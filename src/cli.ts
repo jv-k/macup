@@ -10,7 +10,13 @@ import { BackupStore } from './config/backup';
 import { resolveConfigPaths } from './config/paths';
 import { MacupError } from './errors';
 import { defaultRegistry } from './plugins/registry';
+import { renderAppleLogo } from './ui/logo';
 import { getVersion } from './version';
+
+function shouldUseColor(): boolean {
+  if (process.env.NO_COLOR) return false;
+  return process.stdout.isTTY === true;
+}
 
 type Shell = 'zsh' | 'bash' | 'fish';
 const SUPPORTED_SHELLS: readonly Shell[] = ['zsh', 'bash', 'fish'];
@@ -60,6 +66,10 @@ const main = defineCommand({
       type: 'boolean',
       description: 'Interactively restore the applist from a backup.',
     },
+    logo: {
+      type: 'boolean',
+      description: 'Print the Apple logo and exit.',
+    },
     completions: {
       type: 'string',
       required: false,
@@ -67,6 +77,11 @@ const main = defineCommand({
     },
   },
   async run({ args }) {
+    if (args.logo) {
+      console.log(renderAppleLogo({ color: shouldUseColor() }));
+      return;
+    }
+
     if (typeof args.completions === 'string') {
       if (!isShell(args.completions)) {
         console.error(
@@ -138,7 +153,9 @@ const main = defineCommand({
       return;
     }
 
-    // No flag: if any plugins were registered, they'd be listed here. Not yet.
+    // No flag: show logo + banner.
+    console.log(renderAppleLogo({ color: shouldUseColor() }));
+    console.log();
     const registered = defaultRegistry();
     if (registered.length === 0) {
       console.log(

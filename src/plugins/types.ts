@@ -37,6 +37,12 @@ export interface PluginManifest {
   readonly capabilities: PluginCapabilities;
   /** Optional: plugin-specific version comparator. Default uses semver. */
   compareVersions?(a: string, b: string): -1 | 0 | 1;
+  /**
+   * Optional: resolve a subtype (e.g. 'formulas' for brew) to the applist
+   * key that add/remove should mutate. If omitted, the first entry in
+   * `configKeys` is used.
+   */
+  configKeyFor?(subtype?: string): ApplistKey;
 }
 
 export interface ExecResult {

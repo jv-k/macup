@@ -5,10 +5,13 @@ import { confirm, isCancel, outro, select } from '@clack/prompts';
 import { defineCommand, runMain } from 'citty';
 import { runCleanup } from './commands/cleanup';
 import { buildConfigReport, formatConfigReport } from './commands/config';
+import { commandsFromManifest } from './commands/from-manifest';
 import { runRestore } from './commands/restore';
 import { BackupStore } from './config/backup';
 import { resolveConfigPaths } from './config/paths';
+import { ConfigStore } from './config/store';
 import { MacupError } from './errors';
+import { ExecaExecRunner } from './exec/run';
 import { defaultRegistry } from './plugins/registry';
 import { renderAppleLogo } from './ui/logo';
 import { getVersion } from './version';
@@ -46,13 +49,38 @@ async function handleError<T>(fn: () => Promise<T>): Promise<T | undefined> {
   }
 }
 
+const registry = defaultRegistry();
+const exec = new ExecaExecRunner();
+const log = {
+  info: (m: string) => console.log(m),
+  warn: (m: string) => console.warn(m),
+  error: (m: string) => console.error(m),
+  debug: () => {},
+};
+async function getStore(): Promise<ConfigStore> {
+  const paths = resolvePaths();
+  const store = new ConfigStore(paths);
+  await store.load();
+  return store;
+}
+
+const pluginSubCommands: Record<string, ReturnType<typeof commandsFromManifest>> = {};
+for (const plugin of registry) {
+  pluginSubCommands[plugin.manifest.id] = commandsFromManifest(plugin, {
+    exec,
+    log,
+    getStore,
+  });
+}
+
 const main = defineCommand({
   meta: {
     name: 'macup-next',
     version: getVersion(),
     description:
-      'macup — macOS package update tool. Phase 2: config commands wired, plugin contract frozen, no plugins registered yet.',
+      'macup — macOS package update tool. Phase 3: brew plugin live, manifest-driven dispatch.',
   },
+  subCommands: pluginSubCommands,
   args: {
     config: {
       type: 'boolean',

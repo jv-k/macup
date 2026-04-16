@@ -49,11 +49,16 @@
   "homepage": "https://github.com/jv-k/macos-updatetool",
   "preferGlobal": true,
   "dependencies": {
-    "citty": "^0.1.6"
+    "@clack/prompts": "^1.2.0",
+    "citty": "^0.1.6",
+    "semver": "^7.7.4",
+    "yaml": "^2.8.3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^22.10.0",
+    "@types/semver": "^7.7.1",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

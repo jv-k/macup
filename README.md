@@ -13,6 +13,7 @@ A comprehensive CLI tool that tracks and manages apps and packages on macOS from
 - **🎯 Resource-Centric**: Modern CLI syntax with intuitive resource-based commands
 - **🔧 Shell Completions**: Intelligent tab completion for all commands and options
 - **📋 Configuration**: YAML-based package tracking with validation
+- **💾 Automatic Backups**: Configuration automatically backed up before changes with smart cleanup
 
 ## Installation
 
@@ -133,6 +134,40 @@ macos-updatetool --config
 
 # Validate configuration with detailed schema checking
 pnpm run config:check
+```
+
+## Configuration Backup System
+
+The tool automatically creates timestamped backups of your configuration before any modifications:
+
+### Automatic Backups
+
+- **When**: Backups are created automatically before `add`, `remove`, and `install` operations
+- **Where**: Stored in `~/.config/macos-updatetool/backups/`
+- **Format**: `applist_<operation>_YYYY-MM-DD_HH-MM-SS.yaml`
+- **Smart**: Only keeps backups when actual changes occur (removes backup if no changes made)
+
+### Backup Management
+
+```bash
+# Clean up all backup files (with confirmation prompt)
+macos-updatetool --cleanup
+
+# Backup files are automatically created, for example:
+# ~/.config/macos-updatetool/backups/applist_add_2024-03-15_14-30-22.yaml
+# ~/.config/macos-updatetool/backups/applist_install_2024-03-15_14-35-18.yaml
+```
+
+### Backup Examples
+
+```bash
+# These operations automatically create backups:
+macos-updatetool brew add git           # Creates applist_add_*.yaml
+macos-updatetool npm remove typescript  # Creates applist_remove_*.yaml
+macos-updatetool all install           # Creates applist_install_*.yaml
+
+# Clean up when you have too many backups:
+macos-updatetool --cleanup              # Interactive cleanup with confirmation
 ```
 
 ## Shell Completions
@@ -281,6 +316,9 @@ macos-updatetool --config
 
 # Test shell completions
 macos-updatetool completions | head -20
+
+# Clean up backup files if needed
+macos-updatetool --cleanup
 ```
 
 ## Contributing

@@ -34,7 +34,6 @@
 # Author: John Valai <git@jvk.to>
 # License: MIT License
 
-# Import styles
 source "${MODULE_DIR}/styles.zsh"
 
 # Upgrades App Store applications defined in applist configuration to their latest versions.

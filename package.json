@@ -13,7 +13,7 @@
     "lint": "shellcheck -s bash ./bin/*",
     "lint:fix": "shellcheck -s bash -f diff ./bin/*",
     "lint:fix:patch": "shellcheck -s bash -f diff ./bin/* | sed 's|\\./||g' | git apply",
-    "lint:syntax": "zsh -n ./bin/*",
+    "lint:syntax": "zsh -n ./bin/*"
   },
   "keywords": [
     "macos",

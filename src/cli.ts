@@ -78,7 +78,7 @@ const main = defineCommand({
     name: 'macup-next',
     version: getVersion(),
     description:
-      'macup — macOS package update tool. Phase 3: brew plugin live, manifest-driven dispatch.',
+      'macup — macOS package update tool. Phase 4: full plugin set live (brew, npm, appstore, xcode, system, all).',
   },
   subCommands: pluginSubCommands,
   args: {

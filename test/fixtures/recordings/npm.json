@@ -1,0 +1,35 @@
+[
+  {
+    "cmd": "npm",
+    "args": ["list", "-g", "--json"],
+    "result": {
+      "stdout": "{\n  \"name\": \"lib\",\n  \"dependencies\": {\n    \"typescript\": { \"version\": \"5.3.3\" },\n    \"nodemon\": { \"version\": \"3.0.1\" },\n    \"eslint\": { \"version\": \"9.39.2\" },\n    \"bun\": { \"version\": \"1.3.5\" }\n  }\n}",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "npm",
+    "args": ["outdated", "-g", "--json"],
+    "result": {
+      "stdout": "{\n  \"typescript\": { \"current\": \"5.3.3\", \"wanted\": \"5.4.0\", \"latest\": \"5.4.0\" },\n  \"eslint\": { \"current\": \"9.39.2\", \"wanted\": \"10.2.0\", \"latest\": \"10.2.0\" }\n}",
+      "stderr": "",
+      "exitCode": 1
+    }
+  },
+  {
+    "cmd": "npm",
+    "args": ["install", "-g", "typescript"],
+    "result": { "stdout": "added typescript\n", "stderr": "", "exitCode": 0 }
+  },
+  {
+    "cmd": "npm",
+    "args": ["update", "-g", "typescript"],
+    "result": { "stdout": "updated typescript\n", "stderr": "", "exitCode": 0 }
+  },
+  {
+    "cmd": "npm",
+    "args": ["update", "-g", "eslint"],
+    "result": { "stdout": "updated eslint\n", "stderr": "", "exitCode": 0 }
+  }
+]

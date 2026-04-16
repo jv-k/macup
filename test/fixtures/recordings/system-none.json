@@ -1,0 +1,11 @@
+[
+  {
+    "cmd": "softwareupdate",
+    "args": ["-l"],
+    "result": {
+      "stdout": "Software Update Tool\n\nFinding available software\nNo new software available.\n",
+      "stderr": "",
+      "exitCode": 0
+    }
+  }
+]

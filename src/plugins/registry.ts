@@ -1,6 +1,11 @@
 import { constants, accessSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
+import { createAllPlugin } from '../../plugins/all';
+import appstorePlugin from '../../plugins/appstore';
 import brewPlugin from '../../plugins/brew';
+import npmPlugin from '../../plugins/npm';
+import systemPlugin from '../../plugins/system';
+import xcodePlugin from '../../plugins/xcode';
 import type { Plugin } from './types';
 
 export interface RegistryDeps {
@@ -46,7 +51,18 @@ export function isOnPath(binary: string, env: NodeJS.ProcessEnv = process.env): 
  * The closed set of built-in plugins for 1.0. Each later phase appends
  * one import + one entry here. Phase 2 ships empty.
  */
-export const BUILTIN_PLUGINS: readonly Plugin[] = [brewPlugin];
+const INDIVIDUAL_PLUGINS: readonly Plugin[] = [
+  brewPlugin,
+  npmPlugin,
+  appstorePlugin,
+  xcodePlugin,
+  systemPlugin,
+];
+
+export const BUILTIN_PLUGINS: readonly Plugin[] = [
+  ...INDIVIDUAL_PLUGINS,
+  createAllPlugin(INDIVIDUAL_PLUGINS),
+];
 
 /** Convenience: registry computed from BUILTIN_PLUGINS against the current process. */
 export function defaultRegistry(): Plugin[] {

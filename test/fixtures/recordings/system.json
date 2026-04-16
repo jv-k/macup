@@ -1,0 +1,16 @@
+[
+  {
+    "cmd": "softwareupdate",
+    "args": ["-l"],
+    "result": {
+      "stdout": "Software Update Tool\n\nFinding available software\nSoftware Update found the following new or updated software:\n* Label: macOS Sequoia 15.4-24E5228e\n\tTitle: macOS Sequoia 15.4, Version: 15.4, Size: 12345678K, Recommended: YES, Action: restart,\n* Label: Safari17.5-20H30SafariSeed1\n\tTitle: Safari 17.5, Version: 17.5, Size: 100000K, Recommended: YES,\n",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "softwareupdate",
+    "args": ["--install", "Safari17.5-20H30SafariSeed1", "--verbose"],
+    "result": { "stdout": "Downloaded Safari\nDone.\n", "stderr": "", "exitCode": 0 }
+  }
+]

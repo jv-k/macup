@@ -1,0 +1,127 @@
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { BackupStore } from '../../../src/config/backup';
+import { ErrBackupNotFound } from '../../../src/errors';
+
+let workDir: string;
+let applistPath: string;
+let backupDir: string;
+
+beforeEach(async () => {
+  workDir = await mkdtemp(join(tmpdir(), 'macup-backup-'));
+  applistPath = join(workDir, 'applist.yaml');
+  backupDir = join(workDir, 'backups');
+});
+
+afterEach(async () => {
+  await rm(workDir, { recursive: true, force: true });
+});
+
+async function seedBackups(files: readonly string[]): Promise<string[]> {
+  await mkdir(backupDir, { recursive: true });
+  const paths: string[] = [];
+  for (const f of files) {
+    const p = join(backupDir, f);
+    await writeFile(p, `# ${f}\n`, 'utf8');
+    paths.push(p);
+  }
+  return paths;
+}
+
+describe('BackupStore — list', () => {
+  it('returns empty when backup dir does not exist', async () => {
+    const s = new BackupStore({ applistPath, backupDir });
+    expect(await s.list()).toEqual([]);
+  });
+
+  it('lists only applist_* yaml files, sorted newest first', async () => {
+    await seedBackups([
+      'applist_add_2024-01-01_00-00-00.yaml',
+      'applist_add_2024-03-15_14-30-22.yaml',
+      'applist_remove_2024-02-10_09-00-00.yaml',
+      'not-a-backup.txt',
+    ]);
+    const s = new BackupStore({ applistPath, backupDir });
+    const list = await s.list();
+    expect(list.map((e) => e.filename)).toEqual([
+      'applist_add_2024-03-15_14-30-22.yaml',
+      'applist_remove_2024-02-10_09-00-00.yaml',
+      'applist_add_2024-01-01_00-00-00.yaml',
+    ]);
+  });
+
+  it('parses the operation and timestamp fields on each entry', async () => {
+    await seedBackups(['applist_install_2024-03-15_14-30-22.yaml']);
+    const s = new BackupStore({ applistPath, backupDir });
+    const list = await s.list();
+    expect(list[0]?.operation).toBe('install');
+    expect(list[0]?.timestamp).toBe('2024-03-15_14-30-22');
+  });
+});
+
+describe('BackupStore — restore', () => {
+  it('copies the backup over the applist path', async () => {
+    const [backupPath] = await seedBackups(['applist_add_2024-01-01_00-00-00.yaml']);
+    await writeFile(applistPath, 'current: true\n', 'utf8');
+
+    const s = new BackupStore({ applistPath, backupDir });
+    const entries = await s.list();
+    const first = entries[0];
+    if (!first) throw new Error('expected one backup entry');
+    await s.restore(first);
+
+    const content = await readFile(applistPath, 'utf8');
+    expect(content).toBe('# applist_add_2024-01-01_00-00-00.yaml\n');
+  });
+
+  it('throws ErrBackupNotFound when the entry path no longer exists', async () => {
+    const s = new BackupStore({ applistPath, backupDir });
+    await expect(
+      s.restore({
+        path: join(backupDir, 'missing.yaml'),
+        filename: 'missing.yaml',
+        operation: 'add',
+        timestamp: 'bogus',
+      }),
+    ).rejects.toBeInstanceOf(ErrBackupNotFound);
+  });
+});
+
+describe('BackupStore — cleanup', () => {
+  it('with confirmed=false, is a no-op and returns 0', async () => {
+    await seedBackups([
+      'applist_add_2024-01-01_00-00-00.yaml',
+      'applist_remove_2024-02-10_09-00-00.yaml',
+    ]);
+    const s = new BackupStore({ applistPath, backupDir });
+    const count = await s.cleanup(false);
+    expect(count).toBe(0);
+    expect((await s.list()).length).toBe(2);
+  });
+
+  it('with confirmed=true, deletes all backup files and removes the empty dir', async () => {
+    await seedBackups([
+      'applist_add_2024-01-01_00-00-00.yaml',
+      'applist_remove_2024-02-10_09-00-00.yaml',
+    ]);
+    const s = new BackupStore({ applistPath, backupDir });
+    const count = await s.cleanup(true);
+    expect(count).toBe(2);
+    expect(await s.list()).toEqual([]);
+    await expect(stat(backupDir)).rejects.toThrow();
+  });
+
+  it('leaves non-backup files untouched on cleanup', async () => {
+    await seedBackups(['applist_add_2024-01-01_00-00-00.yaml']);
+    await writeFile(join(backupDir, 'keep-me.txt'), 'hello', 'utf8');
+
+    const s = new BackupStore({ applistPath, backupDir });
+    const count = await s.cleanup(true);
+    expect(count).toBe(1);
+
+    const leftover = await readFile(join(backupDir, 'keep-me.txt'), 'utf8');
+    expect(leftover).toBe('hello');
+  });
+});

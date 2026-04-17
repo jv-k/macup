@@ -1,0 +1,35 @@
+[
+  {
+    "cmd": "pnpm",
+    "args": ["list", "-g", "--json"],
+    "result": {
+      "stdout": "[{\"path\":\"/global\",\"dependencies\":{\"typescript\":{\"from\":\"typescript\",\"version\":\"5.3.3\"},\"prettier\":{\"from\":\"prettier\",\"version\":\"3.3.3\"},\"next\":{\"from\":\"next\",\"version\":\"16.2.1\"}}}]",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "pnpm",
+    "args": ["outdated", "-g", "--json"],
+    "result": {
+      "stdout": "{\"next\":{\"current\":\"16.2.1\",\"latest\":\"16.2.4\",\"wanted\":\"16.2.1\",\"isDeprecated\":false},\"typescript\":{\"current\":\"5.3.3\",\"latest\":\"6.0.3\",\"wanted\":\"5.3.3\",\"isDeprecated\":false}}",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "pnpm",
+    "args": ["add", "-g", "typescript"],
+    "result": { "stdout": "added typescript\n", "stderr": "", "exitCode": 0 }
+  },
+  {
+    "cmd": "pnpm",
+    "args": ["update", "-g", "typescript"],
+    "result": { "stdout": "updated typescript\n", "stderr": "", "exitCode": 0 }
+  },
+  {
+    "cmd": "pnpm",
+    "args": ["update", "-g", "next"],
+    "result": { "stdout": "updated next\n", "stderr": "", "exitCode": 0 }
+  }
+]

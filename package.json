@@ -1,19 +1,29 @@
 {
-  "name": "macos-updatetool",
-  "version": "0.1.0",
-  "description": "macos-updatetool is a CLI workflow tool designed to make updating essential resources important for developers working in a macOS environment frictionless. It handles Homebrew, npm, App Store apps, as well as Xcode resource types.",
-  "main": "bin/macos-updatetool",
+  "name": "macup",
+  "version": "1.0.0",
+  "description": "A plugin-based CLI for tracking and updating developer packages on macOS — Homebrew, npm, App Store, Xcode, and system updates with pins, skip lists, and an interactive wizard.",
+  "type": "module",
   "bin": {
-    "macos-updatetool": "./bin/macos-updatetool"
+    "macup": "./dist/cli.mjs"
+  },
+  "main": "./dist/cli.mjs",
+  "exports": {
+    ".": "./dist/cli.mjs"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
-    "install": "echo 'Setting up macos-updatetool...'",
-    "postinstall": "echo 'macos-updatetool installed successfully! Run: macos-updatetool help'",
-    "checkshell": "zsh -n ./bin/*",
-    "lint": "shellcheck -s bash ./bin/*",
-    "lint:fix": "shellcheck -s bash -f diff ./bin/*",
-    "lint:fix:patch": "shellcheck -s bash -f diff ./bin/* | sed 's|\\./||g' | git apply",
-    "lint:syntax": "zsh -n ./bin/*"
+    "build": "tsup",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "build:binary": "bun scripts/build-binary.ts"
   },
   "keywords": [
     "macos",
@@ -28,25 +38,34 @@
   ],
   "author": "John Valai <git@jvk.to>",
   "license": "MIT",
-  "devDependencies": {
-    "js-yaml": "^4.1.0",
-    "ajv": "^8.12.0"
-  },
-  "os": [
-    "darwin"
-  ],
+  "os": ["darwin"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/jv-k/macos-updatetool.git"
+    "url": "git+https://github.com/jv-k/macos-updatetool.git"
   },
   "bugs": {
     "url": "https://github.com/jv-k/macos-updatetool/issues"
   },
   "homepage": "https://github.com/jv-k/macos-updatetool",
   "preferGlobal": true,
-  "files": [
-    "bin/",
-    "README.md",
-    "LICENSE"
-  ]
+  "dependencies": {
+    "@clack/prompts": "^1.2.0",
+    "citty": "^0.1.6",
+    "execa": "^9.6.1",
+    "semver": "^7.7.4",
+    "yaml": "^2.8.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.10.0",
+    "@types/semver": "^7.7.1",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@biomejs/biome", "esbuild"]
+  }
 }

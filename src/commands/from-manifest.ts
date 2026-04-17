@@ -1,5 +1,6 @@
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ConfigStore } from '../config/store';
+import { resolveSelection } from '../plugins/selection';
 import type {
   ExecRunner,
   Logger,
@@ -158,9 +159,33 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const kind =
           subtype === 'casks' ? 'cask' : subtype === 'formulas' ? 'formula' : manifest.id;
         const statuses = await plugin.list(makeCtx(deps), { subtype, onlyOutdated: true });
-        const refs: PackageRef[] = statuses.map((s) => ({ kind, name: s.ref.name }));
+
+        // Apply pin/skip filtering — load config selection policy for this plugin.
+        let filtered = statuses;
+        try {
+          const store = await deps.getStore();
+          const policy = store.selectionFor(manifest.id);
+          const { upgradable, pinnedBlocked, skipped } = resolveSelection(
+            statuses,
+            policy,
+            manifest.compareVersions,
+          );
+          filtered = upgradable;
+          if (pinnedBlocked.length > 0) {
+            console.log(
+              `Pinned (skipping): ${pinnedBlocked.map((s) => `${s.ref.name}@${s.pinnedAt}`).join(', ')}`,
+            );
+          }
+          if (skipped.length > 0) {
+            console.log(`Skipped: ${skipped.map((s) => s.ref.name).join(', ')}`);
+          }
+        } catch {
+          // If config can't load (no file yet), skip filtering — update everything.
+        }
+
+        const refs: PackageRef[] = filtered.map((s) => ({ kind, name: s.ref.name }));
         if (refs.length === 0) {
-          console.log('Nothing to update — all packages are current.');
+          console.log('Nothing to update — all packages are current (or pinned/skipped).');
           return;
         }
         if (plugin.update) {

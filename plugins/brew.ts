@@ -23,7 +23,7 @@ interface OutdatedFormula {
 }
 
 interface OutdatedCask {
-  name: string[];
+  name: string;
   installed_versions: string;
   current_version: string;
 }
@@ -84,8 +84,7 @@ async function fetchCasks(ctx: PluginContext, onlyOutdated: boolean): Promise<Pa
   ]);
   const outdatedMap = new Map<string, string>();
   for (const o of outdatedRaw.casks ?? []) {
-    const name = o.name[0] ?? '';
-    if (name) outdatedMap.set(name, o.current_version);
+    if (o.name) outdatedMap.set(o.name, o.current_version);
   }
 
   const result: PackageStatus[] = installed.map((e) => {

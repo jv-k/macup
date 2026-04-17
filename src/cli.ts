@@ -105,7 +105,7 @@ const main = defineCommand({
     completions: {
       type: 'string',
       required: false,
-      description: `Emit shell completions for ${SUPPORTED_SHELLS.join('|')} (Phase 5 stub).`,
+      description: `Emit shell completions for ${SUPPORTED_SHELLS.join('|')}.`,
     },
   },
   async run({ args, rawArgs }) {

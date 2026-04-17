@@ -49,7 +49,17 @@ export class ConfigStore {
   }
 
   async load(): Promise<void> {
-    const text = await readFile(this.paths.applistPath, 'utf8');
+    let text: string;
+    try {
+      text = await readFile(this.paths.applistPath, 'utf8');
+    } catch (err) {
+      if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
+        // No config file yet — start with an empty document.
+        text = '';
+      } else {
+        throw err;
+      }
+    }
     this.originalText = text;
     this.doc = parseDocument(text);
     const result = ApplistSchema.safeParse(this.doc.toJS() ?? {});

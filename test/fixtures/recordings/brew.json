@@ -30,7 +30,7 @@
     "cmd": "brew",
     "args": ["outdated", "--json=v2", "--cask"],
     "result": {
-      "stdout": "{\"formulae\":[],\"casks\":[{\"name\":[\"firefox\"],\"installed_versions\":\"120.0\",\"current_version\":\"121.0\"}]}",
+      "stdout": "{\"formulae\":[],\"casks\":[{\"name\":\"firefox\",\"installed_versions\":\"120.0\",\"current_version\":\"121.0\"}]}",
       "stderr": "",
       "exitCode": 0
     }

@@ -1,0 +1,160 @@
+name: Release
+
+# Triggers: GitHub Release published, or manual workflow_dispatch.
+# GATED: every job requires vars.RELEASE_ENABLED == 'true'.
+# Set the repo variable to activate (Phase 8). Until then, all jobs
+# are no-ops — the workflow file is reviewable in PRs without risk.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.1) — used for manual re-runs'
+        required: true
+
+permissions:
+  contents: write
+  id-token: write # npm provenance
+
+env:
+  NODE_VERSION: '20'
+  BUN_VERSION: '1.1.x'
+  PNPM_VERSION: '9'
+
+jobs:
+  # ── 1. Re-verify against the tagged ref ───────────────────────────
+  verify:
+    name: Verify (lint + test + build)
+    runs-on: macos-latest
+    if: ${{ vars.RELEASE_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  # ── 2. Publish to npm ─────────────────────────────────────────────
+  publish-npm:
+    name: Publish to npm
+    runs-on: macos-latest
+    needs: verify
+    if: ${{ vars.RELEASE_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # Verify package.json version matches the release tag
+      - name: Check version matches tag
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          TAG_VERSION="${TAG#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::package.json version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+      - run: pnpm publish --access public --provenance --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ── 3. Build + upload compiled binaries ───────────────────────────
+  build-binaries:
+    name: Build binaries (darwin arm64 + x64)
+    runs-on: macos-latest
+    needs: verify
+    if: ${{ vars.RELEASE_ENABLED == 'true' }}
+    outputs:
+      sha256_arm64: ${{ steps.sums.outputs.sha256_arm64 }}
+      sha256_x64: ${{ steps.sums.outputs.sha256_x64 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:binary -- --all
+
+      - name: Compute SHA256 checksums
+        id: sums
+        run: |
+          SHA_ARM64=$(shasum -a 256 dist/macup-darwin-arm64 | awk '{print $1}')
+          SHA_X64=$(shasum -a 256 dist/macup-darwin-x64 | awk '{print $1}')
+          echo "sha256_arm64=$SHA_ARM64" >> "$GITHUB_OUTPUT"
+          echo "sha256_x64=$SHA_X64" >> "$GITHUB_OUTPUT"
+          echo "$SHA_ARM64  macup-darwin-arm64" > dist/checksums.txt
+          echo "$SHA_X64  macup-darwin-x64" >> dist/checksums.txt
+
+      - name: Smoke-test compiled binaries
+        run: |
+          ./dist/macup-darwin-arm64 --version
+
+      - name: Upload binaries to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name || inputs.tag }}
+          files: |
+            dist/macup-darwin-arm64
+            dist/macup-darwin-x64
+            dist/checksums.txt
+
+  # ── 4. Dispatch homebrew tap update ───────────────────────────────
+  dispatch-homebrew-tap:
+    name: Update homebrew tap
+    runs-on: macos-latest
+    needs: build-binaries
+    if: ${{ vars.RELEASE_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Dispatch tap update
+        run: npx tsx scripts/update-homebrew-tap.ts
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          SHA256_ARM64: ${{ needs.build-binaries.outputs.sha256_arm64 }}
+          SHA256_X64: ${{ needs.build-binaries.outputs.sha256_x64 }}
+          HOMEBREW_TAP_DISPATCH_TOKEN: ${{ secrets.HOMEBREW_TAP_DISPATCH_TOKEN }}
+          REPO_OWNER: ${{ github.repository_owner }}

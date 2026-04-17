@@ -228,6 +228,92 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
   }
 
+  // Pin/unpin/skip/unskip are config-only commands available to any plugin
+  // with configKeys (i.e. any plugin that tracks packages in applist.yaml).
+  if (manifest.configKeys.length > 0) {
+    subCommands.pin = defineCommand({
+      meta: { name: 'pin', description: 'Pin a package to a maximum version.' },
+      args: {
+        name: { type: 'positional', required: true, description: 'Package name.' },
+        version: { type: 'positional', required: true, description: 'Maximum version.' },
+      },
+      async run({ rawArgs }) {
+        const positionals = rawArgs.filter((a) => !a.startsWith('-'));
+        const [name, version] = positionals;
+        if (!name || !version) {
+          console.error('error: usage — macup <plugin> pin <name> <version>');
+          process.exitCode = 1;
+          return;
+        }
+        const store = await deps.getStore();
+        store.pin(manifest.id, name, version);
+        const save = await store.save('pin');
+        console.log(`Pinned ${name} to max ${version} for ${manifest.id}.`);
+        if (save.backupPath) console.log(`Backup: ${save.backupPath}`);
+      },
+    });
+
+    subCommands.unpin = defineCommand({
+      meta: { name: 'unpin', description: 'Remove a version pin.' },
+      args: {
+        name: { type: 'positional', required: true, description: 'Package name.' },
+      },
+      async run({ rawArgs }) {
+        const name = rawArgs.find((a) => !a.startsWith('-'));
+        if (!name) {
+          console.error('error: usage — macup <plugin> unpin <name>');
+          process.exitCode = 1;
+          return;
+        }
+        const store = await deps.getStore();
+        store.unpin(manifest.id, name);
+        const save = await store.save('unpin');
+        console.log(`Unpinned ${name} for ${manifest.id}.`);
+        if (save.backupPath) console.log(`Backup: ${save.backupPath}`);
+      },
+    });
+
+    subCommands.skip = defineCommand({
+      meta: { name: 'skip', description: 'Skip packages from future updates.' },
+      args: {
+        packages: { type: 'positional', required: true, description: 'Package name(s).' },
+      },
+      async run({ rawArgs }) {
+        const names = rawArgs.filter((a) => !a.startsWith('-'));
+        if (names.length === 0) {
+          console.error('error: usage — macup <plugin> skip <name...>');
+          process.exitCode = 1;
+          return;
+        }
+        const store = await deps.getStore();
+        store.skip(manifest.id, names);
+        const save = await store.save('skip');
+        console.log(`Skipped ${names.join(', ')} for ${manifest.id}.`);
+        if (save.backupPath) console.log(`Backup: ${save.backupPath}`);
+      },
+    });
+
+    subCommands.unskip = defineCommand({
+      meta: { name: 'unskip', description: 'Remove packages from the skip list.' },
+      args: {
+        packages: { type: 'positional', required: true, description: 'Package name(s).' },
+      },
+      async run({ rawArgs }) {
+        const names = rawArgs.filter((a) => !a.startsWith('-'));
+        if (names.length === 0) {
+          console.error('error: usage — macup <plugin> unskip <name...>');
+          process.exitCode = 1;
+          return;
+        }
+        const store = await deps.getStore();
+        store.unskip(manifest.id, names);
+        const save = await store.save('unskip');
+        console.log(`Unskipped ${names.join(', ')} for ${manifest.id}.`);
+        if (save.backupPath) console.log(`Backup: ${save.backupPath}`);
+      },
+    });
+  }
+
   return defineCommand({
     meta: { name: manifest.id, description: manifest.displayName },
     subCommands,

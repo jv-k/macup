@@ -7,6 +7,9 @@ import { runCleanup } from './commands/cleanup';
 import { buildConfigReport, formatConfigReport } from './commands/config';
 import { commandsFromManifest } from './commands/from-manifest';
 import { runRestore } from './commands/restore';
+import { generateBashCompletions } from './completions/bash';
+import { generateFishCompletions } from './completions/fish';
+import { generateZshCompletions } from './completions/zsh';
 import { BackupStore } from './config/backup';
 import { resolveConfigPaths } from './config/paths';
 import { ConfigStore } from './config/store';
@@ -15,6 +18,7 @@ import { ExecaExecRunner } from './exec/run';
 import { defaultRegistry } from './plugins/registry';
 import { renderAppleLogo } from './ui/logo';
 import { getVersion } from './version';
+import { type WizardResult, runWizard } from './wizard';
 
 function shouldUseColor(): boolean {
   if (process.env.NO_COLOR) return false;
@@ -78,7 +82,7 @@ const main = defineCommand({
     name: 'macup-next',
     version: getVersion(),
     description:
-      'macup — macOS package update tool. Phase 4: full plugin set live (brew, npm, appstore, xcode, system, all).',
+      'macup — macOS package update tool with plugin architecture, pins, skip, interactive wizard, and shell completions.',
   },
   subCommands: pluginSubCommands,
   args: {
@@ -118,7 +122,12 @@ const main = defineCommand({
         process.exitCode = 1;
         return;
       }
-      console.log(`# macup ${args.completions} completions — not implemented yet (Phase 5)`);
+      const generators: Record<Shell, (p: typeof registry) => string> = {
+        zsh: generateZshCompletions,
+        bash: generateBashCompletions,
+        fish: generateFishCompletions,
+      };
+      console.log(generators[args.completions as Shell](registry));
       return;
     }
 
@@ -181,18 +190,55 @@ const main = defineCommand({
       return;
     }
 
-    // No flag: show logo + banner.
+    // No flag: wizard (TTY) or logo + help hint (non-TTY).
+    if (!process.stdin.isTTY) {
+      console.log(renderAppleLogo({ color: false }));
+      console.log(`\nmacup — ${registry.length} plugin(s). Run with --help or a command.`);
+      return;
+    }
+
     console.log(renderAppleLogo({ color: shouldUseColor() }));
     console.log();
-    const registered = defaultRegistry();
-    if (registered.length === 0) {
-      console.log(
-        'macup-next — Phase 2 scaffold. No plugins registered yet; see --help, --config, --cleanup, --restore.',
-      );
-    } else {
-      console.log(
-        `macup-next — ${registered.length} plugin(s) available: ${registered.map((p) => p.manifest.id).join(', ')}`,
-      );
+
+    const wizResult: WizardResult | null = await runWizard({
+      plugins: registry,
+      selectPlugin: async (opts) => {
+        const choice = await select({ message: 'Which package manager?', options: opts });
+        return isCancel(choice) ? null : (choice as string);
+      },
+      selectCommand: async (opts) => {
+        const choice = await select({ message: 'What do you want to do?', options: opts });
+        return isCancel(choice) ? null : (choice as string);
+      },
+      selectSubtype: async (opts) => {
+        const choice = await select({ message: 'Which subtype?', options: opts });
+        return isCancel(choice) ? null : (choice as string);
+      },
+    });
+
+    if (!wizResult) {
+      outro('Cancelled.');
+      return;
+    }
+
+    // Dispatch the wizard result through the same from-manifest command tree.
+    const targetPlugin = registry.find((p) => p.manifest.id === wizResult.pluginId);
+    if (!targetPlugin) {
+      console.error(`error: plugin "${wizResult.pluginId}" is not available`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const cliArgs = [wizResult.pluginId, wizResult.command];
+    if (wizResult.subtype === 'casks') cliArgs.push('--cask');
+    console.log(`\n→ macup ${cliArgs.join(' ')}\n`);
+
+    // Re-invoke via the sub-command tree.
+    const cmd = pluginSubCommands[wizResult.pluginId];
+    if (cmd) {
+      // citty sub-commands are invoked via runMain — for now, use process.argv override.
+      process.argv = ['node', 'macup', ...cliArgs];
+      await runMain(cmd);
     }
   },
 });

@@ -1,19 +1,28 @@
 // Regression guard for bin/utils.zsh:419 — validate_package_names_required()
 // returned `exit 0` on failure, silently masking "missing packages" as success.
-// In the TS design, argument validation is handled by citty's arg schema
-// (the `add`/`remove` sub-commands are generated from plugin manifests in
-// Phase 3, and required variadic args are enforced by citty). When invoked
-// with zero package names, the process MUST exit non-zero.
-//
-// This test is intentionally skipped in Phase 2: the resource sub-commands
-// that consume `add`/`remove` don't exist until a plugin is registered
-// (Phase 3 brings brew). Unskip in Phase 3 once `macup brew add` is live
-// and assert against the compiled `dist/cli.mjs` via execFile.
+// In the TS design, the `add` sub-command's run() handler explicitly checks
+// for zero package names and sets process.exitCode = 1.
 
-import { describe, it } from 'vitest';
+import { exec as execCb } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { describe, expect, it } from 'vitest';
 
-describe.skip('regression: `add` with zero packages exits non-zero (Phase 3)', () => {
-  it('invokes `macup brew add` with no package args and asserts exit code 1', () => {
-    // Placeholder. Unskip in Phase 3.
+const exec = promisify(execCb);
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, '../..');
+const CLI = join(ROOT, 'dist/cli.mjs');
+
+describe('regression: `add` with zero packages exits non-zero', () => {
+  it('`macup brew add` with no package args produces exit code 1', async () => {
+    try {
+      await exec(`node "${CLI}" brew add`, { timeout: 10_000, cwd: ROOT });
+      expect.fail('expected non-zero exit code');
+    } catch (err) {
+      const e = err as { code?: number };
+      expect(e.code).toBe(1);
+    }
   });
 });

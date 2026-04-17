@@ -1,10 +1,10 @@
 {
   "name": "macup",
-  "version": "0.1.0-dev.0",
-  "description": "A CLI workflow tool designed to make updating essential resources important for developers working in a macOS environment frictionless. It handles Homebrew, npm, App Store apps, as well as Xcode resource types.",
+  "version": "1.0.0",
+  "description": "A plugin-based CLI for tracking and updating developer packages on macOS — Homebrew, npm, App Store, Xcode, and system updates with pins, skip lists, and an interactive wizard.",
   "type": "module",
   "bin": {
-    "macup-next": "./dist/cli.mjs"
+    "macup": "./dist/cli.mjs"
   },
   "main": "./dist/cli.mjs",
   "exports": {

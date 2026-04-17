@@ -79,7 +79,7 @@ for (const plugin of registry) {
 
 const main = defineCommand({
   meta: {
-    name: 'macup-next',
+    name: 'macup',
     version: getVersion(),
     description:
       'macup — macOS package update tool with plugin architecture, pins, skip, interactive wizard, and shell completions.',
@@ -108,7 +108,13 @@ const main = defineCommand({
       description: `Emit shell completions for ${SUPPORTED_SHELLS.join('|')} (Phase 5 stub).`,
     },
   },
-  async run({ args }) {
+  async run({ args, rawArgs }) {
+    // citty calls the parent run() even after a subcommand dispatches.
+    // If the first raw arg is a known plugin id, the subcommand already
+    // handled it — bail to avoid double output.
+    const first = rawArgs[0];
+    if (first && pluginSubCommands[first]) return;
+
     if (args.logo) {
       console.log(renderAppleLogo({ color: shouldUseColor() }));
       return;

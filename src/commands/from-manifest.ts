@@ -90,6 +90,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           type: 'boolean',
           description: 'Only show outdated packages.',
         },
+        json: {
+          type: 'boolean',
+          description: 'Output as JSON (PackageStatus[]).',
+        },
       },
       async run({ args }) {
         await plugin.check(makeCtx(deps));
@@ -97,7 +101,11 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           subtype: hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined,
           onlyOutdated: Boolean(args['only-outdated']),
         });
-        console.log(renderTable(statuses));
+        if (args.json) {
+          console.log(JSON.stringify(statuses, null, 2));
+        } else {
+          console.log(renderTable(statuses));
+        }
       },
     });
   }

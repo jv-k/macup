@@ -7,6 +7,7 @@ describe('ApplistSchema', () => {
     expect(result).toEqual({
       appstore_apps: [],
       npm_apps: [],
+      pnpm_apps: [],
       brew_formulas: [],
       brew_casks: [],
       pins: {},
@@ -18,6 +19,7 @@ describe('ApplistSchema', () => {
     const input = {
       appstore_apps: ['Xcode'],
       npm_apps: ['typescript'],
+      pnpm_apps: ['prettier'],
       brew_formulas: ['git'],
       brew_casks: ['visual-studio-code'],
       pins: { npm: { typescript: '5.3.3' } },

@@ -100,7 +100,8 @@ const main = defineCommand({
   args: {
     config: {
       type: 'boolean',
-      description: 'Show resolved config path, schema status, and backup directory.',
+      description:
+        'Show config location, schema status, pin/skip counts, backup dir, and migration hints.',
     },
     cleanup: {
       type: 'boolean',

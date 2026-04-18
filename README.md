@@ -28,6 +28,7 @@ macup all update
 
 # Add packages to your tracked list
 macup brew add git curl jq
+macup brew add --cask firefox visual-studio-code
 macup npm add typescript nodemon
 
 # Pin a package to a max version
@@ -45,12 +46,13 @@ macup --restore
 
 ## Plugins
 
-macup ships with 6 built-in plugins:
+macup ships with 7 built-in plugins:
 
 | Plugin | What it manages | Key commands |
 | --- | --- | --- |
 | `brew` | Homebrew formulas + casks | `list`, `install`, `update`, `add`, `remove` (use `--cask` for casks) |
 | `npm` | Global npm packages | `list`, `install`, `update`, `add`, `remove` |
+| `pnpm` | Global pnpm packages | `list`, `install`, `update`, `add`, `remove` |
 | `appstore` | Mac App Store apps (via `mas`) | `list`, `install`, `update`, `add`, `remove` |
 | `xcode` | Xcode.app + Command Line Tools | `list`, `install`, `update` |
 | `system` | macOS system updates (`softwareupdate`) | `list`, `install`, `update` |

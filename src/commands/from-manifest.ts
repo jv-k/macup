@@ -32,11 +32,18 @@ export interface CommandDeps {
   readonly getStore: () => Promise<ConfigStore>;
 }
 
+// Shared controller so Ctrl-C cancels in-flight subprocess operations.
+const globalController = new AbortController();
+process.on('SIGINT', () => {
+  globalController.abort();
+  process.exit(130);
+});
+
 function makeCtx(deps: CommandDeps): PluginContext {
   return {
     exec: deps.exec,
     log: deps.log,
-    signal: new AbortController().signal,
+    signal: globalController.signal,
   };
 }
 
@@ -110,6 +117,17 @@ async function runHealthCheck(pluginId: string, ctx: PluginContext): Promise<voi
   await withSpinner(`Checking ${pluginId} health...`, async () => {
     await ctx.exec.run(cmd, args);
   });
+}
+
+/** Extracts non-flag positional args, or prints usage + sets exit 1 and returns null. */
+function requireNames(rawArgs: string[], pluginId: string, command: string): string[] | null {
+  const names = rawArgs.filter((a) => !a.startsWith('-'));
+  if (names.length === 0) {
+    console.error(`Usage: macup ${pluginId} ${command} <name...>`);
+    process.exitCode = 1;
+    return null;
+  }
+  return names;
 }
 
 function resolveConfigKey(plugin: Plugin, subtype: string | undefined) {
@@ -187,8 +205,13 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             }
             if (tracked.size > 0) {
               statuses = statuses.filter((s) => tracked.has(s.ref.name));
+            } else {
+              console.log(
+                log.warning(
+                  `No tracked packages. Showing all installed. Add with: macup ${manifest.id} add <name...>`,
+                ),
+              );
             }
-            // If no tracked packages, fall through to show all (first-run UX).
           } catch {
             // No config file yet — show all.
           }
@@ -228,7 +251,15 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           const key = resolveConfigKey(plugin, subtype);
           refs = [...store.list(key)].map((name) => ({ kind, name }));
         }
-        if (plugin.install && refs.length > 0) {
+        if (refs.length === 0) {
+          console.log(
+            log.info(
+              `No tracked packages found. Add packages first: macup ${manifest.id} add <name...>`,
+            ),
+          );
+          return;
+        }
+        if (plugin.install) {
           if (manifest.id === 'all' && process.stdout.isTTY) {
             const ans = await confirm({
               message: `This installs ${refs.length} package(s) across all managers. Continue?`,
@@ -347,12 +378,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args, rawArgs }) {
-        const names = rawArgs.filter((a) => !a.startsWith('-'));
-        if (names.length === 0) {
-          console.error('error: at least one package name is required');
-          process.exitCode = 1;
-          return;
-        }
+        const names = requireNames(rawArgs, manifest.id, 'add');
+        if (!names) return;
         const subtype = hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined;
         const store = await deps.getStore();
         const key = resolveConfigKey(plugin, subtype);
@@ -381,12 +408,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args, rawArgs }) {
-        const names = rawArgs.filter((a) => !a.startsWith('-'));
-        if (names.length === 0) {
-          console.error('error: at least one package name is required');
-          process.exitCode = 1;
-          return;
-        }
+        const names = requireNames(rawArgs, manifest.id, 'remove');
+        if (!names) return;
         const subtype = hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined;
         const store = await deps.getStore();
         const key = resolveConfigKey(plugin, subtype);
@@ -410,13 +433,15 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         version: { type: 'positional', required: true, description: 'Maximum version.' },
       },
       async run({ rawArgs }) {
-        const positionals = rawArgs.filter((a) => !a.startsWith('-'));
-        const [name, version] = positionals;
-        if (!name || !version) {
-          console.error('error: usage — macup <plugin> pin <name> <version>');
-          process.exitCode = 1;
+        const positionals = requireNames(rawArgs, manifest.id, 'pin <name> <version>');
+        if (!positionals || positionals.length < 2) {
+          if (positionals) {
+            console.error(`Usage: macup ${manifest.id} pin <name> <version>`);
+            process.exitCode = 1;
+          }
           return;
         }
+        const [name, version] = positionals as [string, string];
         const store = await deps.getStore();
         store.pin(manifest.id, name, version);
         const save = await store.save('pin');
@@ -431,16 +456,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         name: { type: 'positional', required: true, description: 'Package name.' },
       },
       async run({ rawArgs }) {
-        const name = rawArgs.find((a) => !a.startsWith('-'));
-        if (!name) {
-          console.error('error: usage — macup <plugin> unpin <name>');
-          process.exitCode = 1;
-          return;
-        }
+        const names = requireNames(rawArgs, manifest.id, 'unpin');
+        if (!names) return;
         const store = await deps.getStore();
-        store.unpin(manifest.id, name);
+        store.unpin(manifest.id, names[0] as string);
         const save = await store.save('unpin');
-        console.log(`Unpinned ${name} for ${manifest.id}.`);
+        console.log(`Unpinned ${names[0]} for ${manifest.id}.`);
         if (save.backupPath) console.log(`Backup: ${save.backupPath}`);
       },
     });
@@ -451,12 +472,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         packages: { type: 'positional', required: true, description: 'Package name(s).' },
       },
       async run({ rawArgs }) {
-        const names = rawArgs.filter((a) => !a.startsWith('-'));
-        if (names.length === 0) {
-          console.error('error: usage — macup <plugin> skip <name...>');
-          process.exitCode = 1;
-          return;
-        }
+        const names = requireNames(rawArgs, manifest.id, 'skip');
+        if (!names) return;
         const store = await deps.getStore();
         store.skip(manifest.id, names);
         const save = await store.save('skip');
@@ -471,12 +488,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         packages: { type: 'positional', required: true, description: 'Package name(s).' },
       },
       async run({ rawArgs }) {
-        const names = rawArgs.filter((a) => !a.startsWith('-'));
-        if (names.length === 0) {
-          console.error('error: usage — macup <plugin> unskip <name...>');
-          process.exitCode = 1;
-          return;
-        }
+        const names = requireNames(rawArgs, manifest.id, 'unskip');
+        if (!names) return;
         const store = await deps.getStore();
         store.unskip(manifest.id, names);
         const save = await store.save('unskip');

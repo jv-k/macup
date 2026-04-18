@@ -8,14 +8,6 @@ import type {
   PluginContext,
 } from '../src/plugins/types';
 
-type BrewSubtype = 'formulas' | 'casks';
-type BrewKind = 'formula' | 'cask';
-
-const KIND: Record<BrewSubtype, BrewKind> = {
-  formulas: 'formula',
-  casks: 'cask',
-};
-
 interface OutdatedFormula {
   name: string;
   installed_versions: string[];
@@ -154,7 +146,7 @@ const brew: Plugin = {
 
   async list(ctx: PluginContext, opts: ListOptions): Promise<PackageStatus[]> {
     const onlyOutdated = opts.onlyOutdated ?? false;
-    const subtype = opts.subtype as BrewSubtype | undefined;
+    const subtype = opts.subtype as 'formulas' | 'casks' | undefined;
 
     if (subtype === 'formulas') return fetchFormulas(ctx, onlyOutdated);
     if (subtype === 'casks') return fetchCasks(ctx, onlyOutdated);
@@ -185,6 +177,5 @@ const brew: Plugin = {
 
 // Silence "KIND unused" since it's informational documentation for
 // the plan's `configKeys` mapping.
-void KIND;
 
 export default brew;

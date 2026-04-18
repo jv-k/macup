@@ -1,3 +1,4 @@
+import { spinner } from '@clack/prompts';
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ConfigStore } from '../config/store';
 import { resolveSelection } from '../plugins/selection';
@@ -9,6 +10,20 @@ import type {
   Plugin,
   PluginContext,
 } from '../plugins/types';
+
+async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
+  if (!process.stdout.isTTY) return fn();
+  const s = spinner();
+  s.start(message);
+  try {
+    const result = await fn();
+    s.stop(message.replace(/\.{3}$/, '') + ' done.');
+    return result;
+  } catch (err) {
+    s.stop(message.replace(/\.{3}$/, '') + ' failed.');
+    throw err;
+  }
+}
 
 export interface CommandDeps {
   readonly exec: ExecRunner;
@@ -97,12 +112,18 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args }) {
-        await plugin.check(makeCtx(deps));
-        const statuses = await plugin.list(makeCtx(deps), {
-          subtype: hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined,
-          onlyOutdated: Boolean(args['only-outdated']),
-        });
-        if (args.json) {
+        const showJson = Boolean(args.json);
+        const statuses = await withSpinner(
+          `Fetching ${manifest.displayName} packages...`,
+          async () => {
+            await plugin.check(makeCtx(deps));
+            return plugin.list(makeCtx(deps), {
+              subtype: hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined,
+              onlyOutdated: Boolean(args['only-outdated']),
+            });
+          },
+        );
+        if (showJson) {
           console.log(JSON.stringify(statuses, null, 2));
         } else {
           console.log(renderTable(statuses));
@@ -137,7 +158,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           refs = [...store.list(key)].map((name) => ({ kind, name }));
         }
         if (plugin.install) {
-          await plugin.install(makeCtx(deps), refs, {});
+          await withSpinner(
+            `Installing ${refs.length} package(s) via ${manifest.displayName}...`,
+            () => plugin.install!(makeCtx(deps), refs, {}),
+          );
         }
       },
     });
@@ -154,13 +178,19 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args }) {
-        await plugin.check(makeCtx(deps));
         const subtype = hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined;
         const kind =
           subtype === 'casks' ? 'cask' : subtype === 'formulas' ? 'formula' : manifest.id;
-        const statuses = await plugin.list(makeCtx(deps), { subtype, onlyOutdated: true });
 
-        // Apply pin/skip filtering — load config selection policy for this plugin.
+        const statuses = await withSpinner(
+          `Checking ${manifest.displayName} for outdated packages...`,
+          async () => {
+            await plugin.check(makeCtx(deps));
+            return plugin.list(makeCtx(deps), { subtype, onlyOutdated: true });
+          },
+        );
+
+        // Apply pin/skip filtering.
         let filtered = statuses;
         try {
           const store = await deps.getStore();
@@ -189,7 +219,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           return;
         }
         if (plugin.update) {
-          await plugin.update(makeCtx(deps), refs, {});
+          await withSpinner(
+            `Updating ${refs.length} package(s) via ${manifest.displayName}...`,
+            () => plugin.update!(makeCtx(deps), refs, {}),
+          );
         }
         console.log(`Updated ${refs.length} package(s): ${refs.map((r) => r.name).join(', ')}`);
       },

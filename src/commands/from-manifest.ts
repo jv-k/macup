@@ -1,4 +1,4 @@
-import { spinner } from '@clack/prompts';
+import { confirm, isCancel, spinner } from '@clack/prompts';
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ConfigStore } from '../config/store';
 import { resolveSelection } from '../plugins/selection';
@@ -96,6 +96,20 @@ function renderList(pluginName: string, statuses: PackageStatus[], onlyOutdated:
 
   lines.push('');
   return lines.join('\n');
+}
+
+async function runHealthCheck(pluginId: string, ctx: PluginContext): Promise<void> {
+  const checks: Record<string, [string, string[]]> = {
+    brew: ['brew', ['doctor']],
+    npm: ['npm', ['doctor']],
+    pnpm: ['pnpm', ['doctor']],
+  };
+  const entry = checks[pluginId];
+  if (!entry) return;
+  const [cmd, args] = entry;
+  await withSpinner(`Checking ${pluginId} health...`, async () => {
+    await ctx.exec.run(cmd, args);
+  });
 }
 
 function resolveConfigKey(plugin: Plugin, subtype: string | undefined) {
@@ -214,13 +228,27 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           const key = resolveConfigKey(plugin, subtype);
           refs = [...store.list(key)].map((name) => ({ kind, name }));
         }
-        if (plugin.install) {
-          await withSpinner(
-            `Installing ${refs.length} package(s) via ${manifest.displayName}...`,
-            async () => {
-              await plugin.install?.(makeCtx(deps), refs, {});
-            },
-          );
+        if (plugin.install && refs.length > 0) {
+          if (manifest.id === 'all' && process.stdout.isTTY) {
+            const ans = await confirm({
+              message: `This installs ${refs.length} package(s) across all managers. Continue?`,
+              initialValue: true,
+            });
+            if (isCancel(ans) || !ans) {
+              console.log(log.warning('Install cancelled.'));
+              return;
+            }
+          }
+          console.log('');
+          console.log(log.header(`Installing ${manifest.displayName}`, refs.length));
+          console.log('');
+          for (let i = 0; i < refs.length; i++) {
+            const ref = refs[i] as PackageRef;
+            await withSpinner(log.counter(i + 1, refs.length, 'Installing', ref.name), async () => {
+              await plugin.install?.(makeCtx(deps), [ref], {});
+            });
+          }
+          await runHealthCheck(manifest.id, makeCtx(deps));
         }
       },
     });
@@ -274,18 +302,35 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
 
         const refs: PackageRef[] = filtered.map((s) => ({ kind, name: s.ref.name }));
         if (refs.length === 0) {
-          console.log('Nothing to update — all packages are current (or pinned/skipped).');
+          console.log(log.success(`All ${manifest.displayName} packages are up-to-date!`));
           return;
         }
-        if (plugin.update) {
-          await withSpinner(
-            `Updating ${refs.length} package(s) via ${manifest.displayName}...`,
-            async () => {
-              await plugin.update?.(makeCtx(deps), refs, {});
-            },
-          );
+
+        // Confirmation gate for bulk operations (matches zsh tool)
+        if (manifest.id === 'all' && process.stdout.isTTY) {
+          const ans = await confirm({
+            message: `This updates ${refs.length} package(s) across all managers. Continue?`,
+            initialValue: true,
+          });
+          if (isCancel(ans) || !ans) {
+            console.log(log.warning('Update cancelled.'));
+            return;
+          }
         }
-        console.log(`Updated ${refs.length} package(s): ${refs.map((r) => r.name).join(', ')}`);
+
+        console.log('');
+        console.log(log.header(`Updating ${manifest.displayName}`, refs.length));
+        console.log('');
+        if (plugin.update) {
+          for (let i = 0; i < refs.length; i++) {
+            const ref = refs[i] as PackageRef;
+            await withSpinner(log.counter(i + 1, refs.length, 'Updating', ref.name), async () => {
+              await plugin.update?.(makeCtx(deps), [ref], {});
+            });
+          }
+        }
+        await runHealthCheck(manifest.id, makeCtx(deps));
+        console.log(log.success(`Updated ${refs.length} package(s).`));
       },
     });
   }

@@ -15,7 +15,8 @@ import { resolveConfigPaths } from './config/paths';
 import { ConfigStore } from './config/store';
 import { MacupError } from './errors';
 import { ExecaExecRunner } from './exec/run';
-import { defaultRegistry } from './plugins/registry';
+import { BUILTIN_PLUGINS, defaultRegistry } from './plugins/registry';
+import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
 import { getVersion } from './version';
 import { type WizardResult, runWizard } from './wizard';
@@ -75,6 +76,17 @@ for (const plugin of registry) {
     log,
     getStore,
   });
+}
+
+// Startup: log warnings for plugins that can't load (missing binaries).
+for (const plugin of BUILTIN_PLUGINS) {
+  const { id, requires, supportedOS } = plugin.manifest;
+  if (!supportedOS.includes(process.platform as NodeJS.Platform)) continue;
+  for (const bin of requires) {
+    if (!exec.onPath(bin)) {
+      console.warn(logui.warning(`Plugin "${id}" unavailable: \`${bin}\` not found on PATH.`));
+    }
+  }
 }
 
 const main = defineCommand({
@@ -245,5 +257,19 @@ const main = defineCommand({
     }
   },
 });
+
+// Intercept --version/-v before citty's default (which just prints the version string).
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  console.log(renderAppleLogo({ color: shouldUseColor() }));
+  console.log(
+    logui.versionBlock({
+      version: getVersion(),
+      description: 'A plugin-based CLI for tracking and updating developer packages on macOS.',
+      author: 'John Valai <git@jvk.to>',
+      homepage: 'https://github.com/jv-k/macos-updatetool',
+    }),
+  );
+  process.exit(0);
+}
 
 runMain(main);

@@ -134,6 +134,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           type: 'boolean',
           description: 'Only show outdated packages.',
         },
+        all: {
+          type: 'boolean',
+          description: 'Show all installed packages, not just tracked ones.',
+        },
         json: {
           type: 'boolean',
           description: 'Output as JSON (PackageStatus[]).',
@@ -141,16 +145,41 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
       },
       async run({ args }) {
         const showJson = Boolean(args.json);
-        const statuses = await withSpinner(
+        const showAll = Boolean(args.all);
+        const subtype = hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined;
+
+        let statuses = await withSpinner(
           `Fetching ${manifest.displayName} packages...`,
           async () => {
             await plugin.check(makeCtx(deps));
             return plugin.list(makeCtx(deps), {
-              subtype: hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined,
+              subtype,
               onlyOutdated: Boolean(args['only-outdated']),
             });
           },
         );
+
+        // Default: show only tracked packages (from applist.yaml).
+        // --all shows everything installed by the package manager.
+        if (!showAll && manifest.configKeys.length > 0) {
+          try {
+            const store = await deps.getStore();
+            const tracked = new Set<string>();
+            for (const key of manifest.configKeys) {
+              const configKey = manifest.configKeyFor ? manifest.configKeyFor(subtype) : key;
+              for (const name of store.list(configKey)) {
+                tracked.add(name);
+              }
+            }
+            if (tracked.size > 0) {
+              statuses = statuses.filter((s) => tracked.has(s.ref.name));
+            }
+            // If no tracked packages, fall through to show all (first-run UX).
+          } catch {
+            // No config file yet — show all.
+          }
+        }
+
         if (showJson) {
           console.log(JSON.stringify(statuses, null, 2));
         } else {
@@ -188,7 +217,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (plugin.install) {
           await withSpinner(
             `Installing ${refs.length} package(s) via ${manifest.displayName}...`,
-            () => plugin.install?.(makeCtx(deps), refs, {}),
+            async () => {
+              await plugin.install?.(makeCtx(deps), refs, {});
+            },
           );
         }
       },
@@ -249,7 +280,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (plugin.update) {
           await withSpinner(
             `Updating ${refs.length} package(s) via ${manifest.displayName}...`,
-            () => plugin.update?.(makeCtx(deps), refs, {}),
+            async () => {
+              await plugin.update?.(makeCtx(deps), refs, {});
+            },
           );
         }
         console.log(`Updated ${refs.length} package(s): ${refs.map((r) => r.name).join(', ')}`);

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm lint *)",
+      "Bash(gh issue create --title 'Starter config / init command' --label type:feature,priority:low,area:cli,area:config --body ' *)",
+      "Bash(gh issue create --title 'UI column alignment across all commands' --label type:feature,priority:low,area:tui --body ' *)",
+      "Bash(gh issue create --title 'Optional file logging' --label type:feature,priority:low,area:cli --body ' *)",
+      "Bash(gh issue create --title 'Shell integration \\(macup init zsh/bash/fish\\)' --label type:feature,priority:low,area:cli --body ' *)"
+    ]
+  }
+}

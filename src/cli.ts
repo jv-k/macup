@@ -2,7 +2,7 @@
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { confirm, isCancel, outro, select } from '@clack/prompts';
-import { defineCommand, runMain } from 'citty';
+import { defineCommand, runCommand, runMain } from 'citty';
 import { runCleanup } from './commands/cleanup';
 import { buildConfigReport, formatConfigReport } from './commands/config';
 import { commandsFromManifest } from './commands/from-manifest';
@@ -235,16 +235,13 @@ const main = defineCommand({
       return;
     }
 
-    const cliArgs = [wizResult.pluginId, wizResult.command];
-    if (wizResult.subtype === 'casks') cliArgs.push('--cask');
-    console.log(`\n→ macup ${cliArgs.join(' ')}\n`);
+    const wizArgs = [wizResult.command];
+    if (wizResult.subtype === 'casks') wizArgs.push('--cask');
+    console.log(`\n→ macup ${wizResult.pluginId} ${wizArgs.join(' ')}\n`);
 
-    // Re-invoke via the sub-command tree.
     const cmd = pluginSubCommands[wizResult.pluginId];
     if (cmd) {
-      // citty sub-commands are invoked via runMain — for now, use process.argv override.
-      process.argv = ['node', 'macup', ...cliArgs];
-      await runMain(cmd);
+      await runCommand(cmd, { rawArgs: wizArgs });
     }
   },
 });

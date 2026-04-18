@@ -10,6 +10,7 @@ import type {
   Plugin,
   PluginContext,
 } from '../plugins/types';
+import * as log from '../ui/log';
 
 async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
   if (!process.stdout.isTTY) return fn();
@@ -17,10 +18,10 @@ async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T>
   s.start(message);
   try {
     const result = await fn();
-    s.stop(message.replace(/\.{3}$/, '') + ' done.');
+    s.stop(`${message.replace(/\.{3}$/, '')} done.`);
     return result;
   } catch (err) {
-    s.stop(message.replace(/\.{3}$/, '') + ' failed.');
+    s.stop(`${message.replace(/\.{3}$/, '')} failed.`);
     throw err;
   }
 }
@@ -46,28 +47,55 @@ function subtypeFromCaskFlag(plugin: Plugin, cask: boolean): string | undefined 
   return subtypes[0];
 }
 
-function renderTable(statuses: PackageStatus[]): string {
-  if (statuses.length === 0) return '(nothing tracked)';
-  const widths = [0, 0, 0];
-  for (const s of statuses) {
-    widths[0] = Math.max(widths[0] as number, s.ref.name.length);
-    widths[1] = Math.max(widths[1] as number, (s.installedVersion ?? '').length);
-    widths[2] = Math.max(widths[2] as number, (s.latestVersion ?? '').length);
+function renderList(pluginName: string, statuses: PackageStatus[], onlyOutdated: boolean): string {
+  if (statuses.length === 0) {
+    return [log.info(`No ${pluginName} packages found.`)].join('\n');
   }
-  const pad = (x: string, w: number) => x + ' '.repeat(Math.max(0, w - x.length));
-  return statuses
-    .map((s) => {
-      const marker = s.outdated ? '*' : ' ';
-      return [
-        marker,
-        pad(s.ref.name, widths[0] as number),
-        pad(s.installedVersion ?? '', widths[1] as number),
-        s.outdated ? `→ ${s.latestVersion ?? '?'}` : '',
-      ]
-        .join('  ')
-        .trimEnd();
-    })
-    .join('\n');
+
+  const upToDate = statuses.filter((s) => s.installed && !s.outdated);
+  const outdated = statuses.filter((s) => s.installed && s.outdated);
+  const notInstalled = statuses.filter((s) => !s.installed);
+  const nameWidth = Math.max(...statuses.map((s) => s.ref.name.length), 0);
+  const lines: string[] = [];
+
+  // Section header
+  lines.push('');
+  lines.push(log.header(`${pluginName}`, statuses.length));
+
+  // Up-to-date
+  if (!onlyOutdated && upToDate.length > 0) {
+    lines.push('');
+    lines.push(`  ${log.subHeader('Up-to-date', upToDate.length)}`);
+    for (const s of upToDate) {
+      lines.push(log.pkgUpToDate(s.ref.name, s.installedVersion ?? '', nameWidth));
+    }
+  }
+
+  // Outdated
+  if (outdated.length > 0) {
+    lines.push('');
+    lines.push(`  ${log.outdatedHeader('Outdated', outdated.length)}`);
+    for (const s of outdated) {
+      lines.push(
+        log.pkgOutdated(s.ref.name, s.installedVersion ?? '?', s.latestVersion ?? '?', nameWidth),
+      );
+    }
+  } else if (onlyOutdated) {
+    lines.push('');
+    lines.push(log.success(`All ${pluginName} packages are up-to-date!`));
+  }
+
+  // Not installed
+  if (!onlyOutdated && notInstalled.length > 0) {
+    lines.push('');
+    lines.push(`  ${log.errorHeader('Not installed', notInstalled.length)}`);
+    for (const s of notInstalled) {
+      lines.push(log.pkgNotInstalled(s.ref.name, nameWidth));
+    }
+  }
+
+  lines.push('');
+  return lines.join('\n');
 }
 
 function resolveConfigKey(plugin: Plugin, subtype: string | undefined) {
@@ -126,7 +154,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (showJson) {
           console.log(JSON.stringify(statuses, null, 2));
         } else {
-          console.log(renderTable(statuses));
+          console.log(renderList(manifest.displayName, statuses, Boolean(args['only-outdated'])));
         }
       },
     });
@@ -160,7 +188,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (plugin.install) {
           await withSpinner(
             `Installing ${refs.length} package(s) via ${manifest.displayName}...`,
-            () => plugin.install!(makeCtx(deps), refs, {}),
+            () => plugin.install?.(makeCtx(deps), refs, {}),
           );
         }
       },
@@ -221,7 +249,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (plugin.update) {
           await withSpinner(
             `Updating ${refs.length} package(s) via ${manifest.displayName}...`,
-            () => plugin.update!(makeCtx(deps), refs, {}),
+            () => plugin.update?.(makeCtx(deps), refs, {}),
           );
         }
         console.log(`Updated ${refs.length} package(s): ${refs.map((r) => r.name).join(', ')}`);

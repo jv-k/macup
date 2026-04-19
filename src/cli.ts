@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { confirm, isCancel, outro, select } from '@clack/prompts';
 import { defineCommand, runCommand, runMain } from 'citty';
+import pc from 'picocolors';
 import { runCleanup } from './commands/cleanup';
 import { buildConfigReport, formatConfigReport } from './commands/config';
 import { commandsFromManifest } from './commands/from-manifest';
@@ -273,4 +274,104 @@ if (process.argv.includes('--version') || process.argv.includes('-v')) {
   process.exit(0);
 }
 
+// Intercept --help/-h before citty's default (which is plain/unstyled).
+if (
+  process.argv.includes('--help') ||
+  process.argv.includes('-h') ||
+  process.argv.includes('help')
+) {
+  // Only intercept root help — let subcommand help (`macup brew --help`) through.
+  const args = process.argv.slice(2).filter((a) => a !== '--help' && a !== '-h' && a !== 'help');
+  if (args.length === 0) {
+    showCustomHelp();
+    process.exit(0);
+  }
+}
+
 runMain(main);
+
+function showCustomHelp() {
+  const color = shouldUseColor();
+  console.log(renderAppleLogo({ color }));
+  console.log(
+    logui.versionBlock({
+      version: getVersion(),
+      description: 'A plugin-based CLI for tracking and updating developer packages on macOS.',
+      author: 'John Valai <git@jvk.to>',
+      homepage: 'https://github.com/jv-k/macos-updatetool',
+    }),
+  );
+
+  const id = (x: string) => x;
+  const s = color ? pc : { bold: id, cyan: id, dim: id, green: id, yellow: id, underline: id };
+
+  // Usage
+  console.log(s.underline(s.cyan('USAGE:')));
+  console.log(
+    `  ${s.bold('macup')} ${s.dim('<plugin>')} ${s.dim('<command>')} ${s.dim('[options] [packages...]')}`,
+  );
+  console.log(
+    `  ${s.bold('macup')} ${s.dim('[--help | --version | --config | --cleanup | --restore]')}`,
+  );
+  console.log('');
+
+  // Plugins
+  console.log(s.underline(s.cyan('PLUGINS:')));
+  const pad = 12;
+  for (const plugin of registry) {
+    const m = plugin.manifest;
+    const cmds = [];
+    if (m.capabilities.list) cmds.push('list');
+    if (m.capabilities.install) cmds.push('install');
+    if (m.capabilities.update) cmds.push('update');
+    if (m.capabilities.add) cmds.push('add');
+    if (m.capabilities.remove) cmds.push('remove');
+    const cmdStr = s.dim(cmds.join(', '));
+    const subtypeHint =
+      m.subtypes && m.subtypes.length > 1 ? s.dim(` [--cask for ${m.subtypes[1]}]`) : '';
+    console.log(`  ${s.bold(m.id.padEnd(pad))} ${m.displayName}  ${cmdStr}${subtypeHint}`);
+  }
+  console.log('');
+
+  // Pin / Skip
+  console.log(s.underline(s.cyan('PINS & SKIP:')));
+  console.log(
+    `  ${s.bold('macup <plugin> pin')} ${s.dim('<name> <version>')}    Pin to max version`,
+  );
+  console.log(`  ${s.bold('macup <plugin> unpin')} ${s.dim('<name>')}            Remove pin`);
+  console.log(
+    `  ${s.bold('macup <plugin> skip')} ${s.dim('<name...>')}          Skip from updates`,
+  );
+  console.log(
+    `  ${s.bold('macup <plugin> unskip')} ${s.dim('<name...>')}        Remove from skip list`,
+  );
+  console.log('');
+
+  // Global options
+  console.log(s.underline(s.cyan('GLOBAL OPTIONS:')));
+  console.log(`  ${s.cyan('--help, -h')}          Show this help`);
+  console.log(`  ${s.cyan('--version, -v')}       Show version with logo`);
+  console.log(`  ${s.cyan('--config')}            Show config path, schema, pins/skip counts`);
+  console.log(`  ${s.cyan('--cleanup')}           Delete all backup files`);
+  console.log(`  ${s.cyan('--restore')}           Restore config from a backup`);
+  console.log(`  ${s.cyan('--logo')}              Print the Apple logo`);
+  console.log(`  ${s.cyan('--completions=<sh>')}  Emit completions (zsh, bash, fish)`);
+  console.log('');
+
+  // Examples
+  console.log(s.underline(s.cyan('EXAMPLES:')));
+  console.log(`  ${s.bold('macup')}                              Interactive wizard`);
+  console.log(`  ${s.bold('macup brew list')}                    Show tracked brew formulas`);
+  console.log(`  ${s.bold('macup brew list --all')}              Show all installed formulas`);
+  console.log(`  ${s.bold('macup brew list --only-outdated')}    Show only outdated`);
+  console.log(`  ${s.bold('macup npm list --json')}              JSON output for scripting`);
+  console.log(
+    `  ${s.bold('macup all update')}                   Update everything (with confirmation)`,
+  );
+  console.log(`  ${s.bold('macup brew add git curl jq')}         Track new packages`);
+  console.log(`  ${s.bold('macup brew add --cask firefox')}      Track a cask`);
+  console.log(`  ${s.bold('macup npm pin typescript 5.3.3')}     Pin to max version`);
+  console.log(`  ${s.bold('macup brew skip legacy-dep')}         Skip from future updates`);
+  console.log(`  ${s.bold('macup --completions=zsh > ...')}      Generate shell completions`);
+  console.log('');
+}

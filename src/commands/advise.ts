@@ -84,7 +84,11 @@ export async function runAdviseFlow(deps: AdviseFlowDeps): Promise<void> {
     const chosen = await deps.promptAction(actions);
     if (chosen.type === 'CANCEL') return;
     if (chosen.type === 'ASK_QUESTION') {
-      question = await deps.promptFollowUp();
+      const q = await deps.promptFollowUp();
+      // Empty-string means the user cancelled the text prompt; bail rather
+      // than loop back into a fresh initial request that burns tokens.
+      if (q.trim() === '') return;
+      question = q;
       continue;
     }
     await executeAction(chosen, {

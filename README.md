@@ -119,7 +119,7 @@ You'll see streaming advice, then a menu of suggested actions:
 - **Ask a follow-up** — stateless follow-up with the same report.
 - **Cancel** — back to main menu.
 
-Ctrl+C cancels any in-progress streaming response and returns to the main menu.
+Ctrl+C aborts any in-progress streaming response and exits (code 130), same as every other macup command.
 
 ### Cost
 

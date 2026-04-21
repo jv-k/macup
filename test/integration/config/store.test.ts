@@ -124,6 +124,40 @@ describe('ConfigStore — save', () => {
   });
 });
 
+describe('ConfigStore — ai setters', () => {
+  it('setAiEnabled persists the flag', async () => {
+    await seed('brew_formulas:\n  - git\n');
+    const s = await store();
+    await s.setAiEnabled(true);
+
+    const s2 = new ConfigStore({ applistPath, backupDir });
+    await s2.load();
+    expect(s2.getAi().enabled).toBe(true);
+
+    await s.setAiEnabled(false);
+    const s3 = new ConfigStore({ applistPath, backupDir });
+    await s3.load();
+    expect(s3.getAi().enabled).toBe(false);
+  });
+
+  it('setAiProvider persists the provider', async () => {
+    await seed('brew_formulas:\n  - git\n');
+    const s = await store();
+    await s.setAiProvider('openai');
+
+    const s2 = new ConfigStore({ applistPath, backupDir });
+    await s2.load();
+    expect(s2.getAi().provider).toBe('openai');
+  });
+
+  it('rejects unknown providers via schema', async () => {
+    await seed('brew_formulas:\n  - git\n');
+    const s = await store();
+    // @ts-expect-error
+    await expect(s.setAiProvider('bogus')).rejects.toThrow();
+  });
+});
+
 describe('ConfigStore — pins and skip', () => {
   it('pin adds an entry under the plugin id', async () => {
     await seed('npm_apps:\n  - typescript\n');

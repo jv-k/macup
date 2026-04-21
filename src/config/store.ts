@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { type Document, Scalar, YAMLMap, YAMLSeq, parseDocument } from 'yaml';
 import { ErrInvalidConfig } from '../errors';
 import type { SelectionPolicy } from '../plugins/selection';
-import { type ApplistKey, ApplistSchema } from './schema';
+import { type AiConfig, AiConfigSchema, type AiProvider, AiProviderSchema, type ApplistKey, ApplistSchema } from './schema';
 
 export interface ConfigStorePaths {
   readonly applistPath: string;
@@ -197,6 +197,38 @@ export class ConfigStore {
     }
 
     return { pinned, skipped };
+  }
+
+  getAi(): AiConfig {
+    const doc = this.requireDoc();
+    const raw = doc.get('ai');
+    if (raw === null || raw === undefined) {
+      return AiConfigSchema.parse({});
+    }
+    return AiConfigSchema.parse(raw instanceof YAMLMap ? raw.toJSON() : raw);
+  }
+
+  async setAiEnabled(enabled: boolean): Promise<SaveResult> {
+    const doc = this.requireDoc();
+    let ai = doc.get('ai');
+    if (!(ai instanceof YAMLMap)) {
+      ai = new YAMLMap();
+      doc.set('ai', ai);
+    }
+    (ai as YAMLMap).set('enabled', enabled);
+    return this.save('set-ai-enabled');
+  }
+
+  async setAiProvider(provider: AiProvider): Promise<SaveResult> {
+    AiProviderSchema.parse(provider);
+    const doc = this.requireDoc();
+    let ai = doc.get('ai');
+    if (!(ai instanceof YAMLMap)) {
+      ai = new YAMLMap();
+      doc.set('ai', ai);
+    }
+    (ai as YAMLMap).set('provider', provider);
+    return this.save('set-ai-provider');
   }
 
   async save(operation: string): Promise<SaveResult> {

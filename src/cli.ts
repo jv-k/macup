@@ -264,7 +264,8 @@ const main = defineCommand({
       });
 
       if (!wizResult) {
-        outro('Goodbye.');
+        // Clack's cancelled-prompt rendering already closes the frame visually;
+        // adding outro() on top produces a double-gap, so we just exit.
         return;
       }
 
@@ -275,7 +276,7 @@ const main = defineCommand({
         const label = t.subtype
           ? `${t.pluginId} ${wizResult.command} --subtype=${t.subtype}`
           : `${t.pluginId} ${wizResult.command}`;
-        console.log(`\n→ macup ${label}\n`);
+        console.log(`\n→ macup ${label}`);
         const cmd = pluginSubCommands[t.pluginId];
         if (!cmd) {
           console.error(`error: plugin "${t.pluginId}" is not available`);
@@ -307,8 +308,8 @@ const main = defineCommand({
       // poison the next one. The failure was already surfaced to the user
       // via stderr; this lets them try another operation from the menu.
       if (failed) process.exitCode = 0;
-
-      console.log('');
+      // Operations already render their own trailing whitespace (list/header
+      // blocks, success messages) — don't add another blank line here.
     }
   },
 });

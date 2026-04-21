@@ -64,9 +64,27 @@ describe('runWizard (multiselect)', () => {
     expect(result).toBeNull();
   });
 
-  it('returns null when the user cancels command selection', async () => {
-    const result = await runWizard(makeDeps({ targets: [{ pluginId: 'npm' }], command: null }));
+  it('loops back to target selection when the user cancels command selection', async () => {
+    // First selectTargets call returns npm; second returns null to exit.
+    // selectCommand always returns null (cancel). Wizard should re-prompt
+    // targets after the command cancel, then exit when targets is null.
+    let targetsCalls = 0;
+    let commandCalls = 0;
+    const deps: WizardDeps = {
+      plugins: [brew, npm, system],
+      selectTargets: async () => {
+        targetsCalls++;
+        return targetsCalls === 1 ? [{ pluginId: 'npm' }] : null;
+      },
+      selectCommand: async () => {
+        commandCalls++;
+        return null;
+      },
+    };
+    const result = await runWizard(deps);
     expect(result).toBeNull();
+    expect(commandCalls).toBe(1);
+    expect(targetsCalls).toBe(2);
   });
 
   it('returns targets + command for a single target', async () => {

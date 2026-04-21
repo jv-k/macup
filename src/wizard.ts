@@ -99,25 +99,29 @@ function commandIntersection(plugins: readonly Plugin[], targets: readonly Targe
 
 export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> {
   const { plugins, selectTargets, selectCommand } = deps;
-
   const groups = buildGroups(plugins);
-  const targets = await selectTargets(groups);
-  if (targets === null || targets.length === 0) return null;
 
-  const commands = commandIntersection(plugins, targets);
-  if (commands.length === 0) {
-    console.error(
-      `error: no command is supported by all selected targets (${targets
-        .map((t) => (t.subtype ? `${t.pluginId}:${t.subtype}` : t.pluginId))
-        .join(', ')}).`,
+  // Esc on the target prompt = exit wizard.
+  // Esc on the command prompt = go back to target selection (nav stack of 1).
+  // Loop implements the back-navigation.
+  while (true) {
+    const targets = await selectTargets(groups);
+    if (targets === null || targets.length === 0) return null;
+
+    const commands = commandIntersection(plugins, targets);
+    if (commands.length === 0) {
+      console.error(
+        `error: no command is supported by all selected targets (${targets
+          .map((t) => (t.subtype ? `${t.pluginId}:${t.subtype}` : t.pluginId))
+          .join(', ')}).`,
+      );
+      return null;
+    }
+
+    const command = await selectCommand(
+      commands.map((c) => ({ label: COMMAND_LABELS[c] ?? c, value: c })),
     );
-    return null;
+    if (command === null) continue; // back to target selection
+    return { targets, command };
   }
-
-  const command = await selectCommand(
-    commands.map((c) => ({ label: COMMAND_LABELS[c] ?? c, value: c })),
-  );
-  if (command === null) return null;
-
-  return { targets, command };
 }

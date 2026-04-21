@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Plugin, PluginManifest } from '../../src/plugins/types';
-import { type WizardDeps, type WizardResult, runWizard } from '../../src/wizard';
+import { type Target, type WizardDeps, type WizardResult, runWizard } from '../../src/wizard';
 
 function mkPlugin(id: string, extra?: Partial<PluginManifest>): Plugin {
   return {
@@ -19,63 +19,129 @@ function mkPlugin(id: string, extra?: Partial<PluginManifest>): Plugin {
         outdated: true,
       },
       ...extra,
-    },
+    } as PluginManifest,
     check: async () => {},
     list: async () => [],
   };
 }
 
+const brew = mkPlugin('brew', { subtypes: ['formulas', 'casks'] });
+const npm = mkPlugin('npm', {
+  capabilities: {
+    list: true,
+    install: true,
+    update: true,
+    add: false,
+    remove: false,
+    outdated: true,
+  },
+});
+const system = mkPlugin('system', {
+  capabilities: {
+    list: true,
+    install: false,
+    update: true,
+    add: false,
+    remove: false,
+    outdated: true,
+  },
+});
+
 function makeDeps(answers: {
-  plugin?: string | null;
+  targets?: readonly Target[] | null;
   command?: string | null;
-  subtype?: string | null;
 }): WizardDeps {
   return {
-    plugins: [mkPlugin('brew', { subtypes: ['formulas', 'casks'] }), mkPlugin('npm')],
-    selectPlugin: async () => answers.plugin ?? null,
+    plugins: [brew, npm, system],
+    selectTargets: async () => answers.targets ?? null,
     selectCommand: async () => answers.command ?? null,
-    selectSubtype: async () => answers.subtype ?? null,
   };
 }
 
-describe('runWizard', () => {
-  it('returns null when user cancels at plugin selection', async () => {
-    const result = await runWizard(makeDeps({ plugin: null }));
+describe('runWizard (multiselect)', () => {
+  it('returns null when the user cancels target selection', async () => {
+    const result = await runWizard(makeDeps({ targets: null }));
     expect(result).toBeNull();
   });
 
-  it('returns null when user cancels at command selection', async () => {
-    const result = await runWizard(makeDeps({ plugin: 'npm', command: null }));
+  it('returns null when the user cancels command selection', async () => {
+    const result = await runWizard(makeDeps({ targets: [{ pluginId: 'npm' }], command: null }));
     expect(result).toBeNull();
   });
 
-  it('returns a WizardResult for a simple plugin with no subtypes', async () => {
-    const result = await runWizard(makeDeps({ plugin: 'npm', command: 'list' }));
+  it('returns targets + command for a single target', async () => {
+    const result = await runWizard(makeDeps({ targets: [{ pluginId: 'npm' }], command: 'update' }));
     expect(result).toEqual<WizardResult>({
-      pluginId: 'npm',
-      command: 'list',
-    });
-  });
-
-  it('prompts for subtype when plugin has subtypes, and includes it in result', async () => {
-    const result = await runWizard(makeDeps({ plugin: 'brew', command: 'list', subtype: 'casks' }));
-    expect(result).toEqual<WizardResult>({
-      pluginId: 'brew',
-      command: 'list',
-      subtype: 'casks',
-    });
-  });
-
-  it('returns null when user cancels at subtype selection', async () => {
-    const result = await runWizard(makeDeps({ plugin: 'brew', command: 'add', subtype: null }));
-    expect(result).toBeNull();
-  });
-
-  it('skips subtype for plugins without subtypes', async () => {
-    const result = await runWizard(makeDeps({ plugin: 'npm', command: 'update' }));
-    expect(result).toEqual<WizardResult>({
-      pluginId: 'npm',
+      targets: [{ pluginId: 'npm' }],
       command: 'update',
     });
+  });
+
+  it('returns multiple targets with subtypes intact', async () => {
+    const targets: Target[] = [
+      { pluginId: 'brew', subtype: 'formulas' },
+      { pluginId: 'brew', subtype: 'casks' },
+      { pluginId: 'npm' },
+    ];
+    const result = await runWizard(makeDeps({ targets, command: 'update' }));
+    expect(result).toEqual<WizardResult>({ targets, command: 'update' });
+  });
+
+  it('offers only commands supported by every selected target (intersection)', async () => {
+    const receivedCommands: string[] = [];
+    const deps: WizardDeps = {
+      plugins: [brew, npm, system],
+      selectTargets: async () => [
+        { pluginId: 'brew', subtype: 'formulas' },
+        { pluginId: 'npm' },
+        { pluginId: 'system' },
+      ],
+      selectCommand: async (opts) => {
+        receivedCommands.push(...opts.map((o) => o.value));
+        return 'update';
+      },
+    };
+    await runWizard(deps);
+    // brew has all 5, npm has no add/remove, system has only list+update.
+    // Intersection: list, update.
+    expect(receivedCommands.sort()).toEqual(['list', 'update']);
+  });
+
+  it('returns null and prints an error when capability intersection is empty', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onlyInstall = mkPlugin('only-install', {
+      capabilities: {
+        list: false,
+        install: true,
+        update: false,
+        add: false,
+        remove: false,
+        outdated: false,
+      } as unknown as PluginManifest['capabilities'],
+    });
+    const onlyUpdate = mkPlugin('only-update', {
+      capabilities: {
+        list: false,
+        install: false,
+        update: true,
+        add: false,
+        remove: false,
+        outdated: false,
+      } as unknown as PluginManifest['capabilities'],
+    });
+    const deps: WizardDeps = {
+      plugins: [onlyInstall, onlyUpdate],
+      selectTargets: async () => [{ pluginId: 'only-install' }, { pluginId: 'only-update' }],
+      selectCommand: async () => {
+        throw new Error('selectCommand should not be called when intersection is empty');
+      },
+    };
+    const result = await runWizard(deps);
+    expect(result).toBeNull();
+    expect(errSpy).toHaveBeenCalled();
+    expect(errSpy.mock.calls.map((c) => c.join(' ')).join('\n')).toMatch(
+      /no command is supported/i,
+    );
+    errSpy.mockRestore();
   });
 });

@@ -1,21 +1,25 @@
 import type { Plugin } from './plugins/types';
 
+export interface Target {
+  readonly pluginId: string;
+  readonly subtype?: string;
+}
+
 export interface WizardResult {
-  pluginId: string;
-  command: string;
-  subtype?: string;
+  readonly targets: readonly Target[];
+  readonly command: string;
 }
 
 export interface WizardDeps {
   readonly plugins: readonly Plugin[];
-  readonly selectPlugin: (
-    options: Array<{ label: string; value: string }>,
-  ) => Promise<string | null>;
+  readonly selectTargets: (
+    groups: ReadonlyArray<{
+      readonly plugin: Plugin;
+      readonly items: ReadonlyArray<{ readonly label: string; readonly value: Target }>;
+    }>,
+  ) => Promise<readonly Target[] | null>;
   readonly selectCommand: (
-    options: Array<{ label: string; value: string }>,
-  ) => Promise<string | null>;
-  readonly selectSubtype: (
-    options: Array<{ label: string; value: string }>,
+    options: ReadonlyArray<{ readonly label: string; readonly value: string }>,
   ) => Promise<string | null>;
 }
 
@@ -27,30 +31,77 @@ const COMMAND_LABELS: Record<string, string> = {
   remove: 'Remove from tracked list',
 };
 
+// Commands the wizard shows. `outdated` is a flag on `list`, not a standalone
+// command — exclude it. add/remove require positional names; they're offered
+// only when exactly one target is selected.
+const WIZARD_COMMANDS: readonly string[] = ['list', 'install', 'update', 'add', 'remove'];
+
+function titleCase(s: string): string {
+  return s.length === 0 ? s : s[0]?.toUpperCase() + s.slice(1);
+}
+
+function buildGroups(plugins: readonly Plugin[]) {
+  // The composite `all` plugin is redundant in a multiselect (press `a` to
+  // select all) — exclude it from the UI.
+  const shown = plugins.filter((p) => p.manifest.id !== 'all');
+  return shown.map((plugin) => {
+    const subtypes = plugin.manifest.subtypes;
+    const items =
+      subtypes && subtypes.length > 1
+        ? subtypes.map((s) => ({
+            label: titleCase(s),
+            value: { pluginId: plugin.manifest.id, subtype: s } as Target,
+          }))
+        : [
+            {
+              label: plugin.manifest.displayName,
+              value: { pluginId: plugin.manifest.id } as Target,
+            },
+          ];
+    return { plugin, items };
+  });
+}
+
+function commandIntersection(plugins: readonly Plugin[], targets: readonly Target[]): string[] {
+  const selectedPlugins = targets
+    .map((t) => plugins.find((p) => p.manifest.id === t.pluginId))
+    .filter((p): p is Plugin => p !== undefined);
+
+  const multiTarget = targets.length > 1;
+  const commands: string[] = [];
+  for (const cmd of WIZARD_COMMANDS) {
+    // add/remove require positional package names — only meaningful for a
+    // single target.
+    if (multiTarget && (cmd === 'add' || cmd === 'remove')) continue;
+    const supportedByAll = selectedPlugins.every(
+      (p) => (p.manifest.capabilities as unknown as Record<string, boolean>)[cmd] === true,
+    );
+    if (supportedByAll) commands.push(cmd);
+  }
+  return commands;
+}
+
 export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> {
-  const { plugins, selectPlugin, selectCommand, selectSubtype } = deps;
+  const { plugins, selectTargets, selectCommand } = deps;
 
-  const pluginId = await selectPlugin(
-    plugins.map((p) => ({ label: p.manifest.displayName, value: p.manifest.id })),
-  );
-  if (!pluginId) return null;
+  const groups = buildGroups(plugins);
+  const targets = await selectTargets(groups);
+  if (targets === null || targets.length === 0) return null;
 
-  const plugin = plugins.find((p) => p.manifest.id === pluginId);
-  if (!plugin) return null;
-
-  const commands = Object.entries(plugin.manifest.capabilities)
-    .filter(([, supported]) => supported === true)
-    .map(([cmd]) => ({ label: COMMAND_LABELS[cmd] ?? cmd, value: cmd }));
-
-  const command = await selectCommand(commands);
-  if (!command) return null;
-
-  const subtypes = plugin.manifest.subtypes;
-  if (subtypes && subtypes.length > 1) {
-    const subtype = await selectSubtype(subtypes.map((s) => ({ label: s, value: s })));
-    if (!subtype) return null;
-    return { pluginId, command, subtype };
+  const commands = commandIntersection(plugins, targets);
+  if (commands.length === 0) {
+    console.error(
+      `error: no command is supported by all selected targets (${targets
+        .map((t) => (t.subtype ? `${t.pluginId}:${t.subtype}` : t.pluginId))
+        .join(', ')}).`,
+    );
+    return null;
   }
 
-  return { pluginId, command };
+  const command = await selectCommand(
+    commands.map((c) => ({ label: COMMAND_LABELS[c] ?? c, value: c })),
+  );
+  if (command === null) return null;
+
+  return { targets, command };
 }

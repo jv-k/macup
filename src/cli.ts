@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { confirm, isCancel, outro, select } from '@clack/prompts';
+import { confirm, groupMultiselect, isCancel, outro, select } from '@clack/prompts';
 import { defineCommand, runCommand, runMain } from 'citty';
 import pc from 'picocolors';
 import { runCleanup } from './commands/cleanup';
@@ -20,7 +20,7 @@ import { BUILTIN_PLUGINS, defaultRegistry } from './plugins/registry';
 import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
 import { getVersion } from './version';
-import { type WizardResult, runWizard } from './wizard';
+import { type Target, type WizardResult, runWizard } from './wizard';
 
 function shouldUseColor(): boolean {
   if (process.env.NO_COLOR) return false;
@@ -222,16 +222,28 @@ const main = defineCommand({
 
     const wizResult: WizardResult | null = await runWizard({
       plugins: registry,
-      selectPlugin: async (opts) => {
-        const choice = await select({ message: 'Which package manager?', options: opts });
-        return isCancel(choice) ? null : (choice as string);
+      selectTargets: async (groups) => {
+        // Clack's groupMultiselect takes a flat map of `{ [groupLabel]: Option[] }`.
+        const options: Record<string, Array<{ label: string; value: Target }>> = {};
+        for (const g of groups) {
+          options[g.plugin.manifest.displayName] = g.items.map((it) => ({
+            label: it.label,
+            value: it.value,
+          }));
+        }
+        const choice = await groupMultiselect<Target>({
+          message: 'Which package managers? (space to toggle · a for all · enter to confirm)',
+          options,
+          required: true,
+        });
+        if (isCancel(choice)) return null;
+        return choice as readonly Target[];
       },
       selectCommand: async (opts) => {
-        const choice = await select({ message: 'What do you want to do?', options: opts });
-        return isCancel(choice) ? null : (choice as string);
-      },
-      selectSubtype: async (opts) => {
-        const choice = await select({ message: 'Which subtype?', options: opts });
+        const choice = await select({
+          message: 'What do you want to do?',
+          options: opts as Array<{ label: string; value: string }>,
+        });
         return isCancel(choice) ? null : (choice as string);
       },
     });
@@ -241,21 +253,25 @@ const main = defineCommand({
       return;
     }
 
-    // Dispatch the wizard result through the same from-manifest command tree.
-    const targetPlugin = registry.find((p) => p.manifest.id === wizResult.pluginId);
-    if (!targetPlugin) {
-      console.error(`error: plugin "${wizResult.pluginId}" is not available`);
-      process.exitCode = 1;
-      return;
-    }
-
-    const wizArgs = [wizResult.command];
-    if (wizResult.subtype === 'casks') wizArgs.push('--cask');
-    console.log(`\n→ macup ${wizResult.pluginId} ${wizArgs.join(' ')}\n`);
-
-    const cmd = pluginSubCommands[wizResult.pluginId];
-    if (cmd) {
-      await runCommand(cmd, { rawArgs: wizArgs });
+    for (const t of wizResult.targets) {
+      const wizArgs = [wizResult.command];
+      if (t.subtype) wizArgs.push(`--subtype=${t.subtype}`);
+      const label = t.subtype
+        ? `${t.pluginId} ${wizResult.command} --subtype=${t.subtype}`
+        : `${t.pluginId} ${wizResult.command}`;
+      console.log(`\n→ macup ${label}\n`);
+      const cmd = pluginSubCommands[t.pluginId];
+      if (cmd) {
+        await runCommand(cmd, { rawArgs: wizArgs });
+        // Subcommands signal failure by setting process.exitCode (Task 2 pattern).
+        // Stop the loop on the first failure so we don't pile on with cascading
+        // updates against a user who's already seeing an error.
+        if (process.exitCode && process.exitCode !== 0) return;
+      } else {
+        console.error(`error: plugin "${t.pluginId}" is not available`);
+        process.exitCode = 1;
+        return;
+      }
     }
   },
 });

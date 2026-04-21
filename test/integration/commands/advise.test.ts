@@ -114,3 +114,18 @@ describe('commands/advise — end-to-end (mocked provider + plugins)', () => {
     expect(captured[1]).toContain('should I update git?');
   });
 });
+
+import type { CommandMeta } from 'citty';
+import { buildAdviseCommand } from '../../../src/commands/advise';
+import type { ConfigStore } from '../../../src/config/store';
+
+describe('commands/advise — citty wrapper', () => {
+  it('exports a citty command with meta.name=advise', () => {
+    const cmd = buildAdviseCommand({
+      store: {} as ConfigStore,
+      plugins: [],
+      makeContext: () => ({}) as PluginContext,
+    });
+    expect((cmd.meta as CommandMeta)?.name).toBe('advise');
+  });
+});

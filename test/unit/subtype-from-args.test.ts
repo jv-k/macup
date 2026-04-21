@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  pluginHasSubtypes,
   resolveSubtypeOrExit,
   subtypeFromArgs,
   validateSubtypeArg,
@@ -161,5 +162,19 @@ describe('resolveSubtypeOrExit', () => {
     // hand over something else for a bare flag. The helper narrows via typeof.
     const result = resolveSubtypeOrExit(brew, { subtype: true as unknown });
     expect(result).toEqual({ ok: true, subtype: 'formulas' });
+  });
+});
+
+describe('pluginHasSubtypes', () => {
+  it('returns true for a plugin with 2+ subtypes', () => {
+    expect(pluginHasSubtypes(mkPlugin('brew', ['formulas', 'casks']))).toBe(true);
+  });
+
+  it('returns false for a plugin with exactly one subtype (no choice to make)', () => {
+    expect(pluginHasSubtypes(mkPlugin('solo', ['only']))).toBe(false);
+  });
+
+  it('returns false for a plugin with zero subtypes', () => {
+    expect(pluginHasSubtypes(mkPlugin('npm'))).toBe(false);
   });
 });

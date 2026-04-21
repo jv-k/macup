@@ -59,6 +59,15 @@ export function validateSubtypeArg(plugin: Plugin, args: SubtypeArgs): Validatio
 }
 
 /**
+ * True iff this plugin declares more than one subtype — i.e., the CLI should
+ * expose `--subtype=<name>` / `--cask` flags for it, and the wizard should
+ * split it into multiple items.
+ */
+export function pluginHasSubtypes(plugin: Plugin): boolean {
+  return (plugin.manifest.subtypes?.length ?? 0) > 1;
+}
+
+/**
  * Validate and resolve the subtype from raw CLI args in one step.
  * Side-effects: on invalid input, writes to stderr and sets process.exitCode=1.
  * Callers should check the returned discriminant and early-return on `ok: false`.
@@ -81,7 +90,6 @@ export function resolveSubtypeOrExit(
     process.exitCode = 1;
     return { ok: false };
   }
-  const subtype =
-    (plugin.manifest.subtypes?.length ?? 0) > 1 ? subtypeFromArgs(plugin, sArgs) : undefined;
+  const subtype = pluginHasSubtypes(plugin) ? subtypeFromArgs(plugin, sArgs) : undefined;
   return { ok: true, subtype };
 }

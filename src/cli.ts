@@ -261,17 +261,24 @@ const main = defineCommand({
         : `${t.pluginId} ${wizResult.command}`;
       console.log(`\n→ macup ${label}\n`);
       const cmd = pluginSubCommands[t.pluginId];
-      if (cmd) {
-        await runCommand(cmd, { rawArgs: wizArgs });
-        // Subcommands signal failure by setting process.exitCode (Task 2 pattern).
-        // Stop the loop on the first failure so we don't pile on with cascading
-        // updates against a user who's already seeing an error.
-        if (process.exitCode && process.exitCode !== 0) return;
-      } else {
+      if (!cmd) {
         console.error(`error: plugin "${t.pluginId}" is not available`);
         process.exitCode = 1;
         return;
       }
+      // Subcommands signal failure two ways: setting process.exitCode (validation
+      // paths like resolveSubtypeOrExit + requireNames) or throwing (subprocess
+      // runs via withSpinner). Handle both and stop the loop either way so we
+      // don't pile on cascading updates against a user already seeing an error.
+      try {
+        await runCommand(cmd, { rawArgs: wizArgs });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`error running ${t.pluginId} ${wizResult.command}: ${msg}`);
+        process.exitCode = 1;
+        return;
+      }
+      if (process.exitCode && process.exitCode !== 0) return;
     }
   },
 });
@@ -344,7 +351,7 @@ function showCustomHelp() {
     if (m.capabilities.remove) cmds.push('remove');
     const cmdStr = s.dim(cmds.join(', '));
     const subtypeHint =
-      m.subtypes && m.subtypes.length > 1 ? s.dim(` [--cask for ${m.subtypes[1]}]`) : '';
+      m.subtypes && m.subtypes.length > 1 ? s.dim(` [--subtype=${m.subtypes.join('|')}]`) : '';
     console.log(`  ${s.bold(m.id.padEnd(pad))} ${m.displayName}  ${cmdStr}${subtypeHint}`);
   }
   console.log('');

@@ -11,7 +11,7 @@ import type {
   PluginContext,
 } from '../plugins/types';
 import * as log from '../ui/log';
-import { resolveSubtypeOrExit } from './subtype';
+import { pluginHasSubtypes, resolveSubtypeOrExit } from './subtype';
 
 async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
   if (!process.stdout.isTTY) return fn();
@@ -135,7 +135,7 @@ function resolveConfigKey(plugin: Plugin, subtype: string | undefined) {
 
 export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): CommandDef {
   const { manifest } = plugin;
-  const hasSubtypes = (manifest.subtypes?.length ?? 0) > 1;
+  const hasSubtypes = pluginHasSubtypes(plugin);
   const subtypeArg: ArgsDef = hasSubtypes
     ? {
         subtype: {

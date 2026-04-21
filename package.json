@@ -10,7 +10,11 @@
   "exports": {
     ".": "./dist/cli.mjs"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=20"
   },
@@ -38,7 +42,9 @@
   ],
   "author": "John Valai <git@jvk.to>",
   "license": "MIT",
-  "os": ["darwin"],
+  "os": [
+    "darwin"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jv-k/macos-updatetool.git"
@@ -49,6 +55,7 @@
   "homepage": "https://github.com/jv-k/macos-updatetool",
   "preferGlobal": true,
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
     "@clack/prompts": "^1.2.0",
     "citty": "^0.1.6",
     "execa": "^9.6.1",
@@ -67,6 +74,9 @@
     "vitest": "^2.1.8"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@biomejs/biome", "esbuild"]
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "esbuild"
+    ]
   }
 }

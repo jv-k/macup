@@ -231,6 +231,11 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
       meta: { name: 'install', description: 'Install packages via the plugin.' },
       args: {
         ...subtypeArg,
+        verbose: {
+          type: 'boolean',
+          alias: 'v',
+          description: 'After each package, print a one-line trace (kind, duration, or error).',
+        },
         packages: {
           type: 'positional',
           required: false,
@@ -275,11 +280,26 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           console.log('');
           console.log(log.header(`Installing ${manifest.displayName}`, refs.length));
           console.log('');
+          const verbose = Boolean(args.verbose);
           for (let i = 0; i < refs.length; i++) {
             const ref = refs[i] as PackageRef;
-            await withSpinner(log.counter(i + 1, refs.length, 'Installing', ref.name), async () => {
-              await plugin.install?.(makeCtx(deps), [ref], {});
-            });
+            const started = Date.now();
+            try {
+              await withSpinner(
+                log.counter(i + 1, refs.length, 'Installing', ref.name),
+                async () => {
+                  await plugin.install?.(makeCtx(deps), [ref], {});
+                },
+              );
+              if (verbose) {
+                console.log(log.trace(`${ref.kind} · ${Date.now() - started}ms`));
+              }
+            } catch (err) {
+              if (verbose) {
+                console.log(log.traceError(err instanceof Error ? err.message : String(err)));
+              }
+              throw err;
+            }
           }
           await runHealthCheck(manifest.id, makeCtx(deps));
         }
@@ -295,6 +315,11 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         'only-outdated': {
           type: 'boolean',
           description: 'Only upgrade outdated (default true for update).',
+        },
+        verbose: {
+          type: 'boolean',
+          alias: 'v',
+          description: 'After each package, print a one-line trace (kind, duration, or error).',
         },
       },
       async run({ args }) {
@@ -357,11 +382,23 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         console.log(log.header(`Updating ${manifest.displayName}`, refs.length));
         console.log('');
         if (plugin.update) {
+          const verbose = Boolean(args.verbose);
           for (let i = 0; i < refs.length; i++) {
             const ref = refs[i] as PackageRef;
-            await withSpinner(log.counter(i + 1, refs.length, 'Updating', ref.name), async () => {
-              await plugin.update?.(makeCtx(deps), [ref], {});
-            });
+            const started = Date.now();
+            try {
+              await withSpinner(log.counter(i + 1, refs.length, 'Updating', ref.name), async () => {
+                await plugin.update?.(makeCtx(deps), [ref], {});
+              });
+              if (verbose) {
+                console.log(log.trace(`${ref.kind} · ${Date.now() - started}ms`));
+              }
+            } catch (err) {
+              if (verbose) {
+                console.log(log.traceError(err instanceof Error ? err.message : String(err)));
+              }
+              throw err;
+            }
           }
         }
         await runHealthCheck(manifest.id, makeCtx(deps));

@@ -14,29 +14,34 @@ const SYM = {
 };
 
 // ── Section headers ─────────────────────────────────────────────
+// Ink-inspired inverted-video titles: the label renders with fg/bg
+// swapped, with a single-space pad on each side so it reads as a
+// solid pill rather than just tinted text.
+
+function invertedLabel(
+  text: string,
+  count: number | undefined,
+  color: (s: string) => string,
+): string {
+  const countStr = count !== undefined ? ` (${count})` : '';
+  const label = ` ${text.toUpperCase()}${countStr} `;
+  return useColor ? color(pc.inverse(pc.bold(label))) : label.trim();
+}
 
 export function header(text: string, count?: number): string {
-  const countStr = count !== undefined ? ` (${count})` : '';
-  const label = `${text.toUpperCase()}${countStr}:`;
-  return useColor ? pc.underline(pc.cyan(label)) : label;
+  return invertedLabel(text, count, pc.cyan);
 }
 
 export function subHeader(text: string, count?: number): string {
-  const countStr = count !== undefined ? ` (${count})` : '';
-  const label = `${text.toUpperCase()}${countStr}:`;
-  return useColor ? pc.green(label) : label;
+  return invertedLabel(text, count, pc.green);
 }
 
 export function outdatedHeader(text: string, count?: number): string {
-  const countStr = count !== undefined ? ` (${count})` : '';
-  const label = `${text.toUpperCase()}${countStr}:`;
-  return useColor ? pc.yellow(label) : label;
+  return invertedLabel(text, count, pc.yellow);
 }
 
 export function errorHeader(text: string, count?: number): string {
-  const countStr = count !== undefined ? ` (${count})` : '';
-  const label = `${text.toUpperCase()}${countStr}:`;
-  return useColor ? pc.red(label) : label;
+  return invertedLabel(text, count, pc.red);
 }
 
 // ── Package lines ───────────────────────────────────────────────
@@ -64,6 +69,20 @@ export function counter(idx: number, total: number, action: string, name: string
   const prefix = useColor ? pc.dim(`${idx}/${total}`) : `${idx}/${total}`;
   const styled = useColor ? pc.green(name) : name;
   return `  ${prefix} ${action} ${styled}`;
+}
+
+// ── Verbose per-item trace (one dim line after the spinner) ─────
+
+export function trace(detail: string): string {
+  const arrow = useColor ? pc.dim('↳') : '↳';
+  const body = useColor ? pc.dim(detail) : detail;
+  return `    ${arrow} ${body}`;
+}
+
+export function traceError(detail: string): string {
+  const arrow = useColor ? pc.red('↳') : '↳';
+  const body = useColor ? pc.dim(detail) : detail;
+  return `    ${arrow} ${body}`;
 }
 
 // ── Message types ───────────────────────────────────────────────

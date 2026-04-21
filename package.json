@@ -57,6 +57,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
     "@clack/prompts": "^1.2.0",
+    "@google/genai": "^1.50.1",
     "citty": "^0.1.6",
     "execa": "^9.6.1",
     "picocolors": "^1.1.1",

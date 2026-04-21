@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { buildPayload } from '../../../src/ai/payload';
-import type { PackageStatus } from '../../../src/plugins/types';
 import type { OutdatedItem } from '../../../src/ai/payload';
+import type { PackageStatus } from '../../../src/plugins/types';
 
 function status(overrides: Partial<PackageStatus> & { name: string }): PackageStatus {
   const { name, ...rest } = overrides;
@@ -20,8 +20,12 @@ describe('ai/payload', () => {
     const payload = buildPayload({
       macosVersion: '14.4.1',
       byManager: {
-        brew_formulas: [status({ name: 'git', installedVersion: '2.40.0', latestVersion: '2.43.0' })],
-        npm_apps: [status({ name: 'typescript', installedVersion: '5.2.0', latestVersion: '5.4.0' })],
+        brew_formulas: [
+          status({ name: 'git', installedVersion: '2.40.0', latestVersion: '2.43.0' }),
+        ],
+        npm_apps: [
+          status({ name: 'typescript', installedVersion: '5.2.0', latestVersion: '5.4.0' }),
+        ],
       },
     });
     expect(payload.macos_version).toBe('14.4.1');
@@ -43,7 +47,7 @@ describe('ai/payload', () => {
         ],
       },
     });
-    const formulas = payload.outdated.brew_formulas!;
+    const formulas = payload.outdated.brew_formulas ?? [];
     expect(formulas).toHaveLength(1);
     expect(formulas.at(0)?.name).toBe('git');
   });

@@ -6,7 +6,12 @@ interface AnthropicSdkModule {
   default: new (opts: { apiKey: string }) => {
     messages: {
       stream: (
-        body: { model: string; max_tokens: number; system: string; messages: Array<{ role: 'user'; content: string }> },
+        body: {
+          model: string;
+          max_tokens: number;
+          system: string;
+          messages: Array<{ role: 'user'; content: string }>;
+        },
         options: { signal?: AbortSignal },
       ) => AsyncIterable<{ type: string; delta?: { type: string; text?: string } }>;
     };
@@ -32,7 +37,11 @@ export async function createAnthropicProvider(
         { signal: opts.signal },
       );
       for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {
+        if (
+          event.type === 'content_block_delta' &&
+          event.delta?.type === 'text_delta' &&
+          event.delta.text
+        ) {
           yield event.delta.text;
         }
       }

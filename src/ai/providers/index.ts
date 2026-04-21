@@ -10,6 +10,10 @@ const SDK_PACKAGES: Record<AiProvider, string> = {
 
 type ImportFn = (spec: string) => Promise<unknown>;
 
+type AnthropicModule = typeof import('./anthropic');
+type GeminiModule = typeof import('./gemini');
+type OpenAiModule = typeof import('./openai');
+
 export interface LoadProviderOptions {
   readonly importFn?: ImportFn;
 }
@@ -22,16 +26,16 @@ export async function loadProvider(
   try {
     switch (name) {
       case 'anthropic': {
-        const { createAnthropicProvider } = (await importFn('./anthropic')) as typeof import('./anthropic');
-        return await createAnthropicProvider(importFn);
+        const mod = (await importFn('./anthropic')) as AnthropicModule;
+        return await mod.createAnthropicProvider(importFn);
       }
       case 'gemini': {
-        const { createGeminiProvider } = (await importFn('./gemini')) as typeof import('./gemini');
-        return await createGeminiProvider(importFn);
+        const mod = (await importFn('./gemini')) as GeminiModule;
+        return await mod.createGeminiProvider(importFn);
       }
       case 'openai': {
-        const { createOpenAiProvider } = (await importFn('./openai')) as typeof import('./openai');
-        return await createOpenAiProvider(importFn);
+        const mod = (await importFn('./openai')) as OpenAiModule;
+        return await mod.createOpenAiProvider(importFn);
       }
       default: {
         const _exhaustive: never = name;

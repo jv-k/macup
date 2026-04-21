@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { runAdvisor } from '../../../src/ai/advisor';
-import type { StreamProvider } from '../../../src/ai/providers/types';
 import type { AiPayload } from '../../../src/ai/payload';
+import type { StreamProvider } from '../../../src/ai/providers/types';
 
 const payload: AiPayload = {
   macos_version: '14.4.1',
@@ -38,7 +38,9 @@ describe('ai/advisor', () => {
 
   it('builds follow-up user message when question is provided', async () => {
     const provider: StreamProvider = {
-      stream: vi.fn().mockImplementation(async function* () { yield 'answer'; }),
+      stream: vi.fn().mockImplementation(async function* () {
+        yield 'answer';
+      }),
     };
     await runAdvisor({
       provider,

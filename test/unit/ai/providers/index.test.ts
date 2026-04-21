@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { loadProvider } from '../../../../src/ai/providers';
+import { describe, expect, it } from 'vitest';
 import { ErrAiSdkMissing } from '../../../../src/ai/errors';
+import { loadProvider } from '../../../../src/ai/providers';
 
 describe('ai/providers/index', () => {
   it('maps unknown provider name to a TypeError at call time', async () => {
@@ -12,7 +12,11 @@ describe('ai/providers/index', () => {
     // Force import failure by passing a non-installed package name via the
     // override seam (see implementation). This verifies error translation.
     await expect(
-      loadProvider('anthropic', { importFn: async () => { throw Object.assign(new Error('x'), { code: 'ERR_MODULE_NOT_FOUND' }); } }),
+      loadProvider('anthropic', {
+        importFn: async () => {
+          throw Object.assign(new Error('x'), { code: 'ERR_MODULE_NOT_FOUND' });
+        },
+      }),
     ).rejects.toBeInstanceOf(ErrAiSdkMissing);
   });
 });

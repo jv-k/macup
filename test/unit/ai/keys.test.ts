@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { detectKey, detectAvailableProviders, ENV_VARS } from '../../../src/ai/keys';
+import { describe, expect, it } from 'vitest';
+import { ENV_VARS, detectAvailableProviders, detectKey } from '../../../src/ai/keys';
 
 describe('ai/keys', () => {
   it('detects anthropic key from ANTHROPIC_API_KEY', () => {
@@ -25,9 +25,10 @@ describe('ai/keys', () => {
   });
 
   it('detectAvailableProviders lists only providers with keys', () => {
-    expect(
-      detectAvailableProviders({ ANTHROPIC_API_KEY: 'x', OPENAI_API_KEY: 'y' }),
-    ).toEqual(['anthropic', 'openai']);
+    expect(detectAvailableProviders({ ANTHROPIC_API_KEY: 'x', OPENAI_API_KEY: 'y' })).toEqual([
+      'anthropic',
+      'openai',
+    ]);
     expect(detectAvailableProviders({})).toEqual([]);
   });
 

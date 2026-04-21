@@ -58,8 +58,6 @@ describe('ApplistSchema — ai section', () => {
   });
 
   it('rejects unknown providers', () => {
-    expect(() =>
-      ApplistSchema.parse({ ai: { enabled: true, provider: 'bogus' } }),
-    ).toThrow();
+    expect(() => ApplistSchema.parse({ ai: { enabled: true, provider: 'bogus' } })).toThrow();
   });
 });

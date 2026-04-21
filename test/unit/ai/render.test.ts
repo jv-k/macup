@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { streamToStdout } from '../../../src/ai/render';
 
 async function* gen(chunks: string[]) {

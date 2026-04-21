@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { MODELS, MAX_TOKENS } from '../../../src/ai/models';
+import { describe, expect, it } from 'vitest';
+import { MAX_TOKENS, MODELS } from '../../../src/ai/models';
 
 describe('ai/models', () => {
   it('defines a model id per provider', () => {

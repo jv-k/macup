@@ -1,9 +1,9 @@
 import { MAX_TOKENS } from './models';
-import { type AiPayload } from './payload';
-import { buildInitialUserMessage, buildFollowUpUserMessage, SYSTEM_PROMPT } from './prompt';
 import { type Action, parseActions } from './parser';
+import type { AiPayload } from './payload';
+import { SYSTEM_PROMPT, buildFollowUpUserMessage, buildInitialUserMessage } from './prompt';
 import type { StreamProvider } from './providers/types';
-import { streamToStdout, type StreamSink } from './render';
+import { type StreamSink, streamToStdout } from './render';
 
 export interface RunAdvisorOptions {
   readonly provider: StreamProvider;
@@ -36,7 +36,10 @@ export async function runAdvisor(opts: RunAdvisorOptions): Promise<RunAdvisorRes
     signal: opts.signal,
   });
 
-  const sink: StreamSink = opts.sink ?? { write: (s) => process.stdout.write(s), signal: opts.signal };
+  const sink: StreamSink = opts.sink ?? {
+    write: (s) => process.stdout.write(s),
+    signal: opts.signal,
+  };
   const text = await streamToStdout(iter, sink);
 
   const actions = parseActions(text, {

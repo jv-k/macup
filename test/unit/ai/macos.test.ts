@@ -1,10 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getMacosVersion } from '../../../src/ai/macos';
 import type { ExecRunner } from '../../../src/plugins/types';
 
 function fakeExec(result: { stdout: string; exitCode: number }): ExecRunner {
   return {
-    run: vi.fn().mockResolvedValue({ stdout: result.stdout, stderr: '', exitCode: result.exitCode }),
+    run: vi
+      .fn()
+      .mockResolvedValue({ stdout: result.stdout, stderr: '', exitCode: result.exitCode }),
     runJson: vi.fn(),
     onPath: vi.fn().mockReturnValue(true),
   };

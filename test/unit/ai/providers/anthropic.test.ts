@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createAnthropicProvider } from '../../../../src/ai/providers/anthropic';
 
 describe('ai/providers/anthropic', () => {
@@ -9,7 +9,9 @@ describe('ai/providers/anthropic', () => {
       { type: 'message_stop' },
     ];
 
-    async function* fakeStream() { for (const e of events) yield e; }
+    async function* fakeStream() {
+      for (const e of events) yield e;
+    }
 
     const fakeClient = {
       messages: {
@@ -19,7 +21,7 @@ describe('ai/providers/anthropic', () => {
       },
     };
     class FakeAnthropic {
-      constructor(_opts: { apiKey: string }) { return fakeClient as unknown as FakeAnthropic; }
+      messages = fakeClient.messages;
     }
 
     const importFn = async (spec: string) => {
@@ -54,16 +56,27 @@ describe('ai/providers/anthropic', () => {
     const fakeClient = {
       messages: {
         stream: vi.fn().mockReturnValue({
-          [Symbol.asyncIterator]: async function* () { yield { type: 'message_stop' }; },
+          [Symbol.asyncIterator]: async function* () {
+            yield { type: 'message_stop' };
+          },
         }),
       },
     };
-    class FakeAnthropic { constructor(_: unknown) { return fakeClient as unknown as FakeAnthropic; } }
+    class FakeAnthropic {
+      messages = fakeClient.messages;
+    }
     const importFn = async () => ({ default: FakeAnthropic });
     const provider = await createAnthropicProvider(importFn);
     for await (const _ of provider.stream({
-      model: 'x', system: 's', user: 'u', maxTokens: 1, apiKey: 'k', signal,
-    })) { /* noop */ }
+      model: 'x',
+      system: 's',
+      user: 'u',
+      maxTokens: 1,
+      apiKey: 'k',
+      signal,
+    })) {
+      /* noop */
+    }
     expect(fakeClient.messages.stream).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ signal }),

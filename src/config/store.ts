@@ -3,7 +3,14 @@ import { join } from 'node:path';
 import { type Document, Scalar, YAMLMap, YAMLSeq, parseDocument } from 'yaml';
 import { ErrInvalidConfig } from '../errors';
 import type { SelectionPolicy } from '../plugins/selection';
-import { type AiConfig, AiConfigSchema, type AiProvider, AiProviderSchema, type ApplistKey, ApplistSchema } from './schema';
+import {
+  type AiConfig,
+  AiConfigSchema,
+  type AiProvider,
+  AiProviderSchema,
+  type ApplistKey,
+  ApplistSchema,
+} from './schema';
 
 export interface ConfigStorePaths {
   readonly applistPath: string;

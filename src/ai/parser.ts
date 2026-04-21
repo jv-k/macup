@@ -21,8 +21,8 @@ export function parseActions(markdown: string, ctx: ParseContext): Action[] {
     for (const raw of section.split('\n')) {
       const m = LINE_RE.exec(raw);
       if (!m) continue;
-      const id = m[1]!;
-      const tail = m[2]!;
+      const [, id, tail] = m;
+      if (id === undefined || tail === undefined) continue;
       const label = stripRationale(tail);
       const action = parseActionId(id, label, ctx);
       if (action) actions.push(action);
@@ -53,13 +53,13 @@ function parseActionId(id: string, label: string, ctx: ParseContext): Action | n
   if (id === 'ASK_QUESTION') return { type: 'ASK_QUESTION', label };
   if (id === 'CANCEL') return { type: 'CANCEL', label };
   const sel = /^UPDATE_SELECTED:(.+)$/.exec(id);
-  if (sel) {
-    const manager = sel[1]!.trim();
+  if (sel?.[1]) {
+    const manager = sel[1].trim();
     return ctx.validManagers.has(manager) ? { type: 'UPDATE_SELECTED', manager, label } : null;
   }
   const one = /^UPDATE_ONE:(.+)$/.exec(id);
-  if (one) {
-    const pkg = one[1]!.trim();
+  if (one?.[1]) {
+    const pkg = one[1].trim();
     return ctx.validPackages.has(pkg) ? { type: 'UPDATE_ONE', packageName: pkg, label } : null;
   }
   return null;

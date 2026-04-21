@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { parseActions, type ParseContext } from '../../../src/ai/parser';
+import { describe, expect, it } from 'vitest';
+import { type ParseContext, parseActions } from '../../../src/ai/parser';
 
 const ctx: ParseContext = {
   validManagers: new Set(['brew_formulas', 'npm_apps']),
@@ -41,13 +41,13 @@ describe('ai/parser', () => {
   });
 
   it('drops UPDATE_SELECTED with unknown manager', () => {
-    const md = `### Suggested actions\n1. [UPDATE_SELECTED:bogus] nope\n2. [CANCEL] bye\n`;
+    const md = '### Suggested actions\n1. [UPDATE_SELECTED:bogus] nope\n2. [CANCEL] bye\n';
     const actions = parseActions(md, ctx);
     expect(actions.find((a) => a.type === 'UPDATE_SELECTED')).toBeUndefined();
   });
 
   it('drops UPDATE_ONE with unknown package', () => {
-    const md = `### Suggested actions\n1. [UPDATE_ONE:ghost] nope\n2. [CANCEL] bye\n`;
+    const md = '### Suggested actions\n1. [UPDATE_ONE:ghost] nope\n2. [CANCEL] bye\n';
     const actions = parseActions(md, ctx);
     expect(actions.find((a) => a.type === 'UPDATE_ONE')).toBeUndefined();
   });
@@ -58,7 +58,7 @@ describe('ai/parser', () => {
   });
 
   it('does not duplicate ASK_QUESTION or CANCEL when model already emitted them', () => {
-    const md = `### Suggested actions\n1. [ASK_QUESTION] q\n2. [CANCEL] c\n`;
+    const md = '### Suggested actions\n1. [ASK_QUESTION] q\n2. [CANCEL] c\n';
     const actions = parseActions(md, ctx);
     expect(actions.filter((a) => a.type === 'ASK_QUESTION')).toHaveLength(1);
     expect(actions.filter((a) => a.type === 'CANCEL')).toHaveLength(1);

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createOpenAiProvider } from '../../../../src/ai/providers/openai';
 
 describe('ai/providers/openai', () => {
@@ -8,7 +8,9 @@ describe('ai/providers/openai', () => {
       { choices: [{ delta: { content: 'world' } }] },
       { choices: [{ delta: {} }] },
     ];
-    async function* stream() { for (const e of events) yield e; }
+    async function* stream() {
+      for (const e of events) yield e;
+    }
 
     const fakeClient = {
       chat: {
@@ -19,15 +21,19 @@ describe('ai/providers/openai', () => {
     };
     class FakeOpenAI {
       chat = fakeClient.chat;
-      constructor(_: { apiKey: string }) { /* noop */ }
     }
     const importFn = async () => ({ default: FakeOpenAI });
 
     const provider = await createOpenAiProvider(importFn);
     const out: string[] = [];
     for await (const c of provider.stream({
-      model: 'gpt-5-mini', system: 'sys', user: 'user', maxTokens: 2000, apiKey: 'k',
-    })) out.push(c);
+      model: 'gpt-5-mini',
+      system: 'sys',
+      user: 'user',
+      maxTokens: 2000,
+      apiKey: 'k',
+    }))
+      out.push(c);
     expect(out).toEqual(['Hello ', 'world']);
     expect(fakeClient.chat.completions.create).toHaveBeenCalledWith(
       expect.objectContaining({

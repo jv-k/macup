@@ -1,5 +1,5 @@
-import { MacupError } from '../errors';
 import type { AiProvider } from '../config/schema';
+import { MacupError } from '../errors';
 
 export class ErrAiProviderNotConfigured extends MacupError {
   override readonly kind = 'ai-provider-not-configured';
@@ -8,9 +8,7 @@ export class ErrAiProviderNotConfigured extends MacupError {
     readonly provider: AiProvider,
     readonly envVars: readonly string[],
   ) {
-    super(
-      `AI provider "${provider}" has no API key. Set one of: ${envVars.join(', ')}.`,
-    );
+    super(`AI provider "${provider}" has no API key. Set one of: ${envVars.join(', ')}.`);
   }
 }
 

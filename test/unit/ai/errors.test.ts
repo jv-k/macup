@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vitest';
-import { MacupError } from '../../../src/errors';
+import { describe, expect, it } from 'vitest';
 import {
   ErrAiProviderNotConfigured,
-  ErrAiSdkMissing,
   ErrAiRequestFailed,
+  ErrAiSdkMissing,
 } from '../../../src/ai/errors';
+import { MacupError } from '../../../src/errors';
 
 describe('ai/errors', () => {
   it('ErrAiProviderNotConfigured extends MacupError and names the env var', () => {

@@ -1,5 +1,5 @@
-import type { Action } from './parser';
 import type { PackageRef, Plugin, PluginContext } from '../plugins/types';
+import type { Action } from './parser';
 
 export interface ExecuteContext {
   readonly ctx: PluginContext;

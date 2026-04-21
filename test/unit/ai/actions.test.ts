@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { executeAction } from '../../../src/ai/actions';
-import type { Plugin, PluginContext, PackageRef } from '../../../src/plugins/types';
+import type { PackageRef, Plugin, PluginContext } from '../../../src/plugins/types';
 
 function fakePlugin(id: string): Plugin {
   return {
@@ -10,7 +10,14 @@ function fakePlugin(id: string): Plugin {
       supportedOS: ['darwin'],
       requires: [],
       configKeys: [],
-      capabilities: { list: true, install: true, update: true, add: true, remove: true, outdated: true },
+      capabilities: {
+        list: true,
+        install: true,
+        update: true,
+        add: true,
+        remove: true,
+        outdated: true,
+      },
     },
     check: vi.fn(),
     list: vi.fn(),
@@ -18,7 +25,11 @@ function fakePlugin(id: string): Plugin {
   };
 }
 
-const ctx = { exec: {} as any, log: { info() {}, warn() {}, error() {}, debug() {} }, signal: new AbortController().signal } as PluginContext;
+const ctx = {
+  exec: {} as unknown,
+  log: { info() {}, warn() {}, error() {}, debug() {} },
+  signal: new AbortController().signal,
+} as unknown as PluginContext;
 
 describe('ai/actions', () => {
   it('UPDATE_ALL runs plugin.update for every outdated ref grouped by manager', async () => {
@@ -32,19 +43,21 @@ describe('ai/actions', () => {
       ['brew_formulas', brew],
       ['npm_apps', npm],
     ]);
-    await executeAction(
-      { type: 'UPDATE_ALL', label: '' },
-      { ctx, refsByManager, managerToPlugin },
-    );
+    await executeAction({ type: 'UPDATE_ALL', label: '' }, { ctx, refsByManager, managerToPlugin });
     expect(brew.update).toHaveBeenCalledWith(ctx, [{ kind: 'formula', name: 'git' }], {});
     expect(npm.update).toHaveBeenCalledWith(ctx, [{ kind: 'npm', name: 'typescript' }], {});
   });
 
   it('UPDATE_SAFE delegates to UPDATE_ALL in v1', async () => {
     const brew = fakePlugin('brew');
-    const refsByManager = new Map([['brew_formulas', [{ kind: 'formula', name: 'git' }] as readonly PackageRef[]]]);
+    const refsByManager = new Map([
+      ['brew_formulas', [{ kind: 'formula', name: 'git' }] as readonly PackageRef[]],
+    ]);
     const managerToPlugin = new Map([['brew_formulas', brew]]);
-    await executeAction({ type: 'UPDATE_SAFE', label: '' }, { ctx, refsByManager, managerToPlugin });
+    await executeAction(
+      { type: 'UPDATE_SAFE', label: '' },
+      { ctx, refsByManager, managerToPlugin },
+    );
     expect(brew.update).toHaveBeenCalled();
   });
 
@@ -55,7 +68,10 @@ describe('ai/actions', () => {
       ['brew_formulas', [{ kind: 'formula', name: 'git' }] as readonly PackageRef[]],
       ['npm_apps', [{ kind: 'npm', name: 'typescript' }] as readonly PackageRef[]],
     ]);
-    const managerToPlugin = new Map([['brew_formulas', brew], ['npm_apps', npm]]);
+    const managerToPlugin = new Map([
+      ['brew_formulas', brew],
+      ['npm_apps', npm],
+    ]);
     await executeAction(
       { type: 'UPDATE_SELECTED', manager: 'brew_formulas', label: '' },
       { ctx, refsByManager, managerToPlugin },
@@ -67,10 +83,13 @@ describe('ai/actions', () => {
   it('UPDATE_ONE runs only the named package', async () => {
     const brew = fakePlugin('brew');
     const refsByManager = new Map([
-      ['brew_formulas', [
-        { kind: 'formula', name: 'git' },
-        { kind: 'formula', name: 'jq' },
-      ] as readonly PackageRef[]],
+      [
+        'brew_formulas',
+        [
+          { kind: 'formula', name: 'git' },
+          { kind: 'formula', name: 'jq' },
+        ] as readonly PackageRef[],
+      ],
     ]);
     const managerToPlugin = new Map([['brew_formulas', brew]]);
     await executeAction(
@@ -82,10 +101,15 @@ describe('ai/actions', () => {
 
   it('CANCEL and ASK_QUESTION are no-ops for the executor', async () => {
     const brew = fakePlugin('brew');
-    const refsByManager = new Map([['brew_formulas', [{ kind: 'formula', name: 'git' }] as readonly PackageRef[]]]);
+    const refsByManager = new Map([
+      ['brew_formulas', [{ kind: 'formula', name: 'git' }] as readonly PackageRef[]],
+    ]);
     const managerToPlugin = new Map([['brew_formulas', brew]]);
     await executeAction({ type: 'CANCEL', label: '' }, { ctx, refsByManager, managerToPlugin });
-    await executeAction({ type: 'ASK_QUESTION', label: '' }, { ctx, refsByManager, managerToPlugin });
+    await executeAction(
+      { type: 'ASK_QUESTION', label: '' },
+      { ctx, refsByManager, managerToPlugin },
+    );
     expect(brew.update).not.toHaveBeenCalled();
   });
 });

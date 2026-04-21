@@ -412,8 +412,8 @@ Replace the entire contents of [test/unit/wizard.test.ts](../../../test/unit/wiz
 
 ```ts
 import { describe, expect, it, vi } from 'vitest';
-import type { Plugin, PluginManifest } from '../../src/plugins/types';
 import { type Target, type WizardDeps, type WizardResult, runWizard } from '../../src/wizard';
+import type { Plugin, PluginManifest } from '../../src/plugins/types';
 
 function mkPlugin(id: string, extra?: Partial<PluginManifest>): Plugin {
   return {
@@ -766,11 +766,11 @@ import { type WizardResult, runWizard } from './wizard';
 import { type Target, type WizardResult, runWizard } from './wizard';
 ```
 
-- [ ] **Step 6: Typecheck + full test suite**
+- [ ] **Step 6: Typecheck + lint + full test suite**
 
-Run: `pnpm typecheck && pnpm test`
+Run: `pnpm typecheck && pnpm lint && pnpm test`
 
-Expected: both exit 0 with all tests green.
+Expected: all three exit 0 with all tests green.
 
 - [ ] **Step 7: Build and smoke-test the wizard visually**
 

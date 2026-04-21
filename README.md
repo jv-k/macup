@@ -64,6 +64,78 @@ Every plugin also supports `pin`, `unpin`, `skip`, `unskip` for packages tracked
 
 See [`plugins/README.md`](plugins/README.md) for the authoring contract. Adding a new backend (e.g. `pip`, `cargo`, `go`) is one file in `/plugins/` plus one registry line.
 
+## AI advice (optional)
+
+macup can ask an LLM to review your outdated-packages list and recommend what to
+update, defer, or investigate. The feature is off by default and only activates
+when you enable it in config AND have a provider API key in your environment.
+
+### Enabling
+
+```yaml
+# ~/.config/macup/applist.yaml
+ai:
+  enabled: true
+  provider: anthropic  # anthropic | gemini | openai
+```
+
+Or interactively via `macup settings`.
+
+### API keys
+
+Keys are read from the environment. macup never prompts for, stores, or logs keys.
+
+| Provider  | Env var(s)                                    |
+| --------- | --------------------------------------------- |
+| Anthropic | `ANTHROPIC_API_KEY`                           |
+| Gemini    | `GEMINI_API_KEY` (fallback: `GOOGLE_API_KEY`) |
+| OpenAI    | `OPENAI_API_KEY`                              |
+
+If only one provider's key is set, it is used automatically. If several are set,
+`ai.provider` determines the choice; switch via `macup settings`.
+
+### What gets sent to the provider
+
+Only:
+
+- Your macOS version (e.g. `14.4.1`).
+- The outdated-packages list, grouped by manager, with name + current + latest version.
+
+Never sent: environment variables, filesystem paths, user identity, other installed
+packages, lock files, project manifests, shell history, or anything outside the
+outdated list.
+
+### Usage
+
+- From the main menu, pick **"Advise using AI"**.
+- Or: `macup advise`.
+
+You'll see streaming advice, then a menu of suggested actions:
+
+- **Update safe subset** — the packages the LLM flagged as low-risk.
+- **Update all** — every outdated package.
+- **Update \<manager\>** — every outdated package from one manager.
+- **Update \<package\>** — a single package.
+- **Ask a follow-up** — stateless follow-up with the same report.
+- **Cancel** — back to main menu.
+
+Ctrl+C cancels any in-progress streaming response and returns to the main menu.
+
+### Cost
+
+You pay the provider directly — macup never bills. The default model tier is
+economical (Claude Sonnet, Gemini Flash, GPT mini). A typical call is a few
+cents or less.
+
+### Troubleshooting
+
+- **"AI provider X has no API key"** — the env var isn't set. See the table
+  above for the expected name.
+- **"requires the X package"** — the SDK for your chosen provider isn't
+  installed. Run `npm install` (or the equivalent) to restore it.
+- **Rate-limit errors** — the provider returned a 429. The error message
+  includes the retry-after hint when available.
+
 ## Configuration
 
 macup tracks your packages in a YAML file:
@@ -93,6 +165,13 @@ skip:
   brew:
     - legacy-dep
 ```
+
+### Config fields reference
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ai.enabled` | `boolean` | `false` | Turn the AI advisor on. |
+| `ai.provider` | `"anthropic" \| "gemini" \| "openai"` | `"anthropic"` | Which provider to use when multiple keys are detected. |
 
 ### Config resolution order
 

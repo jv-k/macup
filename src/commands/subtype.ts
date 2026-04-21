@@ -16,12 +16,12 @@ export function subtypeFromArgs(plugin: Plugin, args: SubtypeArgs): string | und
   const subtypes = plugin.manifest.subtypes;
   if (!subtypes || subtypes.length === 0) return undefined;
 
-  if (args.subtype !== undefined) {
+  if (args.subtype !== undefined && args.subtype !== '') {
     return subtypes.includes(args.subtype) ? args.subtype : undefined;
   }
 
   if (args.cask) {
-    return subtypes.find((s) => s === 'casks') ?? subtypes[subtypes.length - 1];
+    return subtypes.includes('casks') ? 'casks' : undefined;
   }
 
   return subtypes[0];
@@ -35,7 +35,7 @@ export type ValidationResult = { ok: true } | { ok: false; error: string };
  * set at all on a plugin without subtypes. Returns { ok: true } otherwise.
  */
 export function validateSubtypeArg(plugin: Plugin, args: SubtypeArgs): ValidationResult {
-  if (args.subtype === undefined) return { ok: true };
+  if (args.subtype === undefined || args.subtype === '') return { ok: true };
 
   const subtypes = plugin.manifest.subtypes;
   if (!subtypes || subtypes.length === 0) {

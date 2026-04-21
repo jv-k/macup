@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Plugin, PluginManifest } from '../../src/plugins/types';
 import { subtypeFromArgs, validateSubtypeArg } from '../../src/commands/subtype';
+import type { Plugin, PluginManifest } from '../../src/plugins/types';
 
 function mkPlugin(id: string, subtypes?: readonly string[]): Plugin {
   const manifest: PluginManifest = {
@@ -55,6 +55,15 @@ describe('subtypeFromArgs', () => {
     expect(subtypeFromArgs(npm, { cask: true })).toBeUndefined();
     expect(subtypeFromArgs(npm, {})).toBeUndefined();
   });
+
+  it('returns undefined for --cask=true on a plugin with subtypes that lacks "casks"', () => {
+    const exotic = mkPlugin('exotic', ['stable', 'beta']);
+    expect(subtypeFromArgs(exotic, { cask: true })).toBeUndefined();
+  });
+
+  it('treats --subtype="" like unset (returns the first subtype, not undefined)', () => {
+    expect(subtypeFromArgs(brew, { subtype: '' })).toBe('formulas');
+  });
 });
 
 describe('validateSubtypeArg', () => {
@@ -85,6 +94,12 @@ describe('validateSubtypeArg', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toContain('no subtypes');
+      expect(result.error).toContain('npm');
+      expect(result.error).toContain('formulas');
     }
+  });
+
+  it('treats --subtype="" like unset (returns ok=true)', () => {
+    expect(validateSubtypeArg(brew, { subtype: '' })).toEqual({ ok: true });
   });
 });

@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { subtypeFromArgs, validateSubtypeArg } from '../../src/commands/subtype';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  resolveSubtypeOrExit,
+  subtypeFromArgs,
+  validateSubtypeArg,
+} from '../../src/commands/subtype';
 import type { Plugin, PluginManifest } from '../../src/plugins/types';
 
 function mkPlugin(id: string, subtypes?: readonly string[]): Plugin {
@@ -101,5 +105,61 @@ describe('validateSubtypeArg', () => {
 
   it('treats --subtype="" like unset (returns ok=true)', () => {
     expect(validateSubtypeArg(brew, { subtype: '' })).toEqual({ ok: true });
+  });
+});
+
+describe('resolveSubtypeOrExit', () => {
+  const brew = mkPlugin('brew', ['formulas', 'casks']);
+  const npm = mkPlugin('npm');
+
+  let errSpy: ReturnType<typeof vi.spyOn>;
+  let originalExitCode: typeof process.exitCode;
+
+  beforeEach(() => {
+    errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    originalExitCode = process.exitCode;
+  });
+
+  afterEach(() => {
+    errSpy.mockRestore();
+    process.exitCode = originalExitCode;
+  });
+
+  it('resolves to the first subtype by default', () => {
+    const result = resolveSubtypeOrExit(brew, {});
+    expect(result).toEqual({ ok: true, subtype: 'formulas' });
+    expect(errSpy).not.toHaveBeenCalled();
+  });
+
+  it('resolves to --subtype when explicit and valid', () => {
+    const result = resolveSubtypeOrExit(brew, { subtype: 'casks' });
+    expect(result).toEqual({ ok: true, subtype: 'casks' });
+  });
+
+  it('resolves to casks when --cask is set', () => {
+    const result = resolveSubtypeOrExit(brew, { cask: true });
+    expect(result).toEqual({ ok: true, subtype: 'casks' });
+  });
+
+  it('returns { ok: false } and sets exitCode=1 on unknown --subtype', () => {
+    const result = resolveSubtypeOrExit(brew, { subtype: 'bogus' });
+    expect(result).toEqual({ ok: false });
+    expect(process.exitCode).toBe(1);
+    expect(errSpy).toHaveBeenCalled();
+    expect(errSpy.mock.calls.map((c) => c.join(' ')).join('\n')).toContain(
+      'unknown subtype "bogus"',
+    );
+  });
+
+  it('returns { ok: true, subtype: undefined } for a plugin without subtypes', () => {
+    const result = resolveSubtypeOrExit(npm, {});
+    expect(result).toEqual({ ok: true, subtype: undefined });
+  });
+
+  it('ignores non-string --subtype values (citty edge case)', () => {
+    // Citty's `args.subtype` is typed `string | undefined`, but runtime may
+    // hand over something else for a bare flag. The helper narrows via typeof.
+    const result = resolveSubtypeOrExit(brew, { subtype: true as unknown });
+    expect(result).toEqual({ ok: true, subtype: 'formulas' });
   });
 });

@@ -11,7 +11,7 @@ import type {
   PluginContext,
 } from '../plugins/types';
 import * as log from '../ui/log';
-import { subtypeFromArgs, validateSubtypeArg } from './subtype';
+import { resolveSubtypeOrExit } from './subtype';
 
 async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
   if (!process.stdout.isTTY) return fn();
@@ -174,21 +174,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args }) {
-        const subtypeValidation = validateSubtypeArg(plugin, {
-          subtype: args.subtype as string | undefined,
-          cask: Boolean(args.cask),
-        });
-        if (!subtypeValidation.ok) {
-          console.error(`error: ${subtypeValidation.error}`);
-          process.exitCode = 1;
-          return;
-        }
-        const subtype = hasSubtypes
-          ? subtypeFromArgs(plugin, {
-              subtype: args.subtype as string | undefined,
-              cask: Boolean(args.cask),
-            })
-          : undefined;
+        const resolved = resolveSubtypeOrExit(plugin, args);
+        if (!resolved.ok) return;
+        const subtype = resolved.subtype;
         const showJson = Boolean(args.json);
         const showAll = Boolean(args.all);
 
@@ -250,21 +238,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args, rawArgs }) {
-        const subtypeValidation = validateSubtypeArg(plugin, {
-          subtype: args.subtype as string | undefined,
-          cask: Boolean(args.cask),
-        });
-        if (!subtypeValidation.ok) {
-          console.error(`error: ${subtypeValidation.error}`);
-          process.exitCode = 1;
-          return;
-        }
-        const subtype = hasSubtypes
-          ? subtypeFromArgs(plugin, {
-              subtype: args.subtype as string | undefined,
-              cask: Boolean(args.cask),
-            })
-          : undefined;
+        const resolved = resolveSubtypeOrExit(plugin, args);
+        if (!resolved.ok) return;
+        const subtype = resolved.subtype;
         await plugin.check(makeCtx(deps));
         const kind =
           subtype === 'casks' ? 'cask' : subtype === 'formulas' ? 'formula' : manifest.id;
@@ -322,21 +298,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args }) {
-        const subtypeValidation = validateSubtypeArg(plugin, {
-          subtype: args.subtype as string | undefined,
-          cask: Boolean(args.cask),
-        });
-        if (!subtypeValidation.ok) {
-          console.error(`error: ${subtypeValidation.error}`);
-          process.exitCode = 1;
-          return;
-        }
-        const subtype = hasSubtypes
-          ? subtypeFromArgs(plugin, {
-              subtype: args.subtype as string | undefined,
-              cask: Boolean(args.cask),
-            })
-          : undefined;
+        const resolved = resolveSubtypeOrExit(plugin, args);
+        if (!resolved.ok) return;
+        const subtype = resolved.subtype;
         const kind =
           subtype === 'casks' ? 'cask' : subtype === 'formulas' ? 'formula' : manifest.id;
 
@@ -418,21 +382,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args, rawArgs }) {
-        const subtypeValidation = validateSubtypeArg(plugin, {
-          subtype: args.subtype as string | undefined,
-          cask: Boolean(args.cask),
-        });
-        if (!subtypeValidation.ok) {
-          console.error(`error: ${subtypeValidation.error}`);
-          process.exitCode = 1;
-          return;
-        }
-        const subtype = hasSubtypes
-          ? subtypeFromArgs(plugin, {
-              subtype: args.subtype as string | undefined,
-              cask: Boolean(args.cask),
-            })
-          : undefined;
+        const resolved = resolveSubtypeOrExit(plugin, args);
+        if (!resolved.ok) return;
+        const subtype = resolved.subtype;
         const names = requireNames(rawArgs, manifest.id, 'add');
         if (!names) return;
         const store = await deps.getStore();
@@ -462,21 +414,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args, rawArgs }) {
-        const subtypeValidation = validateSubtypeArg(plugin, {
-          subtype: args.subtype as string | undefined,
-          cask: Boolean(args.cask),
-        });
-        if (!subtypeValidation.ok) {
-          console.error(`error: ${subtypeValidation.error}`);
-          process.exitCode = 1;
-          return;
-        }
-        const subtype = hasSubtypes
-          ? subtypeFromArgs(plugin, {
-              subtype: args.subtype as string | undefined,
-              cask: Boolean(args.cask),
-            })
-          : undefined;
+        const resolved = resolveSubtypeOrExit(plugin, args);
+        if (!resolved.ok) return;
+        const subtype = resolved.subtype;
         const names = requireNames(rawArgs, manifest.id, 'remove');
         if (!names) return;
         const store = await deps.getStore();

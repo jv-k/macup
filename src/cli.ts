@@ -235,8 +235,11 @@ const main = defineCommand({
             options[g.category] = g.items.map((it) => ({ label: it.label, value: it.value }));
           }
           const firstItem = groups[0]?.items[0];
+          const kbd = pc.underline;
+          const d = pc.dim;
+          const hint = `${d('(')}${kbd('space')}${d(' to toggle · ')}${kbd('a')}${d(' for all · ')}${kbd('enter')}${d(' to confirm)')}`;
           const choice = await groupMultiselect<Target>({
-            message: 'Which package managers? (space to toggle · a for all · enter to confirm)',
+            message: `Which package managers? ${hint}`,
             options,
             selectableGroups: false,
             // Preselect the first item so enter-with-no-toggles submits the

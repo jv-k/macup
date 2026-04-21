@@ -13,10 +13,7 @@ export interface WizardResult {
 export interface WizardDeps {
   readonly plugins: readonly Plugin[];
   readonly selectTargets: (
-    groups: ReadonlyArray<{
-      readonly plugin: Plugin;
-      readonly items: ReadonlyArray<{ readonly label: string; readonly value: Target }>;
-    }>,
+    items: ReadonlyArray<{ readonly label: string; readonly value: Target }>,
   ) => Promise<readonly Target[] | null>;
   readonly selectCommand: (
     options: ReadonlyArray<{ readonly label: string; readonly value: string }>,
@@ -40,26 +37,31 @@ function titleCase(s: string): string {
   return s.length === 0 ? s : s[0]?.toUpperCase() + s.slice(1);
 }
 
-function buildGroups(plugins: readonly Plugin[]) {
+function buildItems(plugins: readonly Plugin[]): Array<{ label: string; value: Target }> {
   // The composite `all` plugin is redundant in a multiselect (press `a` to
   // select all) — exclude it from the UI.
   const shown = plugins.filter((p) => p.manifest.id !== 'all');
-  return shown.map((plugin) => {
+  const items: Array<{ label: string; value: Target }> = [];
+  for (const plugin of shown) {
     const subtypes = plugin.manifest.subtypes;
-    const items =
-      subtypes && subtypes.length > 1
-        ? subtypes.map((s) => ({
-            label: titleCase(s),
-            value: { pluginId: plugin.manifest.id, subtype: s } as Target,
-          }))
-        : [
-            {
-              label: plugin.manifest.displayName,
-              value: { pluginId: plugin.manifest.id } as Target,
-            },
-          ];
-    return { plugin, items };
-  });
+    if (subtypes && subtypes.length > 1) {
+      // Plugin exposes real subtypes — render one row per subtype with the
+      // "Plugin — Subtype" prefix so the grouping is visible in a flat list.
+      for (const s of subtypes) {
+        items.push({
+          label: `${plugin.manifest.displayName} — ${titleCase(s)}`,
+          value: { pluginId: plugin.manifest.id, subtype: s },
+        });
+      }
+    } else {
+      // Plugin has no meaningful subtype choice — one flat row, no prefix.
+      items.push({
+        label: plugin.manifest.displayName,
+        value: { pluginId: plugin.manifest.id },
+      });
+    }
+  }
+  return items;
 }
 
 function commandIntersection(plugins: readonly Plugin[], targets: readonly Target[]): string[] {
@@ -84,8 +86,8 @@ function commandIntersection(plugins: readonly Plugin[], targets: readonly Targe
 export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> {
   const { plugins, selectTargets, selectCommand } = deps;
 
-  const groups = buildGroups(plugins);
-  const targets = await selectTargets(groups);
+  const items = buildItems(plugins);
+  const targets = await selectTargets(items);
   if (targets === null || targets.length === 0) return null;
 
   const commands = commandIntersection(plugins, targets);

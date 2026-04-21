@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { confirm, groupMultiselect, isCancel, outro, select } from '@clack/prompts';
+import { confirm, isCancel, multiselect, outro, select } from '@clack/prompts';
 import { defineCommand, runCommand, runMain } from 'citty';
 import pc from 'picocolors';
 import { runCleanup } from './commands/cleanup';
@@ -222,18 +222,10 @@ const main = defineCommand({
 
     const wizResult: WizardResult | null = await runWizard({
       plugins: registry,
-      selectTargets: async (groups) => {
-        // Clack's groupMultiselect takes a flat map of `{ [groupLabel]: Option[] }`.
-        const options: Record<string, Array<{ label: string; value: Target }>> = {};
-        for (const g of groups) {
-          options[g.plugin.manifest.displayName] = g.items.map((it) => ({
-            label: it.label,
-            value: it.value,
-          }));
-        }
-        const choice = await groupMultiselect<Target>({
+      selectTargets: async (items) => {
+        const choice = await multiselect<Target>({
           message: 'Which package managers? (space to toggle · a for all · enter to confirm)',
-          options,
+          options: items.map((it) => ({ label: it.label, value: it.value })),
           required: true,
         });
         if (isCancel(choice)) return null;

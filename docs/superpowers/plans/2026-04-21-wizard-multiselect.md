@@ -748,6 +748,10 @@ for (const t of wizResult.targets) {
   const cmd = pluginSubCommands[t.pluginId];
   if (cmd) {
     await runCommand(cmd, { rawArgs: wizArgs });
+    // Subcommands signal failure by setting process.exitCode (Task 2 pattern).
+    // Stop the loop on the first failure so we don't pile on with cascading
+    // updates against a user who's already seeing an error.
+    if (process.exitCode && process.exitCode !== 0) return;
   } else {
     console.error(`error: plugin "${t.pluginId}" is not available`);
     process.exitCode = 1;

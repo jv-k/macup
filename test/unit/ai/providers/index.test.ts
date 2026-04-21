@@ -8,7 +8,7 @@ describe('ai/providers/index', () => {
     await expect(loadProvider('bogus')).rejects.toThrow(/unknown provider/i);
   });
 
-  it.skip('rethrows as ErrAiSdkMissing when dynamic import fails with MODULE_NOT_FOUND', async () => {
+  it('rethrows as ErrAiSdkMissing when dynamic import fails with MODULE_NOT_FOUND', async () => {
     // Force import failure by passing a non-installed package name via the
     // override seam (see implementation). This verifies error translation.
     await expect(

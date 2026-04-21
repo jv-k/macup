@@ -14,18 +14,6 @@ export interface LoadProviderOptions {
   readonly importFn?: ImportFn;
 }
 
-// Adapter module shapes — defined here so we can cast without requiring the
-// adapter files to exist at compile time (they're created in Tasks 10–12).
-interface AnthropicAdapterModule {
-  createAnthropicProvider(importFn: ImportFn): Promise<StreamProvider>;
-}
-interface GeminiAdapterModule {
-  createGeminiProvider(importFn: ImportFn): Promise<StreamProvider>;
-}
-interface OpenAiAdapterModule {
-  createOpenAiProvider(importFn: ImportFn): Promise<StreamProvider>;
-}
-
 export async function loadProvider(
   name: AiProvider,
   opts: LoadProviderOptions = {},
@@ -34,15 +22,15 @@ export async function loadProvider(
   try {
     switch (name) {
       case 'anthropic': {
-        const { createAnthropicProvider } = (await importFn('./anthropic')) as AnthropicAdapterModule;
+        const { createAnthropicProvider } = (await importFn('./anthropic')) as typeof import('./anthropic');
         return await createAnthropicProvider(importFn);
       }
       case 'gemini': {
-        const { createGeminiProvider } = (await importFn('./gemini')) as GeminiAdapterModule;
+        const { createGeminiProvider } = (await importFn('./gemini')) as typeof import('./gemini');
         return await createGeminiProvider(importFn);
       }
       case 'openai': {
-        const { createOpenAiProvider } = (await importFn('./openai')) as OpenAiAdapterModule;
+        const { createOpenAiProvider } = (await importFn('./openai')) as typeof import('./openai');
         return await createOpenAiProvider(importFn);
       }
       default: {

@@ -83,6 +83,7 @@ const pnpm: Plugin = {
   manifest: {
     id: 'pnpm',
     displayName: 'pnpm (global)',
+    category: 'Node.js',
     supportedOS: ['darwin', 'linux'],
     requires: ['pnpm'],
     configKeys: ['pnpm_apps'],

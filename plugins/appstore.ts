@@ -42,6 +42,7 @@ const appstore: Plugin = {
   manifest: {
     id: 'appstore',
     displayName: 'Mac App Store',
+    category: 'macOS',
     supportedOS: ['darwin'],
     requires: ['mas'],
     configKeys: ['appstore_apps'],

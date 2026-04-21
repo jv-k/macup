@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { confirm, isCancel, multiselect, outro, select } from '@clack/prompts';
+import { confirm, groupMultiselect, isCancel, outro, select } from '@clack/prompts';
 import { defineCommand, runCommand, runMain } from 'citty';
 import pc from 'picocolors';
 import { runCleanup } from './commands/cleanup';
@@ -222,14 +222,29 @@ const main = defineCommand({
 
     const wizResult: WizardResult | null = await runWizard({
       plugins: registry,
-      selectTargets: async (items) => {
-        const choice = await multiselect<Target>({
+      selectTargets: async (groups) => {
+        // groupMultiselect takes `Record<groupLabel, Option[]>`; build from the
+        // ordered groups[] so the on-screen order matches the registry order.
+        const options: Record<string, Array<{ label: string; value: Target }>> = {};
+        for (const g of groups) {
+          options[g.category] = g.items.map((it) => ({ label: it.label, value: it.value }));
+        }
+        const firstItem = groups[0]?.items[0];
+        const choice = await groupMultiselect<Target>({
           message: 'Which package managers? (space to toggle · a for all · enter to confirm)',
-          options: items.map((it) => ({ label: it.label, value: it.value })),
-          required: true,
+          options,
+          selectableGroups: false,
+          // Preselect the first item so enter-with-no-toggles submits the
+          // highlighted default instead of erroring on empty selection.
+          ...(firstItem ? { initialValues: [firstItem.value], cursorAt: firstItem.value } : {}),
+          required: false,
         });
         if (isCancel(choice)) return null;
-        return choice as readonly Target[];
+        const arr = choice as readonly Target[];
+        // Fallback guard: if somehow empty (e.g. future Clack change), default
+        // to the first item so enter always does something.
+        if (arr.length === 0 && firstItem) return [firstItem.value];
+        return arr;
       },
       selectCommand: async (opts) => {
         const choice = await select({

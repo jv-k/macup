@@ -13,7 +13,10 @@ export interface WizardResult {
 export interface WizardDeps {
   readonly plugins: readonly Plugin[];
   readonly selectTargets: (
-    items: ReadonlyArray<{ readonly label: string; readonly value: Target }>,
+    groups: ReadonlyArray<{
+      readonly category: string;
+      readonly items: ReadonlyArray<{ readonly label: string; readonly value: Target }>;
+    }>,
   ) => Promise<readonly Target[] | null>;
   readonly selectCommand: (
     options: ReadonlyArray<{ readonly label: string; readonly value: string }>,
@@ -37,31 +40,42 @@ function titleCase(s: string): string {
   return s.length === 0 ? s : s[0]?.toUpperCase() + s.slice(1);
 }
 
-function buildItems(plugins: readonly Plugin[]): Array<{ label: string; value: Target }> {
+function buildGroups(plugins: readonly Plugin[]): Array<{
+  category: string;
+  items: Array<{ label: string; value: Target }>;
+}> {
   // The composite `all` plugin is redundant in a multiselect (press `a` to
   // select all) — exclude it from the UI.
   const shown = plugins.filter((p) => p.manifest.id !== 'all');
-  const items: Array<{ label: string; value: Target }> = [];
+
+  // Preserve registry order on first appearance of each category.
+  const groups = new Map<string, Array<{ label: string; value: Target }>>();
   for (const plugin of shown) {
+    const category = plugin.manifest.category ?? plugin.manifest.displayName;
+    let items = groups.get(category);
+    if (!items) {
+      items = [];
+      groups.set(category, items);
+    }
+
     const subtypes = plugin.manifest.subtypes;
     if (subtypes && subtypes.length > 1) {
-      // Plugin exposes real subtypes — render one row per subtype with the
-      // "Plugin — Subtype" prefix so the grouping is visible in a flat list.
+      // Plugin declares real subtypes — one item per subtype. The category
+      // header does the grouping, so the subtype label alone is enough.
       for (const s of subtypes) {
         items.push({
-          label: `${plugin.manifest.displayName} — ${titleCase(s)}`,
+          label: titleCase(s),
           value: { pluginId: plugin.manifest.id, subtype: s },
         });
       }
     } else {
-      // Plugin has no meaningful subtype choice — one flat row, no prefix.
       items.push({
         label: plugin.manifest.displayName,
         value: { pluginId: plugin.manifest.id },
       });
     }
   }
-  return items;
+  return Array.from(groups, ([category, items]) => ({ category, items }));
 }
 
 function commandIntersection(plugins: readonly Plugin[], targets: readonly Target[]): string[] {
@@ -86,8 +100,8 @@ function commandIntersection(plugins: readonly Plugin[], targets: readonly Targe
 export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> {
   const { plugins, selectTargets, selectCommand } = deps;
 
-  const items = buildItems(plugins);
-  const targets = await selectTargets(items);
+  const groups = buildGroups(plugins);
+  const targets = await selectTargets(groups);
   if (targets === null || targets.length === 0) return null;
 
   const commands = commandIntersection(plugins, targets);

@@ -65,6 +65,7 @@ const xcode: Plugin = {
   manifest: {
     id: 'xcode',
     displayName: 'Xcode (app + Command Line Tools)',
+    category: 'macOS',
     supportedOS: ['darwin'],
     requires: ['mas', 'xcode-select', 'pkgutil'],
     configKeys: [],

@@ -54,6 +54,7 @@ const system: Plugin = {
   manifest: {
     id: 'system',
     displayName: 'macOS system updates',
+    category: 'macOS',
     supportedOS: ['darwin'],
     requires: ['softwareupdate'],
     configKeys: [],

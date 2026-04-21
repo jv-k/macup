@@ -81,6 +81,7 @@ const npm: Plugin = {
   manifest: {
     id: 'npm',
     displayName: 'npm (global)',
+    category: 'Node.js',
     supportedOS: ['darwin', 'linux'],
     requires: ['npm'],
     configKeys: ['npm_apps'],

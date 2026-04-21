@@ -31,6 +31,12 @@ export interface PluginManifest {
   readonly id: string;
   readonly displayName: string;
   readonly subtypes?: readonly string[];
+  /**
+   * Optional ecosystem label used to group plugins in the wizard
+   * (e.g. "Node.js" for npm + pnpm). Plugins without a category get
+   * a solo group named after their displayName.
+   */
+  readonly category?: string;
   readonly supportedOS: readonly NodeJS.Platform[];
   readonly requires: readonly string[];
   readonly configKeys: readonly ApplistKey[];

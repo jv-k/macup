@@ -34,7 +34,7 @@ export interface CommandDeps {
 }
 
 // Shared controller so Ctrl-C cancels in-flight subprocess operations.
-const globalController = new AbortController();
+export const globalController = new AbortController();
 process.on('SIGINT', () => {
   globalController.abort();
   process.exit(130);
@@ -46,6 +46,11 @@ function makeCtx(deps: CommandDeps): PluginContext {
     log: deps.log,
     signal: globalController.signal,
   };
+}
+
+/** Build a PluginContext from CommandDeps (exposed for use in cli.ts). */
+export function makeContext(deps: CommandDeps): PluginContext {
+  return makeCtx(deps);
 }
 
 function renderList(pluginName: string, statuses: PackageStatus[], onlyOutdated: boolean): string {

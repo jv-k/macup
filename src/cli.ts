@@ -4,10 +4,13 @@ import { homedir } from 'node:os';
 import { confirm, groupMultiselect, isCancel, outro, select } from '@clack/prompts';
 import { defineCommand, runCommand, runMain } from 'citty';
 import pc from 'picocolors';
+import { detectAvailableProviders } from './ai/keys';
+import { buildAdviseCommand, runAdviseInteractive } from './commands/advise';
 import { runCleanup } from './commands/cleanup';
 import { buildConfigReport, formatConfigReport } from './commands/config';
-import { commandsFromManifest } from './commands/from-manifest';
+import { commandsFromManifest, globalController, makeContext } from './commands/from-manifest';
 import { runRestore } from './commands/restore';
+import { buildSettingsCommand } from './commands/settings';
 import { generateBashCompletions } from './completions/bash';
 import { generateFishCompletions } from './completions/fish';
 import { generateZshCompletions } from './completions/zsh';
@@ -17,10 +20,11 @@ import { ConfigStore } from './config/store';
 import { MacupError } from './errors';
 import { ExecaExecRunner } from './exec/run';
 import { BUILTIN_PLUGINS, defaultRegistry } from './plugins/registry';
+import { runSettingsMenu } from './settings/menu';
 import * as logui from './ui/log';
 import { renderAppleLogo, renderCredits } from './ui/logo';
 import { getVersion } from './version';
-import { type Target, type WizardResult, runWizard } from './wizard';
+import { type Target, type TopAction, type WizardResult, runTopLevelWizard } from './wizard';
 
 function shouldUseColor(): boolean {
   if (process.env.NO_COLOR) return false;
@@ -70,14 +74,23 @@ async function getStore(): Promise<ConfigStore> {
   return store;
 }
 
-const pluginSubCommands: Record<string, ReturnType<typeof commandsFromManifest>> = {};
+// Shared store instance for AI/settings commands (loaded lazily on demand).
+const sharedStore = new ConfigStore(resolvePaths());
+const commandDeps = { exec, log, getStore };
+
+// biome-ignore lint/suspicious/noExplicitAny: citty command generics don't compose via Record
+const pluginSubCommands: Record<string, any> = {};
 for (const plugin of registry) {
-  pluginSubCommands[plugin.manifest.id] = commandsFromManifest(plugin, {
-    exec,
-    log,
-    getStore,
-  });
+  pluginSubCommands[plugin.manifest.id] = commandsFromManifest(plugin, commandDeps);
 }
+
+// Register AI advisor and settings as top-level subcommands.
+pluginSubCommands.advise = buildAdviseCommand({
+  store: sharedStore,
+  plugins: registry,
+  makeContext: () => makeContext(commandDeps),
+});
+pluginSubCommands.settings = buildSettingsCommand({ store: sharedStore });
 
 // Startup: log warnings for plugins that can't load (missing binaries).
 for (const plugin of BUILTIN_PLUGINS) {
@@ -221,54 +234,106 @@ const main = defineCommand({
     console.log(renderCredits({ color: shouldUseColor() }));
     console.log();
 
+    // Build shared prompt callbacks reused across wizard iterations.
+    const selectTargets = async (
+      groups: ReadonlyArray<{
+        readonly category: string;
+        readonly items: ReadonlyArray<{ readonly label: string; readonly value: Target }>;
+      }>,
+    ) => {
+      // groupMultiselect takes `Record<groupLabel, Option[]>`; build from the
+      // ordered groups[] so the on-screen order matches the registry order.
+      const options: Record<string, Array<{ label: string; value: Target }>> = {};
+      for (const g of groups) {
+        options[g.category] = g.items.map((it) => ({ label: it.label, value: it.value }));
+      }
+      const firstItem = groups[0]?.items[0];
+      const kbd = pc.underline;
+      const d = pc.dim;
+      const hint = `${d('(')}${kbd('space')}${d(' to toggle · ')}${kbd('a')}${d(' for all · ')}${kbd('enter')}${d(' to confirm)')}`;
+      const choice = await groupMultiselect<Target>({
+        message: `Which package managers? ${hint}`,
+        options,
+        selectableGroups: false,
+        // Preselect the first item so enter-with-no-toggles submits the
+        // highlighted default instead of erroring on empty selection.
+        ...(firstItem ? { initialValues: [firstItem.value], cursorAt: firstItem.value } : {}),
+        required: false,
+      });
+      if (isCancel(choice)) return null;
+      const arr = choice as readonly Target[];
+      // Fallback guard: if somehow empty (e.g. future Clack change), default
+      // to the first item so enter always does something.
+      if (arr.length === 0 && firstItem) return [firstItem.value];
+      return arr;
+    };
+
+    const selectCommand = async (
+      opts: ReadonlyArray<{ readonly label: string; readonly value: string }>,
+    ) => {
+      const choice = await select({
+        message: 'What do you want to do?',
+        options: opts as Array<{ label: string; value: string }>,
+      });
+      return isCancel(choice) ? null : (choice as string);
+    };
+
     // Wizard runs in a loop: after each operation completes we return to
-    // the target-selection menu. The user exits by pressing Escape at
-    // either prompt (selectTargets or selectCommand returning null) or
-    // Ctrl-C (handled by the SIGINT handler in from-manifest.ts).
+    // the top-level menu. The user exits by pressing Escape or selecting
+    // Exit, or Ctrl-C (handled by the SIGINT handler in from-manifest.ts).
     while (true) {
-      const wizResult: WizardResult | null = await runWizard({
+      await sharedStore.load();
+      const aiConfig = sharedStore.getAi();
+      const available = detectAvailableProviders();
+
+      const topResult = await runTopLevelWizard({
         plugins: registry,
-        selectTargets: async (groups) => {
-          // groupMultiselect takes `Record<groupLabel, Option[]>`; build from the
-          // ordered groups[] so the on-screen order matches the registry order.
-          const options: Record<string, Array<{ label: string; value: Target }>> = {};
-          for (const g of groups) {
-            options[g.category] = g.items.map((it) => ({ label: it.label, value: it.value }));
-          }
-          const firstItem = groups[0]?.items[0];
-          const kbd = pc.underline;
-          const d = pc.dim;
-          const hint = `${d('(')}${kbd('space')}${d(' to toggle · ')}${kbd('a')}${d(' for all · ')}${kbd('enter')}${d(' to confirm)')}`;
-          const choice = await groupMultiselect<Target>({
-            message: `Which package managers? ${hint}`,
-            options,
-            selectableGroups: false,
-            // Preselect the first item so enter-with-no-toggles submits the
-            // highlighted default instead of erroring on empty selection.
-            ...(firstItem ? { initialValues: [firstItem.value], cursorAt: firstItem.value } : {}),
-            required: false,
+        selectTargets,
+        selectCommand,
+        selectTopAction: async (opts) => {
+          const pick = await select({
+            message: 'What would you like to do?',
+            options: opts.map((o) => ({ label: o.label, value: o.value })),
           });
-          if (isCancel(choice)) return null;
-          const arr = choice as readonly Target[];
-          // Fallback guard: if somehow empty (e.g. future Clack change), default
-          // to the first item so enter always does something.
-          if (arr.length === 0 && firstItem) return [firstItem.value];
-          return arr;
+          return typeof pick === 'symbol' ? null : (pick as TopAction);
         },
-        selectCommand: async (opts) => {
-          const choice = await select({
-            message: 'What do you want to do?',
-            options: opts as Array<{ label: string; value: string }>,
-          });
-          return isCancel(choice) ? null : (choice as string);
-        },
+        aiEnabled: aiConfig.enabled,
+        aiAvailable: available.length > 0,
+        settingsEnabled: true,
       });
 
-      if (!wizResult) {
+      if (!topResult) {
         // Clack's cancelled-prompt rendering already closes the frame visually;
         // adding outro() on top produces a double-gap, so we just exit.
         return;
       }
+
+      if (topResult.kind === 'advise') {
+        try {
+          await runAdviseInteractive({
+            store: sharedStore,
+            plugins: registry,
+            makeContext: () => makeContext(commandDeps),
+            signal: globalController.signal,
+          });
+        } catch (err) {
+          if (err instanceof MacupError) {
+            console.error(`error: ${err.message}`);
+            process.exitCode = err.exitCode;
+          } else {
+            throw err;
+          }
+        }
+        continue;
+      }
+
+      if (topResult.kind === 'settings') {
+        await runSettingsMenu({ store: sharedStore, availableProviders: available });
+        continue;
+      }
+
+      // topResult.kind === 'run'
+      const wizResult: WizardResult = topResult.result;
 
       let failed = false;
       for (const t of wizResult.targets) {

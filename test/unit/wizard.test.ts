@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Plugin, PluginManifest } from '../../src/plugins/types';
-import { type Target, type WizardDeps, type WizardResult, runWizard } from '../../src/wizard';
+import {
+  type Target,
+  type WizardDeps,
+  type WizardResult,
+  runTopLevelWizard,
+  runWizard,
+} from '../../src/wizard';
 
 function mkPlugin(id: string, extra?: Partial<PluginManifest>): Plugin {
   return {
@@ -161,5 +167,81 @@ describe('runWizard (multiselect)', () => {
       /no command is supported/i,
     );
     errSpy.mockRestore();
+  });
+});
+
+describe('runTopLevelWizard', () => {
+  it('returns advise when user picks the ai option', async () => {
+    const r = await runTopLevelWizard({
+      plugins: [],
+      selectTargets: vi.fn(),
+      selectCommand: vi.fn(),
+      selectTopAction: async () => 'advise',
+      aiEnabled: true,
+      aiAvailable: true,
+      settingsEnabled: true,
+    });
+    expect(r).toEqual({ kind: 'advise' });
+  });
+
+  it('returns settings when user picks settings', async () => {
+    const r = await runTopLevelWizard({
+      plugins: [],
+      selectTargets: vi.fn(),
+      selectCommand: vi.fn(),
+      selectTopAction: async () => 'settings',
+      aiEnabled: false,
+      aiAvailable: false,
+      settingsEnabled: true,
+    });
+    expect(r).toEqual({ kind: 'settings' });
+  });
+
+  it('delegates to the existing wizard on "packages"', async () => {
+    const r = await runTopLevelWizard({
+      plugins: [],
+      selectTargets: async () => [{ pluginId: 'brew' }],
+      selectCommand: async () => 'list',
+      selectTopAction: async () => 'packages',
+      aiEnabled: false,
+      aiAvailable: false,
+      settingsEnabled: false,
+    });
+    // 'packages' path returns a WizardResult wrapped as { kind: 'run', result }
+    expect(r?.kind).toBe('run');
+  });
+
+  it('omits advise option when ai disabled', async () => {
+    let offered: string[] = [];
+    await runTopLevelWizard({
+      plugins: [],
+      selectTargets: vi.fn(),
+      selectCommand: vi.fn(),
+      selectTopAction: async (opts) => {
+        offered = opts.map((o) => o.value);
+        return 'exit';
+      },
+      aiEnabled: false,
+      aiAvailable: false,
+      settingsEnabled: false,
+    });
+    expect(offered).not.toContain('advise');
+  });
+
+  it('omits advise option when ai enabled but no provider available', async () => {
+    let offered: string[] = [];
+    await runTopLevelWizard({
+      plugins: [],
+      selectTargets: vi.fn(),
+      selectCommand: vi.fn(),
+      selectTopAction: async (opts) => {
+        offered = opts.map((o) => o.value);
+        return 'exit';
+      },
+      aiEnabled: true,
+      aiAvailable: false,
+      settingsEnabled: true,
+    });
+    expect(offered).not.toContain('advise');
   });
 });

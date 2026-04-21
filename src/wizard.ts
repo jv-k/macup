@@ -97,6 +97,25 @@ function commandIntersection(plugins: readonly Plugin[], targets: readonly Targe
   return commands;
 }
 
+export type TopAction = 'advise' | 'packages' | 'settings' | 'exit';
+
+export interface TopActionChoice {
+  readonly label: string;
+  readonly value: TopAction;
+}
+
+export interface TopLevelWizardDeps extends WizardDeps {
+  readonly selectTopAction: (options: readonly TopActionChoice[]) => Promise<TopAction | null>;
+  readonly aiEnabled: boolean;
+  readonly aiAvailable: boolean;
+  readonly settingsEnabled: boolean;
+}
+
+export type TopLevelResult =
+  | { readonly kind: 'advise' }
+  | { readonly kind: 'settings' }
+  | { readonly kind: 'run'; readonly result: WizardResult };
+
 export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> {
   const { plugins, selectTargets, selectCommand } = deps;
   const groups = buildGroups(plugins);
@@ -124,4 +143,24 @@ export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> 
     if (command === null) continue; // back to target selection
     return { targets, command };
   }
+}
+
+export async function runTopLevelWizard(deps: TopLevelWizardDeps): Promise<TopLevelResult | null> {
+  const options: TopActionChoice[] = [];
+  if (deps.aiEnabled && deps.aiAvailable) {
+    options.push({ label: 'Advise using AI', value: 'advise' });
+  }
+  options.push({ label: 'Select managers to update…', value: 'packages' });
+  if (deps.settingsEnabled) {
+    options.push({ label: 'Settings', value: 'settings' });
+  }
+  options.push({ label: 'Exit', value: 'exit' });
+
+  const picked = await deps.selectTopAction(options);
+  if (picked === null || picked === 'exit') return null;
+  if (picked === 'advise') return { kind: 'advise' };
+  if (picked === 'settings') return { kind: 'settings' };
+  // picked === 'packages'
+  const result = await runWizard(deps);
+  return result ? { kind: 'run', result } : null;
 }

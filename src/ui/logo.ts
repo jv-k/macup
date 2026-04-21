@@ -61,3 +61,30 @@ export function renderAppleLogo(opts: LogoRenderOptions = {}): string {
     return out;
   }).join('\n');
 }
+
+/**
+ * Rendered credits block for the interactive splash — author line and
+ * repo URL, all lowercase, dimmed to sit quietly beneath the Apple logo.
+ * Kept separate from the branded --version output (which uses titlecase +
+ * bullets in src/ui/log.ts:versionBlock) so the splash stays understated.
+ */
+export interface CreditsRenderOptions {
+  color?: boolean;
+  author?: string;
+  email?: string;
+  repo?: string;
+}
+
+export function renderCredits(opts: CreditsRenderOptions = {}): string {
+  const color = opts.color ?? true;
+  const author = (opts.author ?? 'John Valai').toLowerCase();
+  const email = (opts.email ?? 'git@jvk.to').toLowerCase();
+  const repo = (opts.repo ?? 'github.com/jv-k/macos-updatetool').toLowerCase();
+
+  const line1 = `${author} <${email}>`;
+  const line2 = repo;
+  if (!color) return `  ${line1}\n  ${line2}`;
+
+  const dim = `${ESC}[2m`;
+  return `  ${dim}${line1}${RESET}\n  ${dim}${line2}${RESET}`;
+}

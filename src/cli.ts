@@ -18,7 +18,7 @@ import { MacupError } from './errors';
 import { ExecaExecRunner } from './exec/run';
 import { BUILTIN_PLUGINS, defaultRegistry } from './plugins/registry';
 import * as logui from './ui/log';
-import { renderAppleLogo } from './ui/logo';
+import { renderAppleLogo, renderCredits } from './ui/logo';
 import { getVersion } from './version';
 import { type Target, type WizardResult, runWizard } from './wizard';
 
@@ -218,6 +218,7 @@ const main = defineCommand({
     }
 
     console.log(renderAppleLogo({ color: shouldUseColor() }));
+    console.log(renderCredits({ color: shouldUseColor() }));
     console.log();
 
     // Wizard runs in a loop: after each operation completes we return to

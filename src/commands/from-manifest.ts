@@ -11,6 +11,7 @@ import type {
   PluginContext,
 } from '../plugins/types';
 import * as log from '../ui/log';
+import { subtypeFromArgs, validateSubtypeArg } from './subtype';
 
 async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
   if (!process.stdout.isTTY) return fn();
@@ -45,13 +46,6 @@ function makeCtx(deps: CommandDeps): PluginContext {
     log: deps.log,
     signal: globalController.signal,
   };
-}
-
-function subtypeFromCaskFlag(plugin: Plugin, cask: boolean): string | undefined {
-  const subtypes = plugin.manifest.subtypes;
-  if (!subtypes || subtypes.length === 0) return undefined;
-  if (cask) return subtypes.find((s) => s === 'casks') ?? subtypes[subtypes.length - 1];
-  return subtypes[0];
 }
 
 function renderList(pluginName: string, statuses: PackageStatus[], onlyOutdated: boolean): string {
@@ -142,8 +136,12 @@ function resolveConfigKey(plugin: Plugin, subtype: string | undefined) {
 export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): CommandDef {
   const { manifest } = plugin;
   const hasSubtypes = (manifest.subtypes?.length ?? 0) > 1;
-  const caskArg: ArgsDef = hasSubtypes
+  const subtypeArg: ArgsDef = hasSubtypes
     ? {
+        subtype: {
+          type: 'string',
+          description: `Subtype: ${manifest.subtypes?.join(' | ')}.`,
+        },
         cask: {
           type: 'boolean',
           description: `Operate on ${manifest.subtypes?.[1] ?? 'subtype'} instead of ${manifest.subtypes?.[0] ?? ''}.`,
@@ -161,7 +159,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     subCommands.list = defineCommand({
       meta: { name: 'list', description: `List packages tracked by ${manifest.displayName}.` },
       args: {
-        ...caskArg,
+        ...subtypeArg,
         'only-outdated': {
           type: 'boolean',
           description: 'Only show outdated packages.',
@@ -176,9 +174,23 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args }) {
+        const subtypeValidation = validateSubtypeArg(plugin, {
+          subtype: args.subtype as string | undefined,
+          cask: Boolean(args.cask),
+        });
+        if (!subtypeValidation.ok) {
+          console.error(`error: ${subtypeValidation.error}`);
+          process.exitCode = 1;
+          return;
+        }
+        const subtype = hasSubtypes
+          ? subtypeFromArgs(plugin, {
+              subtype: args.subtype as string | undefined,
+              cask: Boolean(args.cask),
+            })
+          : undefined;
         const showJson = Boolean(args.json);
         const showAll = Boolean(args.all);
-        const subtype = hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined;
 
         let statuses = await withSpinner(
           `Fetching ${manifest.displayName} packages...`,
@@ -230,7 +242,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     subCommands.install = defineCommand({
       meta: { name: 'install', description: 'Install packages via the plugin.' },
       args: {
-        ...caskArg,
+        ...subtypeArg,
         packages: {
           type: 'positional',
           required: false,
@@ -238,8 +250,22 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args, rawArgs }) {
+        const subtypeValidation = validateSubtypeArg(plugin, {
+          subtype: args.subtype as string | undefined,
+          cask: Boolean(args.cask),
+        });
+        if (!subtypeValidation.ok) {
+          console.error(`error: ${subtypeValidation.error}`);
+          process.exitCode = 1;
+          return;
+        }
+        const subtype = hasSubtypes
+          ? subtypeFromArgs(plugin, {
+              subtype: args.subtype as string | undefined,
+              cask: Boolean(args.cask),
+            })
+          : undefined;
         await plugin.check(makeCtx(deps));
-        const subtype = hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined;
         const kind =
           subtype === 'casks' ? 'cask' : subtype === 'formulas' ? 'formula' : manifest.id;
         const packages = rawArgs.filter((a) => !a.startsWith('-'));
@@ -289,14 +315,28 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     subCommands.update = defineCommand({
       meta: { name: 'update', description: 'Upgrade outdated packages to latest.' },
       args: {
-        ...caskArg,
+        ...subtypeArg,
         'only-outdated': {
           type: 'boolean',
           description: 'Only upgrade outdated (default true for update).',
         },
       },
       async run({ args }) {
-        const subtype = hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined;
+        const subtypeValidation = validateSubtypeArg(plugin, {
+          subtype: args.subtype as string | undefined,
+          cask: Boolean(args.cask),
+        });
+        if (!subtypeValidation.ok) {
+          console.error(`error: ${subtypeValidation.error}`);
+          process.exitCode = 1;
+          return;
+        }
+        const subtype = hasSubtypes
+          ? subtypeFromArgs(plugin, {
+              subtype: args.subtype as string | undefined,
+              cask: Boolean(args.cask),
+            })
+          : undefined;
         const kind =
           subtype === 'casks' ? 'cask' : subtype === 'formulas' ? 'formula' : manifest.id;
 
@@ -370,7 +410,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     subCommands.add = defineCommand({
       meta: { name: 'add', description: 'Add packages to the tracked applist (config-only).' },
       args: {
-        ...caskArg,
+        ...subtypeArg,
         packages: {
           type: 'positional',
           required: true,
@@ -378,9 +418,23 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args, rawArgs }) {
+        const subtypeValidation = validateSubtypeArg(plugin, {
+          subtype: args.subtype as string | undefined,
+          cask: Boolean(args.cask),
+        });
+        if (!subtypeValidation.ok) {
+          console.error(`error: ${subtypeValidation.error}`);
+          process.exitCode = 1;
+          return;
+        }
+        const subtype = hasSubtypes
+          ? subtypeFromArgs(plugin, {
+              subtype: args.subtype as string | undefined,
+              cask: Boolean(args.cask),
+            })
+          : undefined;
         const names = requireNames(rawArgs, manifest.id, 'add');
         if (!names) return;
-        const subtype = hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined;
         const store = await deps.getStore();
         const key = resolveConfigKey(plugin, subtype);
         const result = store.add(key, names);
@@ -400,7 +454,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         description: 'Remove packages from the tracked applist (config-only).',
       },
       args: {
-        ...caskArg,
+        ...subtypeArg,
         packages: {
           type: 'positional',
           required: true,
@@ -408,9 +462,23 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args, rawArgs }) {
+        const subtypeValidation = validateSubtypeArg(plugin, {
+          subtype: args.subtype as string | undefined,
+          cask: Boolean(args.cask),
+        });
+        if (!subtypeValidation.ok) {
+          console.error(`error: ${subtypeValidation.error}`);
+          process.exitCode = 1;
+          return;
+        }
+        const subtype = hasSubtypes
+          ? subtypeFromArgs(plugin, {
+              subtype: args.subtype as string | undefined,
+              cask: Boolean(args.cask),
+            })
+          : undefined;
         const names = requireNames(rawArgs, manifest.id, 'remove');
         if (!names) return;
-        const subtype = hasSubtypes ? subtypeFromCaskFlag(plugin, Boolean(args.cask)) : undefined;
         const store = await deps.getStore();
         const key = resolveConfigKey(plugin, subtype);
         const result = store.remove(key, names);

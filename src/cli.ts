@@ -453,6 +453,16 @@ function showCustomHelp() {
   }
   console.log('');
 
+  // Other commands
+  console.log(s.underline(s.cyan('OTHER COMMANDS:')));
+  console.log(
+    `  ${s.bold('macup advise')}                         Get AI advice on outdated packages`,
+  );
+  console.log(
+    `  ${s.bold('macup settings')}                       Open the interactive settings menu`,
+  );
+  console.log('');
+
   // Pin / Skip
   console.log(s.underline(s.cyan('PINS & SKIP:')));
   console.log(

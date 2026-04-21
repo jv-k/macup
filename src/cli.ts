@@ -220,72 +220,92 @@ const main = defineCommand({
     console.log(renderAppleLogo({ color: shouldUseColor() }));
     console.log();
 
-    const wizResult: WizardResult | null = await runWizard({
-      plugins: registry,
-      selectTargets: async (groups) => {
-        // groupMultiselect takes `Record<groupLabel, Option[]>`; build from the
-        // ordered groups[] so the on-screen order matches the registry order.
-        const options: Record<string, Array<{ label: string; value: Target }>> = {};
-        for (const g of groups) {
-          options[g.category] = g.items.map((it) => ({ label: it.label, value: it.value }));
+    // Wizard runs in a loop: after each operation completes we return to
+    // the target-selection menu. The user exits by pressing Escape at
+    // either prompt (selectTargets or selectCommand returning null) or
+    // Ctrl-C (handled by the SIGINT handler in from-manifest.ts).
+    while (true) {
+      const wizResult: WizardResult | null = await runWizard({
+        plugins: registry,
+        selectTargets: async (groups) => {
+          // groupMultiselect takes `Record<groupLabel, Option[]>`; build from the
+          // ordered groups[] so the on-screen order matches the registry order.
+          const options: Record<string, Array<{ label: string; value: Target }>> = {};
+          for (const g of groups) {
+            options[g.category] = g.items.map((it) => ({ label: it.label, value: it.value }));
+          }
+          const firstItem = groups[0]?.items[0];
+          const choice = await groupMultiselect<Target>({
+            message: 'Which package managers? (space to toggle · a for all · enter to confirm)',
+            options,
+            selectableGroups: false,
+            // Preselect the first item so enter-with-no-toggles submits the
+            // highlighted default instead of erroring on empty selection.
+            ...(firstItem ? { initialValues: [firstItem.value], cursorAt: firstItem.value } : {}),
+            required: false,
+          });
+          if (isCancel(choice)) return null;
+          const arr = choice as readonly Target[];
+          // Fallback guard: if somehow empty (e.g. future Clack change), default
+          // to the first item so enter always does something.
+          if (arr.length === 0 && firstItem) return [firstItem.value];
+          return arr;
+        },
+        selectCommand: async (opts) => {
+          const choice = await select({
+            message: 'What do you want to do?',
+            options: opts as Array<{ label: string; value: string }>,
+          });
+          return isCancel(choice) ? null : (choice as string);
+        },
+      });
+
+      if (!wizResult) {
+        outro('Goodbye.');
+        return;
+      }
+
+      let failed = false;
+      for (const t of wizResult.targets) {
+        const wizArgs = [wizResult.command];
+        if (t.subtype) wizArgs.push(`--subtype=${t.subtype}`);
+        const label = t.subtype
+          ? `${t.pluginId} ${wizResult.command} --subtype=${t.subtype}`
+          : `${t.pluginId} ${wizResult.command}`;
+        console.log(`\n→ macup ${label}\n`);
+        const cmd = pluginSubCommands[t.pluginId];
+        if (!cmd) {
+          console.error(`error: plugin "${t.pluginId}" is not available`);
+          process.exitCode = 1;
+          failed = true;
+          break;
         }
-        const firstItem = groups[0]?.items[0];
-        const choice = await groupMultiselect<Target>({
-          message: 'Which package managers? (space to toggle · a for all · enter to confirm)',
-          options,
-          selectableGroups: false,
-          // Preselect the first item so enter-with-no-toggles submits the
-          // highlighted default instead of erroring on empty selection.
-          ...(firstItem ? { initialValues: [firstItem.value], cursorAt: firstItem.value } : {}),
-          required: false,
-        });
-        if (isCancel(choice)) return null;
-        const arr = choice as readonly Target[];
-        // Fallback guard: if somehow empty (e.g. future Clack change), default
-        // to the first item so enter always does something.
-        if (arr.length === 0 && firstItem) return [firstItem.value];
-        return arr;
-      },
-      selectCommand: async (opts) => {
-        const choice = await select({
-          message: 'What do you want to do?',
-          options: opts as Array<{ label: string; value: string }>,
-        });
-        return isCancel(choice) ? null : (choice as string);
-      },
-    });
-
-    if (!wizResult) {
-      outro('Cancelled.');
-      return;
-    }
-
-    for (const t of wizResult.targets) {
-      const wizArgs = [wizResult.command];
-      if (t.subtype) wizArgs.push(`--subtype=${t.subtype}`);
-      const label = t.subtype
-        ? `${t.pluginId} ${wizResult.command} --subtype=${t.subtype}`
-        : `${t.pluginId} ${wizResult.command}`;
-      console.log(`\n→ macup ${label}\n`);
-      const cmd = pluginSubCommands[t.pluginId];
-      if (!cmd) {
-        console.error(`error: plugin "${t.pluginId}" is not available`);
-        process.exitCode = 1;
-        return;
+        // Subcommands signal failure two ways: setting process.exitCode (validation
+        // paths like resolveSubtypeOrExit + requireNames) or throwing (subprocess
+        // runs via withSpinner). Handle both and stop the current operation either
+        // way so we don't pile on cascading updates against a user already seeing
+        // an error. Control still returns to the outer wizard loop afterwards.
+        try {
+          await runCommand(cmd, { rawArgs: wizArgs });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`error running ${t.pluginId} ${wizResult.command}: ${msg}`);
+          process.exitCode = 1;
+          failed = true;
+          break;
+        }
+        if (process.exitCode && process.exitCode !== 0) {
+          failed = true;
+          break;
+        }
       }
-      // Subcommands signal failure two ways: setting process.exitCode (validation
-      // paths like resolveSubtypeOrExit + requireNames) or throwing (subprocess
-      // runs via withSpinner). Handle both and stop the loop either way so we
-      // don't pile on cascading updates against a user already seeing an error.
-      try {
-        await runCommand(cmd, { rawArgs: wizArgs });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`error running ${t.pluginId} ${wizResult.command}: ${msg}`);
-        process.exitCode = 1;
-        return;
-      }
-      if (process.exitCode && process.exitCode !== 0) return;
+
+      // Reset exitCode between operations so a previous failure doesn't
+      // poison the next one. The failure was already surfaced to the user
+      // via stderr; this lets them try another operation from the menu.
+      if (failed) process.exitCode = 0;
+
+      console.log('');
     }
   },
 });

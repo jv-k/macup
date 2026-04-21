@@ -12,6 +12,7 @@ describe('ApplistSchema', () => {
       brew_casks: [],
       pins: {},
       skip: {},
+      ai: { enabled: false, provider: 'anthropic' },
     });
   });
 
@@ -24,6 +25,7 @@ describe('ApplistSchema', () => {
       brew_casks: ['visual-studio-code'],
       pins: { npm: { typescript: '5.3.3' } },
       skip: { brew: ['legacy-dep'] },
+      ai: { enabled: false, provider: 'anthropic' },
     };
     expect(ApplistSchema.parse(input)).toEqual(input);
   });
@@ -38,5 +40,26 @@ describe('ApplistSchema', () => {
 
   it('rejects non-array skip values', () => {
     expect(() => ApplistSchema.parse({ skip: { brew: 'not-an-array' } })).toThrow();
+  });
+});
+
+describe('ApplistSchema — ai section', () => {
+  it('defaults ai.enabled=false and ai.provider=anthropic when omitted', () => {
+    const parsed = ApplistSchema.parse({});
+    expect(parsed.ai.enabled).toBe(false);
+    expect(parsed.ai.provider).toBe('anthropic');
+  });
+
+  it('accepts all three providers', () => {
+    for (const provider of ['anthropic', 'gemini', 'openai'] as const) {
+      const parsed = ApplistSchema.parse({ ai: { enabled: true, provider } });
+      expect(parsed.ai.provider).toBe(provider);
+    }
+  });
+
+  it('rejects unknown providers', () => {
+    expect(() =>
+      ApplistSchema.parse({ ai: { enabled: true, provider: 'bogus' } }),
+    ).toThrow();
   });
 });

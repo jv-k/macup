@@ -7,6 +7,7 @@ import pc from 'picocolors';
 import { runCleanup } from './commands/cleanup';
 import { buildConfigReport, formatConfigReport } from './commands/config';
 import { commandsFromManifest } from './commands/from-manifest';
+import { buildPluginsReport, formatPluginsReport } from './commands/plugins';
 import { runRestore } from './commands/restore';
 import { generateBashCompletions } from './completions/bash';
 import { generateFishCompletions } from './completions/fish';
@@ -16,7 +17,7 @@ import { resolveConfigPaths } from './config/paths';
 import { ConfigStore } from './config/store';
 import { MacupError } from './errors';
 import { ExecaExecRunner } from './exec/run';
-import { BUILTIN_PLUGINS, defaultRegistry } from './plugins/registry';
+import { BUILTIN_PLUGINS, defaultRegistry, isOnPath } from './plugins/registry';
 import * as logui from './ui/log';
 import { renderAppleLogo, renderCredits } from './ui/logo';
 import { getVersion } from './version';
@@ -116,6 +117,10 @@ const main = defineCommand({
       type: 'boolean',
       description: 'Print the Apple logo and exit.',
     },
+    plugins: {
+      type: 'boolean',
+      description: 'List built-in plugins and whether each is available on this machine.',
+    },
     completions: {
       type: 'string',
       required: false,
@@ -131,6 +136,15 @@ const main = defineCommand({
 
     if (args.logo) {
       console.log(renderAppleLogo({ color: shouldUseColor() }));
+      return;
+    }
+
+    if (args.plugins) {
+      const report = buildPluginsReport(BUILTIN_PLUGINS, {
+        platform: process.platform,
+        onPath: (b) => isOnPath(b),
+      });
+      console.log(formatPluginsReport(report, { color: shouldUseColor() }));
       return;
     }
 
@@ -410,6 +424,7 @@ function showCustomHelp() {
   console.log(`  ${s.cyan('--cleanup')}           Delete all backup files`);
   console.log(`  ${s.cyan('--restore')}           Restore config from a backup`);
   console.log(`  ${s.cyan('--logo')}              Print the Apple logo`);
+  console.log(`  ${s.cyan('--plugins')}           List built-in plugins and their availability`);
   console.log(`  ${s.cyan('--completions=<sh>')}  Emit completions (zsh, bash, fish)`);
   console.log('');
 

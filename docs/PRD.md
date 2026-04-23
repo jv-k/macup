@@ -1,0 +1,450 @@
+# macup — Product Requirements Document
+
+> **Status:** v1.0.0 shipped (TypeScript rewrite). Distribution (Phase 8) pending.
+> **Last updated:** 2026-04-22
+> **Owner:** John Valai
+
+---
+
+## 1. Overview
+
+**macup** is a unified CLI for tracking and updating developer packages on macOS. It aggregates Homebrew, npm globals, Mac App Store, Xcode, system updates, and pnpm behind a single consistent interface, with a declarative YAML config that makes a developer's package setup portable and reproducible.
+
+### 1.1 Elevator pitch
+
+> "One command to see every outdated package across every package manager, and one command to update them — with pins, skip lists, timestamped backups, and a YAML manifest you can check into dotfiles."
+
+### 1.2 Positioning
+
+| | macup | Individual tools | Topgrade | mas-cli |
+|---|---|---|---|---|
+| Unified interface | ✅ | ❌ | ✅ | ❌ |
+| Declarative manifest | ✅ | ❌ | ❌ | ❌ |
+| Per-package pins/skips | ✅ | Partial | ❌ | ❌ |
+| Timestamped backups | ✅ | ❌ | ❌ | ❌ |
+| Plugin architecture | ✅ | ❌ | ❌ | ❌ |
+| macOS-first UX | ✅ | Varies | ❌ | ✅ |
+
+Topgrade is the closest competitor but is Linux-leaning, has no config-as-code, and no pin/skip semantics. macup treats package management as a stateful, auditable workflow — not just "run everything."
+
+---
+
+## 2. Problem statement
+
+A typical macOS developer installs packages from 5-7 different sources (brew formulas, brew casks, npm globals, Mac App Store, Xcode CLT, system updates, pnpm/pip/cargo). Each has its own CLI, its own notion of "outdated," its own upgrade semantics, and no shared state. This creates four concrete problems:
+
+1. **Visibility** — No single command answers "what's outdated across my whole machine?"
+2. **Reproducibility** — Setting up a new Mac means remembering every package, manually. Dotfiles cover shell config but not installed software.
+3. **Safety** — Package manager upgrades can break work. There's no lightweight undo — just reinstall the old version if you remember what it was.
+4. **Selectivity** — You want to upgrade most things but pin one package to a known-good version. Each manager has different mechanisms (`brew pin`, `npm --no-save`, etc.) — or none at all.
+
+---
+
+## 3. Target users
+
+### 3.1 Primary persona — "The tool-forward developer"
+
+Software engineers on macOS who:
+- Use 3+ package managers daily (brew + npm at minimum)
+- Keep dotfiles in a git repo
+- Value reproducibility (devcontainers, CI parity, new-laptop setup)
+- Are comfortable in the terminal; prefer CLI over GUI for dev tooling
+
+### 3.2 Secondary persona — "The cautious upgrader"
+
+Developers who avoid `brew upgrade` because it once broke their setup. They want:
+- To preview what *would* change before committing (`--dry-run`)
+- Per-package version pins
+- An undo button (`--restore`)
+- A skip list for known-problematic packages
+
+### 3.3 Non-users
+
+- Non-developers (UX assumes terminal literacy)
+- Linux/Windows users (macOS-first by design; cross-platform is a non-goal)
+- Users wanting a GUI (explicit non-goal)
+
+---
+
+## 4. Goals & non-goals
+
+### 4.1 Goals
+
+- **G1** Unified view of all outdated packages across all supported managers
+- **G2** Declarative YAML manifest (`applist.yaml`) as single source of truth
+- **G3** Safe-by-default: confirmations, backups, `--dry-run`, `--restore`
+- **G4** Extensible: adding a new package manager is one file
+- **G5** Scriptable: `--json` output and stable exit codes for automation
+- **G6** Fast: Interactive wizard for exploratory use, explicit args for scripting
+- **G7** Portable config: commit `applist.yaml` to dotfiles, re-apply on new machines
+
+### 4.2 Non-goals
+
+- **NG1** Cross-platform support (interface supports it; core doesn't ship linux/windows plugins)
+- **NG2** GUI application (TUI/terminal only)
+- **NG3** Package discovery/search as a primary workflow (delegated to native tools: `brew search`, `npm search`)
+- **NG4** Dependency resolution across managers (each manager owns its dep graph)
+- **NG5** Third-party plugin ecosystem for v1.0 (interface is future-compatible, but the extension surface is not a v1 deliverable)
+
+---
+
+## 5. Core features (v1.0 — shipped)
+
+### 5.1 Unified resource commands
+
+```
+macup <plugin> <command> [args]
+```
+
+| Plugin | Capabilities |
+|---|---|
+| `brew` | list, install, update, add, remove (formulas + casks) |
+| `npm` | list, install, update, add, remove |
+| `pnpm` | list, install, update, add, remove |
+| `appstore` | list, update |
+| `xcode` | list, update |
+| `system` | list, update (softwareupdate wrapper) |
+| `all` | Composite — fans out across all plugins |
+
+### 5.2 Declarative manifest (`applist.yaml`)
+
+```yaml
+brew_formulas: [git, ripgrep, jq]
+brew_casks: [visual-studio-code, rectangle]
+npm_apps: [typescript, prettier]
+pins:
+  npm: { typescript: "5.3.3" }
+brew:
+  formulas: { python: "3.11.7" }
+skip:
+  npm: [legacy-pkg]
+```
+
+- XDG-compliant path resolution (`$XDG_CONFIG_HOME/macup/applist.yaml`)
+- Comment-preserving YAML round-trip (CST-based)
+- Legacy `~/.config/macos-updatetool/` auto-migration
+
+### 5.3 Safety mechanisms
+
+- **Timestamped backups** — automatic before any add/remove/install
+- **Smart backup optimization** — only keeps backups when changes occur
+- **`--restore`** — interactive restore from any backup
+- **`--cleanup`** — interactive backup deletion
+- **Confirmations** — required before bulk operations
+
+### 5.4 Interactive wizard
+
+Running `macup` with no args drops into a TTY-aware `@clack/prompts` flow:
+- Select plugin → select command → (for brew: select subtype) → execute
+- Graceful fallback to `--help` in non-TTY contexts
+
+### 5.5 Selective updates
+
+- **Pins** — `macup npm pin typescript 5.3.3` prevents upgrade past that version
+- **Skip** — `macup npm skip legacy-pkg` excludes from updates
+- **Plugin-specific comparators** — semver for npm, string-exact for brew/mas
+
+### 5.6 Developer experience
+
+- **Shell completions** — zsh, bash, fish (manifest-driven, auto-extend per plugin)
+- **Context-aware help** — generated from plugin manifests, no dead arrays
+- **`--json` output** — structured output for `list` commands
+- **`--version`, `--config`, `--plugins`** — standard introspection (`--plugins` shows per-plugin availability with reasons when a binary is missing or the OS is unsupported)
+
+### 5.7 Distribution
+
+- **npm package** (`macup`) — `npx macup`, `pnpm add -g macup`
+- **Single binary** (via `bun build --compile`) — `darwin-arm64`, `darwin-x64`
+- **Homebrew tap** (planned Phase 8) — `brew install jv-k/tap/macup`
+
+---
+
+## 5.8 Bundles (planned — v1.1)
+
+### 5.8.1 Concept
+
+A **bundle** is a named, shareable collection of packages spanning any combination of plugins. Bundles turn "my laptop setup" from a tribal-knowledge shell script into a declarative, composable, version-controlled artifact.
+
+```yaml
+# ~/.config/macup/bundles/frontend-dev.yaml
+name: frontend-dev
+description: "Frontend development environment"
+version: 1
+author: John Valai
+extends: [base]                    # optional composition
+
+brew:
+  formulas: [node, git, ripgrep]
+  casks: [visual-studio-code, figma]
+npm:
+  - typescript
+  - prettier
+  - eslint
+pnpm:
+  - vite
+appstore:
+  - "497799835"                    # Xcode
+
+pins:
+  brew: { formulas: { node: "20.11.0" } }
+  npm:  { typescript: "5.3.3" }
+```
+
+### 5.8.2 Motivating use cases
+
+1. **New-machine bootstrap** — `macup bundle install personal` installs a full developer setup from a single command
+2. **Role-based setups** — `frontend-dev`, `backend-dev`, `devops`, `designer` bundles
+3. **Project onboarding** — teams check a `team-baseline.yaml` into a repo; new hires run `macup bundle install ./team-baseline.yaml`
+4. **Ephemeral environments** — `macup bundle install ci-tools` before a pipeline run
+5. **Sharing** — publish bundles to GitHub; `macup bundle fetch jv-k/bundles/frontend-dev` pulls and installs
+
+### 5.8.3 Commands
+
+| Command | Behaviour |
+|---|---|
+| `macup bundle list` | List local bundles with metadata |
+| `macup bundle show <name>` | Print bundle contents + resolved package count |
+| `macup bundle install <name>` | Install all packages; also tracks them in `applist.yaml` |
+| `macup bundle install <name> --no-track` | Install without adding to applist |
+| `macup bundle install <name> --refresh` | Bypass the remote cache and re-fetch (URL/GitHub sources only) |
+| `macup bundle install <path-or-url>` | Install from a file path or URL (not from local registry) |
+| `macup bundle create <name>` | Generate a bundle from currently tracked packages (interactive filter) |
+| `macup bundle add <name> <plugin> <pkg>` | Add a package to an existing bundle (file-based bundles only — see §5.8.6) |
+| `macup bundle remove <name> <plugin> <pkg>` | Remove a package from a bundle (file-based bundles only) |
+| `macup bundle fetch <gh-spec>` | Download a bundle from GitHub (e.g., `user/repo/bundle-name`). Supports `--refresh`. |
+| `macup bundle export <name>` | Print bundle YAML to stdout (for piping/sharing) |
+| `macup bundle update <name>` | Run `update` across all packages in the bundle |
+| `macup bundle diff <name>` | Show which bundle packages are installed, outdated, or missing |
+
+### 5.8.4 Storage & resolution
+
+- **Local bundles**: `$XDG_CONFIG_HOME/macup/bundles/<name>.yaml` (one file per bundle; shareable by copy)
+- **Inline bundles**: Also allowed inside `applist.yaml` under a `bundles:` map, for users who prefer a single-file config
+- **Remote bundles**: Fetched via `macup bundle fetch` — cached locally under `$XDG_CACHE_HOME/macup/bundles/<origin>/<name>.yaml`
+- **Resolution order** when `macup bundle install <name>` is called:
+  1. Literal path (if `<name>` ends in `.yaml`, `.yml`, or looks like a path)
+  2. URL (if starts with `http://` or `https://`)
+  3. GitHub spec (if matches `user/repo[/path]`)
+  4. Local `$XDG_CONFIG_HOME/macup/bundles/<name>.yaml`
+  5. Cached remote bundle
+
+### 5.8.5 Composition
+
+Bundles compose via `extends`:
+
+```yaml
+name: frontend-dev
+extends: [base]                    # inherit everything from `base`
+brew:
+  formulas: [node]                 # adds to base.brew.formulas
+```
+
+- `extends` is a list — multiple inheritance with last-wins on conflict
+- Circular `extends` is detected at load time and rejected
+- A `macup bundle show frontend-dev --resolved` command prints the flattened result
+
+### 5.8.6 Interaction with existing systems
+
+- **Pins/skips**: Bundles can declare pins. On `install`, pins are merged into `applist.yaml`'s pin map. Skips are NOT inherited from bundles (skip is a per-machine intent).
+- **Backups**: `macup bundle install` creates a backup before mutating `applist.yaml`, same as existing `add`/`remove`.
+- **`--dry-run`**: `macup bundle install <name> --dry-run` shows exactly what would be installed and tracked, with no side effects.
+- **Partial failures**: One plugin failing does not abort the rest. The install result classifies each package as `installed`, `skipped`, or `failed`; the CLI exits non-zero if any failed, but everything installable did install.
+- **Inline bundles are read-only via CLI**: Bundles defined inside `applist.yaml` under `bundles:` can be installed and shown, but `bundle add` / `bundle remove` operate on file-based bundles only in v1.1. To edit an inline bundle, edit `applist.yaml` directly.
+- **Wizard**: The TTY wizard gains a top-level "install a bundle" option listing local + cached remote bundles.
+- **Plugin contract**: No changes required. Bundles are a layer above plugins — they resolve to plugin-specific install calls.
+
+### 5.8.7 Schema
+
+```ts
+// src/bundles/schema.ts
+export const BundleSchema = z.object({
+  name: z.string().regex(/^[a-z0-9][a-z0-9-_]*$/),
+  description: z.string().optional(),
+  version: z.literal(1),
+  author: z.string().optional(),
+  extends: z.array(z.string()).default([]),
+
+  // Per-plugin package lists — keys match plugin.manifest.configKeys shape
+  brew: z.object({
+    formulas: z.array(z.string()).default([]),
+    casks: z.array(z.string()).default([]),
+  }).optional(),
+  npm: z.array(z.string()).default([]).optional(),
+  pnpm: z.array(z.string()).default([]).optional(),
+  appstore: z.array(z.string()).default([]).optional(),
+  // ... one key per plugin (extensible)
+
+  pins: z.record(z.string(), z.record(z.string(), z.string())).default({}),
+});
+```
+
+### 5.8.8 Non-goals for v1.1
+
+- **Versioning of bundles themselves** — bundles don't have semver; users rely on git for bundle repos
+- **Signing / verification** — remote bundles are trust-on-first-use; signing is a v1.2+ consideration
+- **Package manager lockfiles** — bundles specify *what* to install, not exact resolved trees. That's the job of each plugin's pin mechanism.
+- **Dependency resolution across plugins** — e.g., "install node via brew before running npm"; the existing plugin ordering in `all.ts` handles this implicitly
+
+### 5.8.9 Open questions
+
+- **Auto-discovery of community bundles**: Should `macup bundle search` query a central index (e.g., a GitHub topic `macup-bundle`)? Deferred.
+- **Inline shell scripts**: Some bundles (e.g., Homebrew Bundle's `Brewfile`) allow pre/post shell hooks. We'd reject this for v1.1 — security risk, out of scope — but it's a future question.
+- **Bundle templating** — e.g., `node_version: "{{env.NODE_VERSION}}"`. YAGNI for v1.1.
+
+---
+
+## 6. Architecture summary
+
+### 6.1 Plugin model
+
+```
+src/plugins/types.ts      — Plugin interface + manifest schema
+src/plugins/registry.ts   — Enumerates built-ins, filters by OS + PATH
+src/plugins/selection.ts  — Pin/skip resolver (pure function)
+
+/plugins/brew.ts          — One file per backend
+/plugins/npm.ts
+/plugins/pnpm.ts
+/plugins/appstore.ts
+/plugins/xcode.ts
+/plugins/system.ts
+/plugins/all.ts           — Composite with per-plugin error isolation
+
+src/bundles/              — Bundle host (v1.1)
+├── schema.ts             — zod schema + parser
+├── loader.ts             — file/URL/GitHub resolution + extends flattening
+├── installer.ts          — dispatches bundle contents to plugins
+└── cache.ts              — $XDG_CACHE_HOME/macup/bundles/
+```
+
+Adding a new package manager = **one new file** in `/plugins/` + **one line** in `registry.ts`. No edits to dispatch, help, or completions.
+
+Bundles are a **layer above plugins** — they resolve per-plugin package lists and dispatch to existing `plugin.install()` methods. No changes to the plugin contract.
+
+### 6.2 Stack
+
+- **Language:** TypeScript strict, ESM, `target: es2022`
+- **Runtime:** Node ≥ 20 primary; Bun ≥ 1.1 for dev + `--compile`
+- **CLI dispatch:** citty
+- **Interactive prompts:** @clack/prompts
+- **Subprocess:** execa (funnelled through `src/exec/run.ts`)
+- **YAML:** `yaml` (CST for comment preservation)
+- **Schema:** zod
+- **Testing:** vitest (180+ tests: unit, integration, regression, conformance)
+- **Lint/format:** biome
+
+### 6.3 Testing strategy
+
+- **Unit** — zod schemas, store mutation, selection classifier
+- **Integration** — each plugin against fixture recordings (no live subprocess)
+- **Regression** — one test per historical zsh bug
+- **Conformance** — parameterised test asserting every plugin obeys the interface contract
+- **YAML round-trip** — real tmp dirs, byte-equality on unchanged lines, fuzz on random mutation sequences
+
+---
+
+## 7. Success metrics
+
+### 7.1 Adoption (post-Phase 8)
+
+- **Primary:** weekly npm downloads
+- **Primary:** GitHub stars (vanity metric, but useful discoverability signal)
+- **Secondary:** homebrew tap installs (tracked via formula analytics)
+- **Secondary:** issues filed (engagement signal, even when negative)
+
+### 7.2 Quality
+
+- **CI green rate** on main: >99%
+- **Test coverage**: maintain current ~90%+ on core (`src/config`, `src/plugins`)
+- **Mean time to triage** new issues: <72h
+
+### 7.3 User-facing
+
+- **Cold `macup all list outdated`**: <5s on a machine with ~200 packages
+- **Wizard time-to-first-action**: <3 keystrokes from `macup` to selecting a plugin
+
+---
+
+## 8. Roadmap
+
+### 8.1 Shipped (v1.0.0)
+
+- TypeScript rewrite, plugin architecture
+- 7 built-in plugins (brew, npm, pnpm, appstore, xcode, system, all)
+- Pins + skip lists, backup/restore, XDG paths, wizard, completions
+- CI pipeline active; release pipeline scaffolded
+
+### 8.2 Near-term (v1.0.x — polish)
+
+Tracked in [GitHub issues](https://github.com/jv-k/macos-updatetool/issues):
+
+- **#4** Dry run mode — expose `--dry-run` flag (plugin support exists)
+- **#5** Tracked vs installed distinction in UI
+- **#6** Rollback / undo command
+- **#7** Config schema version field
+- **#22** Activate release pipeline (Phase 8 — create tap, set secrets, cut v1.0.1)
+
+### 8.3 Mid-term (v1.1 — scriptability + bundles)
+
+- **Bundles** — the headline v1.1 feature (see §5.8)
+- **#8** `--json` for all commands (not just `list`)
+- **#9** `macup check` for shell prompts / cron
+- **#11** `macup info` system info dashboard
+- **#12** Changelog / diff view before updates
+- **#16** File logging (`--log`, `MACUP_LOG`)
+
+### 8.4 Long-term (v1.2+ — ecosystem)
+
+- **#10** Python/pip plugin
+- **#19, #20, #21** cargo, go plugins
+- **#14** `macup init` — generate applist from current system
+- **#18** `macup schedule` — launchd integration
+- **#24** Shell integration (`eval "$(macup init zsh)"`)
+- **MCP server** — expose macup as an AI-accessible tool server
+
+### 8.5 Speculative (post-1.2)
+
+- **Streaming progress** for long `brew upgrade` / `npm update` runs
+- **Package search** in wizard's `add` flow
+- **Third-party plugin ecosystem** (`macup-plugin-*` npm packages)
+- **`brew search` / `npm search` integration** in wizard
+
+---
+
+## 9. Known risks & open questions
+
+| # | Risk | Mitigation |
+|---|---|---|
+| R1 | `bun build --compile` + execa edge cases | CI smoke-tests compiled binary; fallback `@yao-pkg/pkg` |
+| R2 | YAML between-item comment drift on splice | Use `Document` + `keepSourceTokens`; fuzz test gates changes |
+| R3 | Non-semver versions (brew pseudo-versions, mas) | Plugins override `compareVersions`; best-effort with warning |
+| R4 | mas maintenance status | Typed `ErrPluginUnavailable`; composite skips gracefully |
+| R5 | Linux/Windows plugin contributions without CI | Conformance suite stubs `process.platform`; real validation only when contributed |
+| R6 | Third-party plugin surface stability | Deferred to post-1.2; interface designed forward-compatible |
+| R7 | Remote bundle trust (arbitrary YAML from GitHub) | TOFU caching + `--dry-run` by default on first fetch; show resolved package list before any install. No shell hooks in v1.1. |
+| R8 | Bundle `extends` graph complexity | Detect cycles at load; cap depth (e.g., max 5 levels); surface flattened view via `bundle show --resolved` |
+
+---
+
+## 10. Appendix
+
+### 10.1 Naming
+
+- **macup** (chosen) — short, memorable, macOS-specific
+- Rejected: `mac-updater` (too generic), `macos-updatetool` (legacy; too long)
+- Legacy `macos-updatetool` npm package deprecated with redirect message at 1.0
+
+### 10.2 Design principles
+
+1. **Plugins own their semantics** — macup is a host, not a package manager
+2. **Declarative over imperative** — YAML manifest is source of truth
+3. **Safe by default** — backups, confirmations, dry-run
+4. **TTY-aware** — wizard when interactive, `--help` when piped
+5. **No magic** — every subprocess is transparent (`--log` shows exactly what ran)
+
+### 10.3 References
+
+- Implementation plan: [`.claude/plans/scalable-juggling-nest.md`](../.claude/plans/scalable-juggling-nest.md)
+- CLI syntax reference: [`docs/cli-syntax.md`](cli-syntax.md)
+- Plugin author contract: `plugins/README.md`
+- Rewrite worktree: `.worktrees/rewrite-phase-1-scaffolding/`

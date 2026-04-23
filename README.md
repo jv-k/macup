@@ -40,6 +40,9 @@ macup brew skip legacy-dep
 # Show config status
 macup --config
 
+# List built-in plugins and whether each is available on your machine
+macup --plugins
+
 # Restore from a backup
 macup --restore
 ```
@@ -59,6 +62,19 @@ macup ships with 7 built-in plugins:
 | `all` | Composite — fans across all plugins | `list`, `install`, `update` (partial-failure isolated) |
 
 Every plugin also supports `pin`, `unpin`, `skip`, `unskip` for packages tracked in your config.
+
+### Which plugins are available here?
+
+`macup --plugins` prints a one-line status per plugin, flagging anything whose required binary isn't on your PATH:
+
+```text
+plugins: 6 / 7 available  (platform: darwin)
+
+  ✓ brew      Homebrew                          list, install, update, add, remove  [formulas|casks]
+  ✓ npm       npm (global)                      list, install, update, add, remove
+  ✗ appstore  Mac App Store                     missing: mas
+  ...
+```
 
 ### Adding a plugin
 

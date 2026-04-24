@@ -66,6 +66,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@ai-hero/sandcastle": "^0.5.1",
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^22.10.0",
     "@types/semver": "^7.7.1",

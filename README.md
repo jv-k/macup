@@ -2,6 +2,12 @@
 
 A plugin-based CLI for tracking and updating developer packages on macOS. Manages Homebrew formulas & casks, npm globals, Mac App Store apps, Xcode, and system updates — with version pins, skip lists, and an interactive wizard.
 
+<p align="center">
+  <img src="img/screenshot.png" alt="macup --help" width="640">
+  <br>
+  <img src="img/demo.gif" alt="macup demo — plugins, brew add, npm pin, config" width="640">
+</p>
+
 ## Install
 
 ```bash

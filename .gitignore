@@ -5,4 +5,5 @@ coverage/
 .DS_Store
 .sandcastle/.env
 .sandcastle/logs/
+img/tmp/
 

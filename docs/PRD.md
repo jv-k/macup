@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-**macup** is a unified CLI for tracking and updating developer packages on macOS. It aggregates Homebrew, npm globals, Mac App Store, Xcode, system updates, and pnpm behind a single consistent interface, with a declarative YAML config that makes a developer's package setup portable and reproducible.
+**macup** is a unified CLI for tracking and updating packages + apps on macOS. It aggregates Homebrew, npm globals, Mac App Store, Xcode, system updates, and pnpm behind a single consistent interface, with a declarative YAML config that makes a developer's package setup portable and reproducible.
 
 ### 1.1 Elevator pitch
 
@@ -445,6 +445,6 @@ Tracked in [GitHub issues](https://github.com/jv-k/macos-updatetool/issues):
 ### 10.3 References
 
 - Implementation plan: [`.claude/plans/scalable-juggling-nest.md`](../.claude/plans/scalable-juggling-nest.md)
-- CLI syntax reference: [`docs/cli-syntax.md`](cli-syntax.md)
+- CLI syntax reference: run `macup --help` (self-documenting)
 - Plugin author contract: `plugins/README.md`
 - Rewrite worktree: `.worktrees/rewrite-phase-1-scaffolding/`

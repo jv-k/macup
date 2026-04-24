@@ -19,7 +19,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
   && rm -rf /var/lib/apt/lists/*
 
 # Enable pnpm via Corepack (macup's package manager — pinned in package.json).
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.33.1 --activate
 
 # Rename the base image's "node" user (UID 1000) to "agent".
 # This keeps UID 1000 so that --userns=keep-id (Podman) and

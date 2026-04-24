@@ -2,8 +2,11 @@ import type { Plugin } from '../plugins/types';
 import { commandsFor } from './shared';
 
 export function generateZshCompletions(plugins: readonly Plugin[]): string {
-  const ids = plugins.map((p) => p.manifest.id);
-  const allCmds = [...new Set(plugins.flatMap(commandsFor))];
+  // Each plugin gets a `name:description` entry so zsh shows the
+  // displayName next to the id in the completion menu.
+  const pluginEntries = plugins
+    .map((p) => `'${p.manifest.id}:${p.manifest.displayName.replace(/'/g, "'\\''")}'`)
+    .join(' ');
 
   const pluginCases = plugins
     .map((p) => {
@@ -18,27 +21,28 @@ export function generateZshCompletions(plugins: readonly Plugin[]): string {
 # Auto-generated from plugin manifests. Do not edit.
 
 _macup() {
-  local -a global_flags plugins commands
-  global_flags=(
-    '--help[Show help]'
-    '--version[Show version]'
-    '--config[Show config status]'
-    '--cleanup[Delete backup files]'
-    '--restore[Restore from backup]'
-    '--logo[Show Apple logo]'
-    '--completions[Emit completions]:shell:(zsh bash fish)'
-  )
-  plugins=(${ids.map((id) => `'${id}'`).join(' ')})
-  commands=(${allCmds.map((c) => `'${c}'`).join(' ')})
+  local -a plugins
+  plugins=(${pluginEntries})
 
+  # Flags are declared on _arguments so each can carry its own value
+  # spec (e.g. --completions=<shell>). Positional args 1 and 2 dispatch
+  # to the plugin / command states below.
   _arguments -C \\
+    '(-h --help)'{-h,--help}'[Show help]' \\
+    '(-v --version)'{-v,--version}'[Show version]' \\
+    '--config[Show config status]' \\
+    '--plugins[List built-in plugins and availability]' \\
+    '--cleanup[Delete backup files]' \\
+    '--restore[Restore from backup]' \\
+    '--logo[Show Apple logo]' \\
+    '--completions=-[Emit completions (omit value to auto-detect)]::shell:(zsh bash fish)' \\
     '1:plugin:->plugin' \\
     '2:command:->command' \\
     '*:: :->rest'
 
   case $state in
     (plugin)
-      _describe 'plugin' plugins -- global_flags
+      _describe -t plugins 'package manager' plugins
       ;;
     (command)
       case $words[2] in

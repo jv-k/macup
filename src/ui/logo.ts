@@ -36,6 +36,45 @@ export interface LogoRenderOptions {
   color?: boolean;
   /** Injectable RNG (0 ≤ x < 1). Defaults to Math.random. Tests pass a seeded fn. */
   random?: () => number;
+  /**
+   * Uniform scale factor (0, 1] applied to both rows and columns.
+   * 1 = full 25-row, ~70-col logo; 0.5 halves both dims; 0.25 quarters
+   * both. Terminal cells are ~2:1 (tall:wide) so uniform scaling gives
+   * a proportionally taller-than-wide result by design — matching how
+   * the Apple wordmark reads in text.
+   */
+  scale?: number;
+}
+
+function sample2D(lines: readonly string[], scale: number): readonly string[] {
+  if (scale >= 1) return lines;
+  if (scale <= 0) return [];
+  const step = 1 / scale;
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i += step) {
+    const row = lines[Math.floor(i)];
+    if (row === undefined) continue;
+    let sampled = '';
+    // For each sampled column, take the first non-space char in the
+    // chunk so edges / glyph clusters survive sampling better than a
+    // naive index pick would. Falls back to whatever's there.
+    for (let j = 0; j < row.length; j += step) {
+      const start = Math.floor(j);
+      const end = Math.min(row.length, Math.floor(j + step));
+      let picked = ' ';
+      for (let k = start; k < end; k++) {
+        const ch = row[k];
+        if (ch && ch !== ' ') {
+          picked = ch;
+          break;
+        }
+        if (k === start && ch) picked = ch;
+      }
+      sampled += picked;
+    }
+    out.push(sampled);
+  }
+  return out;
 }
 
 const ESC = '\x1b';
@@ -49,17 +88,20 @@ function colourise(ch: string, random: () => number): string {
 
 export function renderAppleLogo(opts: LogoRenderOptions = {}): string {
   const color = opts.color ?? true;
-  if (!color) return APPLE_LOGO.join('\n');
+  const lines = sample2D(APPLE_LOGO, opts.scale ?? 1);
+  if (!color) return lines.join('\n');
 
   const random = opts.random ?? Math.random;
-  return APPLE_LOGO.map((line) => {
-    let out = '';
-    for (const ch of line) {
-      // Leave whitespace uncoloured (no visible effect; saves bytes and keeps alignment clean).
-      out += ch === ' ' ? ch : colourise(ch, random);
-    }
-    return out;
-  }).join('\n');
+  return lines
+    .map((line) => {
+      let out = '';
+      for (const ch of line) {
+        // Leave whitespace uncoloured (no visible effect; saves bytes and keeps alignment clean).
+        out += ch === ' ' ? ch : colourise(ch, random);
+      }
+      return out;
+    })
+    .join('\n');
 }
 
 /**
@@ -79,7 +121,7 @@ export function renderCredits(opts: CreditsRenderOptions = {}): string {
   const color = opts.color ?? true;
   const author = (opts.author ?? 'John Valai').toLowerCase();
   const email = (opts.email ?? 'git@jvk.to').toLowerCase();
-  const repo = (opts.repo ?? 'github.com/jv-k/macos-updatetool').toLowerCase();
+  const repo = (opts.repo ?? 'github.com/jv-k/macup').toLowerCase();
 
   const line1 = `${author} <${email}>`;
   const line2 = repo;

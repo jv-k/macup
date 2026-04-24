@@ -58,6 +58,24 @@ describe('generateZshCompletions', () => {
   it('contains a _macup function definition', () => {
     expect(out).toContain('_macup()');
   });
+
+  it('groups plugins under a "package manager" heading', () => {
+    expect(out).toContain("_describe -t plugins 'package manager' plugins");
+  });
+
+  it('declares global flags on _arguments (so each can carry a value spec)', () => {
+    expect(out).toContain("'--config[Show config status]'");
+    expect(out).toContain("'--plugins[List built-in plugins and availability]'");
+    // --completions has an optional value with a fixed shell list.
+    expect(out).toContain("'--completions=-[Emit completions");
+    expect(out).toContain('::shell:(zsh bash fish)');
+  });
+
+  it('attaches each plugin displayName as its completion description', () => {
+    // Test mock sets displayName = id, so the entry round-trips as id:id.
+    expect(out).toContain("'brew:brew'");
+    expect(out).toContain("'npm:npm'");
+  });
 });
 
 describe('generateBashCompletions', () => {

@@ -7,6 +7,7 @@ import pc from 'picocolors';
 import { runCleanup } from './commands/cleanup';
 import { buildConfigReport, formatConfigReport } from './commands/config';
 import { commandsFromManifest } from './commands/from-manifest';
+import { formatInstallReport, installCompletions } from './commands/install-completions';
 import { buildPluginsReport, formatPluginsReport } from './commands/plugins';
 import { runRestore } from './commands/restore';
 import { generateBashCompletions } from './completions/bash';
@@ -19,7 +20,7 @@ import { MacupError } from './errors';
 import { ExecaExecRunner } from './exec/run';
 import { BUILTIN_PLUGINS, defaultRegistry, isOnPath } from './plugins/registry';
 import * as logui from './ui/log';
-import { renderAppleLogo, renderCredits } from './ui/logo';
+import { renderAppleLogo } from './ui/logo';
 import { getVersion } from './version';
 import { type Target, type WizardResult, runWizard } from './wizard';
 
@@ -33,6 +34,20 @@ const SUPPORTED_SHELLS: readonly Shell[] = ['zsh', 'bash', 'fish'];
 
 function isShell(value: string): value is Shell {
   return (SUPPORTED_SHELLS as readonly string[]).includes(value);
+}
+
+/**
+ * Best-effort detection of the user's shell from $SHELL. Returns undefined
+ * when the env var is missing or names a shell we don't generate completions
+ * for. $SHELL reflects the login shell, not necessarily the currently-running
+ * one — callers should fall back to an explicit arg if detection is wrong.
+ */
+export function detectShellFromEnv(env: NodeJS.ProcessEnv): Shell | undefined {
+  const shellPath = env.SHELL;
+  if (!shellPath) return undefined;
+  const base = shellPath.split('/').pop()?.toLowerCase();
+  if (!base) return undefined;
+  return isShell(base) ? base : undefined;
 }
 
 function resolvePaths() {
@@ -114,8 +129,9 @@ const main = defineCommand({
       description: 'Interactively restore the applist from a backup.',
     },
     logo: {
-      type: 'boolean',
-      description: 'Print the Apple logo and exit.',
+      type: 'string',
+      required: false,
+      description: 'Print the Apple logo (optional scale: 0.25, 0.5, 0.75, or 1).',
     },
     plugins: {
       type: 'boolean',
@@ -124,7 +140,12 @@ const main = defineCommand({
     completions: {
       type: 'string',
       required: false,
-      description: `Emit shell completions for ${SUPPORTED_SHELLS.join('|')}.`,
+      description: `Emit shell completions for ${SUPPORTED_SHELLS.join('|')} (omit value to auto-detect from $SHELL).`,
+    },
+    'install-completions': {
+      type: 'string',
+      required: false,
+      description: `Generate and write shell completions to the standard XDG path for ${SUPPORTED_SHELLS.join('|')} (omit value to auto-detect).`,
     },
   },
   async run({ args, rawArgs }) {
@@ -134,8 +155,18 @@ const main = defineCommand({
     const first = rawArgs[0];
     if (first && pluginSubCommands[first]) return;
 
-    if (args.logo) {
-      console.log(renderAppleLogo({ color: shouldUseColor() }));
+    if (typeof args.logo === 'string') {
+      let scale = 1;
+      if (args.logo !== '') {
+        const parsed = Number(args.logo);
+        if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) {
+          console.error(`error: invalid --logo scale "${args.logo}" (expected number in (0, 1]).`);
+          process.exitCode = 1;
+          return;
+        }
+        scale = parsed;
+      }
+      console.log(renderAppleLogo({ color: shouldUseColor(), scale }));
       return;
     }
 
@@ -149,7 +180,21 @@ const main = defineCommand({
     }
 
     if (typeof args.completions === 'string') {
-      if (!isShell(args.completions)) {
+      let shell: Shell;
+      if (args.completions === '') {
+        const detected = detectShellFromEnv(process.env);
+        if (!detected) {
+          console.error(
+            `error: could not detect shell from $SHELL. Pass one of: ${SUPPORTED_SHELLS.join(', ')}.`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+        console.error(`[detected ${detected} from $SHELL]`);
+        shell = detected;
+      } else if (isShell(args.completions)) {
+        shell = args.completions;
+      } else {
         console.error(
           `error: unknown shell "${args.completions}". Supported: ${SUPPORTED_SHELLS.join(', ')}.`,
         );
@@ -161,7 +206,38 @@ const main = defineCommand({
         bash: generateBashCompletions,
         fish: generateFishCompletions,
       };
-      console.log(generators[args.completions as Shell](registry));
+      console.log(generators[shell](registry));
+      return;
+    }
+
+    const installArg = (args as Record<string, unknown>)['install-completions'];
+    if (typeof installArg === 'string') {
+      let shell: Shell;
+      if (installArg === '') {
+        const detected = detectShellFromEnv(process.env);
+        if (!detected) {
+          console.error(
+            `error: could not detect shell from $SHELL. Pass one of: ${SUPPORTED_SHELLS.join(', ')}.`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+        console.error(`[detected ${detected} from $SHELL]`);
+        shell = detected;
+      } else if (isShell(installArg)) {
+        shell = installArg;
+      } else {
+        console.error(
+          `error: unknown shell "${installArg}". Supported: ${SUPPORTED_SHELLS.join(', ')}.`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+      const report = await installCompletions(shell, registry, {
+        home: homedir(),
+        env: process.env,
+      });
+      console.log(formatInstallReport(report));
       return;
     }
 
@@ -231,9 +307,15 @@ const main = defineCommand({
       return;
     }
 
-    console.log(renderAppleLogo({ color: shouldUseColor() }));
-    console.log(renderCredits({ color: shouldUseColor() }));
-    console.log();
+    console.log(
+      logui.splashBlock({
+        version: getVersion(),
+        description: 'A plugin-based CLI for tracking and updating developer packages on macOS.',
+        author: 'John Valai <git@jvk.to>',
+        homepage: 'https://github.com/jv-k/macup',
+        color: shouldUseColor(),
+      }),
+    );
 
     // Wizard runs in a loop: after each operation completes we return to
     // the target-selection menu. The user exits by pressing Escape at
@@ -331,13 +413,13 @@ const main = defineCommand({
 
 // Intercept --version/-v before citty's default (which just prints the version string).
 if (process.argv.includes('--version') || process.argv.includes('-v')) {
-  console.log(renderAppleLogo({ color: shouldUseColor() }));
   console.log(
-    logui.versionBlock({
+    logui.splashBlock({
       version: getVersion(),
       description: 'A plugin-based CLI for tracking and updating developer packages on macOS.',
       author: 'John Valai <git@jvk.to>',
-      homepage: 'https://github.com/jv-k/macos-updatetool',
+      homepage: 'https://github.com/jv-k/macup',
+      color: shouldUseColor(),
     }),
   );
   process.exit(0);
@@ -361,21 +443,22 @@ runMain(main);
 
 function showCustomHelp() {
   const color = shouldUseColor();
-  console.log(renderAppleLogo({ color }));
   console.log(
-    logui.versionBlock({
+    logui.splashBlock({
       version: getVersion(),
       description: 'A plugin-based CLI for tracking and updating developer packages on macOS.',
       author: 'John Valai <git@jvk.to>',
-      homepage: 'https://github.com/jv-k/macos-updatetool',
+      homepage: 'https://github.com/jv-k/macup',
+      color,
     }),
   );
+  console.log('');
 
   const id = (x: string) => x;
   const s = color ? pc : { bold: id, cyan: id, dim: id, green: id, yellow: id, underline: id };
 
   // Usage
-  console.log(s.underline(s.cyan('USAGE:')));
+  console.log(logui.header('USAGE'));
   console.log(
     `  ${s.bold('macup')} ${s.dim('<plugin>')} ${s.dim('<command>')} ${s.dim('[options] [packages...]')}`,
   );
@@ -385,7 +468,7 @@ function showCustomHelp() {
   console.log('');
 
   // Plugins
-  console.log(s.underline(s.cyan('PLUGINS:')));
+  console.log(logui.header('PLUGINS'));
   const pad = 12;
   for (const plugin of registry) {
     const m = plugin.manifest;
@@ -403,7 +486,7 @@ function showCustomHelp() {
   console.log('');
 
   // Pin / Skip
-  console.log(s.underline(s.cyan('PINS & SKIP:')));
+  console.log(logui.header('PINS & SKIP'));
   console.log(
     `  ${s.bold('macup <plugin> pin')} ${s.dim('<name> <version>')}    Pin to max version`,
   );
@@ -417,31 +500,45 @@ function showCustomHelp() {
   console.log('');
 
   // Global options
-  console.log(s.underline(s.cyan('GLOBAL OPTIONS:')));
-  console.log(`  ${s.cyan('--help, -h')}          Show this help`);
-  console.log(`  ${s.cyan('--version, -v')}       Show version with logo`);
-  console.log(`  ${s.cyan('--config')}            Show config path, schema, pins/skip counts`);
-  console.log(`  ${s.cyan('--cleanup')}           Delete all backup files`);
-  console.log(`  ${s.cyan('--restore')}           Restore config from a backup`);
-  console.log(`  ${s.cyan('--logo')}              Print the Apple logo`);
-  console.log(`  ${s.cyan('--plugins')}           List built-in plugins and their availability`);
-  console.log(`  ${s.cyan('--completions=<sh>')}  Emit completions (zsh, bash, fish)`);
+  console.log(logui.header('GLOBAL OPTIONS'));
+  console.log(`  ${s.cyan('--help, -h')}              Show this help`);
+  console.log(`  ${s.cyan('--version, -v')}           Show version with logo`);
+  console.log(`  ${s.cyan('--config')}                Show config path, schema, pins/skip counts`);
+  console.log(`  ${s.cyan('--cleanup')}               Delete all backup files`);
+  console.log(`  ${s.cyan('--restore')}               Restore config from a backup`);
+  console.log(`  ${s.cyan('--logo')}                  Print the Apple logo`);
+  console.log(
+    `  ${s.cyan('--plugins')}               List built-in plugins and their availability`,
+  );
+  console.log(
+    `  ${s.cyan('--install-completions')}   Install shell completions (auto-detects shell)`,
+  );
   console.log('');
 
   // Examples
-  console.log(s.underline(s.cyan('EXAMPLES:')));
+  console.log(logui.header('EXAMPLES'));
   console.log(`  ${s.bold('macup')}                              Interactive wizard`);
-  console.log(`  ${s.bold('macup brew list')}                    Show tracked brew formulas`);
-  console.log(`  ${s.bold('macup brew list --all')}              Show all installed formulas`);
-  console.log(`  ${s.bold('macup brew list --only-outdated')}    Show only outdated`);
-  console.log(`  ${s.bold('macup npm list --json')}              JSON output for scripting`);
   console.log(
-    `  ${s.bold('macup all update')}                   Update everything (with confirmation)`,
+    `  ${s.dim('macup')} ${s.bold('brew list')}                    Show tracked brew formulas`,
   );
-  console.log(`  ${s.bold('macup brew add git curl jq')}         Track new packages`);
-  console.log(`  ${s.bold('macup brew add --cask firefox')}      Track a cask`);
-  console.log(`  ${s.bold('macup npm pin typescript 5.3.3')}     Pin to max version`);
-  console.log(`  ${s.bold('macup brew skip legacy-dep')}         Skip from future updates`);
-  console.log(`  ${s.bold('macup --completions=zsh > ...')}      Generate shell completions`);
+  console.log(
+    `  ${s.dim('macup')} ${s.bold('brew list --all')}              Show all installed formulas`,
+  );
+  console.log(`  ${s.dim('macup')} ${s.bold('brew list --only-outdated')}    Show only outdated`);
+  console.log(
+    `  ${s.dim('macup')} ${s.bold('npm list --json')}              JSON output for scripting`,
+  );
+  console.log(
+    `  ${s.dim('macup')} ${s.bold('all update')}                   Update everything (with confirmation)`,
+  );
+  console.log(`  ${s.dim('macup')} ${s.bold('brew add git curl jq')}         Track new packages`);
+  console.log(`  ${s.dim('macup')} ${s.bold('brew add --cask firefox')}      Track a cask`);
+  console.log(`  ${s.dim('macup')} ${s.bold('npm pin typescript 5.3.3')}     Pin to max version`);
+  console.log(
+    `  ${s.dim('macup')} ${s.bold('brew skip legacy-dep')}         Skip from future updates`,
+  );
+  console.log(
+    `  ${s.dim('macup')} ${s.bold('--install-completions')}          Install shell completions`,
+  );
   console.log('');
 }

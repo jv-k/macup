@@ -29,7 +29,8 @@
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
     "shellcheck": "git ls-files '*.sh' | xargs shellcheck --severity=warning",
-    "build:binary": "bun scripts/build-binary.ts"
+    "build:binary": "bun scripts/build-binary.ts",
+    "sandcastle": "npx tsx .sandcastle/main.mts"
   },
   "keywords": [
     "macos",

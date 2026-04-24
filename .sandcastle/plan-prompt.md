@@ -8,9 +8,9 @@
 
 @.sandcastle/CODING_STANDARDS.md
 
-## Open issues (gated by `ready-for-agent`)
+## Open issues (gated by `status:ready-for-agent`)
 
-!`gh issue list --state open --label ready-for-agent --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`
+!`gh issue list --state open --label status:ready-for-agent --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`
 
 ## Host working-tree state (paths with uncommitted changes on `develop`)
 
@@ -27,7 +27,7 @@ files, defer it.
 # Task
 
 You are the **Planner**. Build a dependency graph of the open
-`ready-for-agent` issues and select the subset that can be worked on
+`status:ready-for-agent` issues and select the subset that can be worked on
 **concurrently in this iteration** without producing merge conflicts
 either against each other or against the host's dirty working tree.
 
@@ -86,5 +86,5 @@ the iteration. Do NOT pick a "least bad" candidate that conflicts with
 the host tree; the SyncError on merge-back is worse than an idle
 iteration.
 
-If there are zero open `ready-for-agent` issues, also output
+If there are zero open `status:ready-for-agent` issues, also output
 `{"issues": []}`.

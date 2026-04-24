@@ -3,7 +3,7 @@
 // Three-phase pipeline modelled on @ai-hero/sandcastle's reference setup,
 // adapted for macup (TypeScript/ESM, vitest, biome — pnpm workspace).
 //
-// Phase 1 (Plan):     orchestrator agent reads `ready-for-agent` issues,
+// Phase 1 (Plan):     orchestrator agent reads `status:ready-for-agent` issues,
 //                     diffs against the host's dirty paths, emits a JSON
 //                     <plan> of non-conflicting issues to attempt this round.
 // Phase 2 (Impl×N):   up to MAX_PARALLEL implementer agents run in parallel,

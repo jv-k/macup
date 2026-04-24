@@ -1,6 +1,6 @@
-# Support macos-updatetool
+# Support macup
 
-Thank you for considering supporting the development of `macos-updatetool`. Your contributions help keep the project actively maintained and evolving.
+Thank you for considering supporting the development of `macup`. Your contributions help keep the project actively maintained and evolving.
 
 If you find this tool useful, please consider one of the following ways to show your support:
 
@@ -15,9 +15,5 @@ You can sponsor me directly through GitHub Sponsors. This is a great way to prov
 A one-time donation is also greatly appreciated!
 
 - [**Buy Me a Coffee**](https://www.buymeacoffee.com/jv-k)
-
-## 🅿️ PayPal
-
-- [**Donate via PayPal**](https://www.paypal.me/jv-k)
 
 Thank you for your support!

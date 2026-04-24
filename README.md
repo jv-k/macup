@@ -129,25 +129,35 @@ macup --restore    # Interactively pick and restore a backup
 
 ## Shell completions
 
+The easy path — auto-detects the shell and writes to the standard XDG location:
+
 ```bash
-# zsh
-macup --completions=zsh > ~/.zsh/completions/_macup
-echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
+macup --install-completions
+# wrote ~/.local/share/zsh/site-functions/_macup (2100 bytes)
+#   Run 'exec zsh' or open a new tab to load completions.
+```
 
-# bash
+For zsh, this also clears cached `.zcompdump` files so the new completions load on next shell start.
+
+### Manual install (dotfiles / scripting)
+
+`--completions` emits to stdout — useful when you want full control over the path or are writing dotfiles:
+
+```bash
+macup --completions=zsh  > ~/.local/share/zsh/site-functions/_macup
 macup --completions=bash > ~/.local/share/bash-completion/completions/macup
-
-# fish
 macup --completions=fish > ~/.config/fish/completions/macup.fish
 ```
 
-Completions are generated from plugin manifests — adding a plugin auto-extends all three shells.
+Both forms accept an explicit shell (`zsh`/`bash`/`fish`) or auto-detect from `$SHELL` when the value is omitted.
+
+The generated files are derived from plugin manifests — adding a plugin auto-extends all three shells.
 
 ## Development
 
 ```bash
-git clone https://github.com/jv-k/macos-updatetool.git
-cd macos-updatetool
+git clone https://github.com/jv-k/macup.git
+cd macup
 pnpm install
 pnpm dev -- brew list            # run from source via tsx
 pnpm test                        # vitest (unit + integration + regression)

@@ -85,6 +85,19 @@ describe('ConfigStore — save', () => {
     expect(backup).toBe('brew_formulas:\n  - git\n');
   });
 
+  it('saves on first run when no applist file exists yet (no backup)', async () => {
+    // Don't seed — applist file doesn't exist on disk.
+    const s = await store();
+    s.add('brew_formulas', ['git']);
+    const r = await s.save('add');
+
+    expect(r.changed).toBe(true);
+    expect(r.backupPath).toBeUndefined();
+
+    const written = await readFile(applistPath, 'utf8');
+    expect(written).toContain('git');
+  });
+
   it('returns changed=false and creates no backup when nothing mutated', async () => {
     await seed('brew_formulas:\n  - git\n');
     const s = await store();

@@ -36,6 +36,24 @@ describe('resolveSelection', () => {
     expect(r.skipped).toEqual([]);
   });
 
+  it('does not crash with non-semver pin when using default comparator', () => {
+    // Brew/mas/etc. ship date-based or build-id versions that aren't valid
+    // semver. The default comparator must fall back gracefully instead of
+    // throwing — pin becomes effectively non-blocking.
+    const s = status('coolapp', '2024-01-01', '2024-06-15', true);
+    expect(() =>
+      resolveSelection([s], {
+        pinned: new Map([['coolapp', '2024-03-01']]),
+        skipped: new Set(),
+      }),
+    ).not.toThrow();
+    const r = resolveSelection([s], {
+      pinned: new Map([['coolapp', '2024-03-01']]),
+      skipped: new Set(),
+    });
+    expect(r.upgradable.map((x) => x.ref.name)).toEqual(['coolapp']);
+  });
+
   it('routes skipped names to the skipped bucket regardless of outdated state', () => {
     const s = status('legacy-pkg', '1.0.0', '2.0.0', true);
     const r = resolveSelection([s], { pinned: new Map(), skipped: new Set(['legacy-pkg']) });

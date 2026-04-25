@@ -39,6 +39,7 @@ function timestamp(now: Date): string {
 export class ConfigStore {
   private doc: Document | null = null;
   private originalText = '';
+  private fileExisted = false;
   private readonly now: () => Date;
 
   constructor(
@@ -52,10 +53,12 @@ export class ConfigStore {
     let text: string;
     try {
       text = await readFile(this.paths.applistPath, 'utf8');
+      this.fileExisted = true;
     } catch (err) {
       if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
         // No config file yet — start with an empty document.
         text = '';
+        this.fileExisted = false;
       } else {
         throw err;
       }
@@ -206,13 +209,16 @@ export class ConfigStore {
       return { changed: false };
     }
     await mkdir(this.paths.backupDir, { recursive: true });
-    const backupPath = join(
-      this.paths.backupDir,
-      `applist_${operation}_${timestamp(this.now())}.yaml`,
-    );
-    await copyFile(this.paths.applistPath, backupPath);
+    // First-run save has nothing to back up — copyFile would ENOENT and
+    // block writing the new config.
+    let backupPath: string | undefined;
+    if (this.fileExisted) {
+      backupPath = join(this.paths.backupDir, `applist_${operation}_${timestamp(this.now())}.yaml`);
+      await copyFile(this.paths.applistPath, backupPath);
+    }
     await writeFile(this.paths.applistPath, newText, 'utf8');
     this.originalText = newText;
-    return { changed: true, backupPath };
+    this.fileExisted = true;
+    return backupPath ? { changed: true, backupPath } : { changed: true };
   }
 }

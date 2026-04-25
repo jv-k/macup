@@ -253,12 +253,17 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         let refs: PackageRef[];
         if (packages.length > 0) {
           refs = packages.map((name) => ({ kind, name }));
+        } else if (manifest.configKeys.length === 0) {
+          // Composite plugins (e.g. `all`) don't track packages themselves —
+          // their install() ignores caller refs and discovers tracked sets
+          // from constituents. Pass an empty list and let the plugin decide.
+          refs = [];
         } else {
           const store = await deps.getStore();
           const key = resolveConfigKey(plugin, subtype);
           refs = [...store.list(key)].map((name) => ({ kind, name }));
         }
-        if (refs.length === 0) {
+        if (refs.length === 0 && manifest.configKeys.length > 0) {
           console.log(
             log.info(
               `No tracked packages found. Add packages first: macup ${manifest.id} add <name...>`,
@@ -267,15 +272,27 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           return;
         }
         if (plugin.install) {
-          if (manifest.id === 'all' && process.stdout.isTTY) {
-            const ans = await confirm({
-              message: `This installs ${refs.length} package(s) across all managers. Continue?`,
-              initialValue: true,
-            });
-            if (isCancel(ans) || !ans) {
-              console.log(log.warning('Install cancelled.'));
-              return;
+          // Composite plugins (configKeys empty) ignore caller refs and
+          // discover their own work from constituents — delegate once and
+          // skip the per-ref loop (we have no refs to iterate anyway).
+          if (manifest.configKeys.length === 0) {
+            if (manifest.id === 'all' && process.stdout.isTTY) {
+              const ans = await confirm({
+                message: 'This installs tracked packages across all managers. Continue?',
+                initialValue: true,
+              });
+              if (isCancel(ans) || !ans) {
+                console.log(log.warning('Install cancelled.'));
+                return;
+              }
             }
+            console.log('');
+            console.log(log.header(`Installing ${manifest.displayName}`));
+            console.log('');
+            await withSpinner(`Installing ${manifest.displayName}...`, async () => {
+              await plugin.install?.(makeCtx(deps), [], {});
+            });
+            return;
           }
           console.log('');
           console.log(log.header(`Installing ${manifest.displayName}`, refs.length));
@@ -312,10 +329,6 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
       meta: { name: 'update', description: 'Upgrade outdated packages to latest.' },
       args: {
         ...subtypeArg,
-        'only-outdated': {
-          type: 'boolean',
-          description: 'Only upgrade outdated (default true for update).',
-        },
         verbose: {
           type: 'boolean',
           alias: 'v',

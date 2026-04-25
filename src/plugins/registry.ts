@@ -49,8 +49,8 @@ export function isOnPath(binary: string, env: NodeJS.ProcessEnv = process.env): 
 }
 
 /**
- * The closed set of built-in plugins for 1.0. Each later phase appends
- * one import + one entry here. Phase 2 ships empty.
+ * The closed set of built-in plugins. Adding a new plugin = one import
+ * here + one entry below.
  */
 const INDIVIDUAL_PLUGINS: readonly Plugin[] = [
   brewPlugin,

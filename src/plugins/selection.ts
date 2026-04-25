@@ -17,9 +17,20 @@ export interface SelectionResult {
 export type VersionComparator = (a: string, b: string) => -1 | 0 | 1;
 
 const semverCompare: VersionComparator = (a, b) => {
-  const result = semver.compare(a, b);
-  if (result < 0) return -1;
-  if (result > 0) return 1;
+  // Pins/skips are user-provided and some ecosystems use non-semver strings
+  // (brew date versions, mas build IDs, etc.). semver.compare throws on
+  // non-semver — fall back to string equality so a bad pin format doesn't
+  // crash the whole update. Plugins with non-semver versions should provide
+  // their own `manifest.compareVersions`.
+  if (semver.valid(a) && semver.valid(b)) {
+    const result = semver.compare(a, b);
+    if (result < 0) return -1;
+    if (result > 0) return 1;
+    return 0;
+  }
+  // Can't compare reliably — treat as equal so the pin doesn't block. This
+  // is permissive on purpose: a malformed pin shouldn't trap the user out
+  // of upgrades.
   return 0;
 };
 

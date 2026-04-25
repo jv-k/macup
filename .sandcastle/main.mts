@@ -36,7 +36,11 @@ const MAX_PARALLEL = 4;
 const hooks = {
   sandbox: { onSandboxReady: [{ command: "pnpm install --frozen-lockfile" }] },
 };
-const copyToWorktree = ["node_modules"];
+// node_modules intentionally NOT copied: host is darwin/arm64 and the
+// sandbox is linux/arm64, so pnpm refuses to reuse the darwin binaries
+// and aborts on `confirmModulesPurge` for lack of a TTY. A fresh install
+// inside the container is faster than the abort + retry loop.
+const copyToWorktree: string[] = [];
 const agent = sandcastle.claudeCode("claude-opus-4-6");
 
 // ---------------------------------------------------------------------------

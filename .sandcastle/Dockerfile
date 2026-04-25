@@ -19,13 +19,20 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
   && rm -rf /var/lib/apt/lists/*
 
 # Enable pnpm via Corepack (macup's package manager — pinned in package.json).
-RUN corepack enable && corepack prepare pnpm@10.33.1 --activate
+# Shims go to /usr/local/bin (root-only), but the prefetch must run as the
+# `agent` user so the binary cache lands in /home/agent/.cache/node/corepack
+# where the runtime user can find it.
+RUN corepack enable
+# Belt-and-braces: never block on a TTY confirmation in a non-interactive sandbox.
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 # Rename the base image's "node" user (UID 1000) to "agent".
 # This keeps UID 1000 so that --userns=keep-id (Podman) and
 # --user 1000:1000 (Docker) map to the correct home directory owner.
 RUN usermod -d /home/agent -m -l agent node
 USER agent
+
+RUN corepack prepare pnpm@10.33.1 --activate
 
 # Install Claude Code CLI
 RUN curl -fsSL https://claude.ai/install.sh | bash

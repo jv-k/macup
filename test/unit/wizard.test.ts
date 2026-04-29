@@ -121,10 +121,46 @@ describe('runWizard (multiselect)', () => {
     };
     await runWizard(deps);
     // brew has all 5, npm has no add/remove, system has only list+update.
-    // All three have `outdated: true` in their capability map, so the
-    // wizard's outdated action is also offered. Intersection: list,
-    // outdated, update.
-    expect(receivedCommands.sort()).toEqual(['list', 'outdated', 'update']);
+    // All three have `outdated: true`, so outdated is offered. `about`
+    // is a standalone help action always available regardless of plugin
+    // capabilities. Intersection: about, list, outdated, update.
+    expect(receivedCommands.sort()).toEqual(['about', 'list', 'outdated', 'update']);
+  });
+
+  it('about: invokes printAbout, retains targets, and loops back to the command prompt', async () => {
+    let aboutCalls = 0;
+    let commandCalls = 0;
+    const result = await runWizard({
+      plugins: [brew, npm, system],
+      selectTargets: async () => [{ pluginId: 'npm' }],
+      selectCommand: async () => {
+        commandCalls++;
+        // First time: pick about (which loops back). Second: pick list.
+        return commandCalls === 1 ? 'about' : 'list';
+      },
+      printAbout: () => {
+        aboutCalls++;
+      },
+    });
+    expect(aboutCalls).toBe(1);
+    expect(commandCalls).toBe(2);
+    expect(result).toEqual<WizardResult>({
+      targets: [{ pluginId: 'npm' }],
+      command: 'list',
+    });
+  });
+
+  it('about: errors and exits when picked but no printAbout handler is wired', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const result = await runWizard({
+      plugins: [brew, npm, system],
+      selectTargets: async () => [{ pluginId: 'npm' }],
+      selectCommand: async () => 'about',
+      // printAbout intentionally omitted
+    });
+    expect(result).toBeNull();
+    expect(errSpy.mock.calls.map((c) => c.join(' ')).join('\n')).toContain('printAbout');
+    errSpy.mockRestore();
   });
 
   it('outdated: returned as a wizard command alongside list/update for capable plugins', async () => {

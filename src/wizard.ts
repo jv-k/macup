@@ -32,6 +32,13 @@ export interface WizardDeps {
     action: 'add' | 'remove',
     target: Target,
   ) => Promise<readonly string[] | null>;
+  /**
+   * Renders the "About macup" screen when the user picks the `about`
+   * command. After it returns, the wizard loops back to the command
+   * prompt (same targets retained). Required when WIZARD_COMMANDS
+   * contains `about`.
+   */
+  readonly printAbout?: () => void;
 }
 
 const COMMAND_LABELS: Record<string, string> = {
@@ -41,12 +48,15 @@ const COMMAND_LABELS: Record<string, string> = {
   update: 'Update outdated packages',
   add: 'Add to tracked list',
   remove: 'Remove from tracked list',
+  about: 'Help — about macup and how to use it',
 };
 
 // Commands the wizard shows. `outdated` is a read-only filter — for the
-// selected plugin(s) it shells to `list --only-outdated`. The CLI runner
-// in cli.ts translates the command. add/remove require positional names;
-// they're offered only when exactly one target is selected.
+// selected plugin(s) it shells to `list --only-outdated`. `about` is a
+// pseudo-command: the CLI runner prints a help screen and loops back
+// without dispatching to any plugin. The CLI runner in cli.ts handles
+// both translations. add/remove require positional names; they're
+// offered only when exactly one target is selected.
 const WIZARD_COMMANDS: readonly string[] = [
   'list',
   'outdated',
@@ -54,7 +64,14 @@ const WIZARD_COMMANDS: readonly string[] = [
   'update',
   'add',
   'remove',
+  'about',
 ];
+
+// Commands that exit the per-plugin command menu without reaching a
+// real plugin dispatch — they're CLI-runner-handled. Listed here so
+// commandIntersection can offer them unconditionally and skip the
+// per-plugin capability check that the others go through.
+const STANDALONE_COMMANDS: ReadonlySet<string> = new Set(['about']);
 
 function titleCase(s: string): string {
   return s.length === 0 ? s : s[0]?.toUpperCase() + s.slice(1);
@@ -106,6 +123,13 @@ function commandIntersection(plugins: readonly Plugin[], targets: readonly Targe
   const multiTarget = targets.length > 1;
   const commands: string[] = [];
   for (const cmd of WIZARD_COMMANDS) {
+    // Standalone commands (e.g. `about`) bypass the capability check
+    // because they don't dispatch to a plugin — the CLI runner handles
+    // them directly.
+    if (STANDALONE_COMMANDS.has(cmd)) {
+      commands.push(cmd);
+      continue;
+    }
     // add/remove require positional package names — only meaningful for a
     // single target.
     if (multiTarget && (cmd === 'add' || cmd === 'remove')) continue;
@@ -118,7 +142,7 @@ function commandIntersection(plugins: readonly Plugin[], targets: readonly Targe
 }
 
 export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> {
-  const { plugins, selectTargets, selectCommand, promptPackages } = deps;
+  const { plugins, selectTargets, selectCommand, promptPackages, printAbout } = deps;
   const groups = buildGroups(plugins);
 
   // Three-level nav: Esc on target prompt exits, Esc on command prompt goes
@@ -128,7 +152,11 @@ export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> 
     if (targets === null || targets.length === 0) return null;
 
     const commands = commandIntersection(plugins, targets);
-    if (commands.length === 0) {
+    // Standalone commands (about) are always available and don't represent
+    // a real action. If nothing else is in the intersection, there's
+    // genuinely no plugin work to offer — bail with the same error as
+    // before.
+    if (commands.every((c) => STANDALONE_COMMANDS.has(c))) {
       console.error(
         `error: no command is supported by all selected targets (${targets
           .map((t) => (t.subtype ? `${t.pluginId}:${t.subtype}` : t.pluginId))
@@ -142,6 +170,15 @@ export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> 
         commands.map((c) => ({ label: COMMAND_LABELS[c] ?? c, value: c })),
       );
       if (command === null) break; // back to target selection
+
+      if (command === 'about') {
+        if (!printAbout) {
+          console.error('error: wizard cannot show About screen without a printAbout handler');
+          return null;
+        }
+        printAbout();
+        continue; // back to command prompt with the same targets retained
+      }
 
       if (command === 'add' || command === 'remove') {
         // commandIntersection already restricts add/remove to single-target

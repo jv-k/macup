@@ -21,7 +21,7 @@ describe('brew plugin — manifest', () => {
     expect(brewPlugin.manifest.subtypes).toEqual(['formulas', 'casks']);
     expect(brewPlugin.manifest.supportedOS).toContain('darwin');
     expect(brewPlugin.manifest.requires).toContain('brew');
-    expect(brewPlugin.manifest.configKeys).toEqual(['brew_formulas', 'brew_casks']);
+    expect(brewPlugin.manifest.configKeys).toEqual(['brew.formulas', 'brew.casks']);
     expect(brewPlugin.manifest.capabilities.install).toBe(true);
     expect(brewPlugin.manifest.capabilities.update).toBe(true);
     expect(brewPlugin.manifest.capabilities.outdated).toBe(true);

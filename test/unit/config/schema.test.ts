@@ -5,11 +5,10 @@ describe('ApplistSchema', () => {
   it('accepts an empty object, defaulting all arrays and maps', () => {
     const result = ApplistSchema.parse({});
     expect(result).toEqual({
-      appstore_apps: [],
-      npm_apps: [],
-      pnpm_apps: [],
-      brew_formulas: [],
-      brew_casks: [],
+      appstore: [],
+      npm: [],
+      pnpm: [],
+      brew: { formulas: [], casks: [] },
       pins: {},
       skip: {},
     });
@@ -17,11 +16,10 @@ describe('ApplistSchema', () => {
 
   it('round-trips a full applist with packages, pins, and skip entries', () => {
     const input = {
-      appstore_apps: ['Xcode'],
-      npm_apps: ['typescript'],
-      pnpm_apps: ['prettier'],
-      brew_formulas: ['git'],
-      brew_casks: ['visual-studio-code'],
+      appstore: ['Xcode'],
+      npm: ['typescript'],
+      pnpm: ['prettier'],
+      brew: { formulas: ['git'], casks: ['visual-studio-code'] },
       pins: { npm: { typescript: '5.3.3' } },
       skip: { brew: ['legacy-dep'] },
     };
@@ -29,7 +27,11 @@ describe('ApplistSchema', () => {
   });
 
   it('rejects non-string entries in package lists', () => {
-    expect(() => ApplistSchema.parse({ npm_apps: [123] })).toThrow();
+    expect(() => ApplistSchema.parse({ npm: [123] })).toThrow();
+  });
+
+  it('rejects non-string entries in nested brew lists', () => {
+    expect(() => ApplistSchema.parse({ brew: { formulas: [123] } })).toThrow();
   });
 
   it('rejects non-string pin versions', () => {

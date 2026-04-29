@@ -45,7 +45,7 @@ const appstore: Plugin = {
     category: 'macOS',
     supportedOS: ['darwin'],
     requires: ['mas'],
-    configKeys: ['appstore_apps'],
+    configKeys: ['appstore'],
     capabilities: {
       list: true,
       install: true,

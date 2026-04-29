@@ -109,13 +109,13 @@ macup <plugin> <command> [args]
 ### 5.2 Declarative manifest (`applist.yaml`)
 
 ```yaml
-brew_formulas: [git, ripgrep, jq]
-brew_casks: [visual-studio-code, rectangle]
-npm_apps: [typescript, prettier]
+brew:
+  formulas: [git, ripgrep, jq]
+  casks: [visual-studio-code, rectangle]
+npm: [typescript, prettier]
 pins:
   npm: { typescript: "5.3.3" }
-brew:
-  formulas: { python: "3.11.7" }
+  brew: { python: "3.11.7" }
 skip:
   npm: [legacy-pkg]
 ```

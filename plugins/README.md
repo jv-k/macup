@@ -28,7 +28,7 @@ const brew: Plugin = {
     subtypes: ['formulas', 'casks'],
     supportedOS: ['darwin', 'linux'],
     requires: ['brew'],
-    configKeys: ['brew_formulas', 'brew_casks'],
+    configKeys: ['brew.formulas', 'brew.casks'],
     capabilities: {
       list: true,
       install: true,
@@ -66,7 +66,7 @@ export default brew;
 | `subtypes` | Optional. Defines `macup <id> <subtype> <command>` shape (e.g. `brew formulas list`). |
 | `supportedOS` | Array of `NodeJS.Platform`. Registry filters plugins whose host platform isn't listed. |
 | `requires` | PATH binaries that must resolve. Registry filters plugins whose binaries are missing. |
-| `configKeys` | Which top-level YAML keys in `applist.yaml` this plugin reads/writes (e.g. `['brew_formulas', 'brew_casks']`). Informational — `add`/`remove` are config mutations handled by the store, not the plugin. |
+| `configKeys` | Dotted-path YAML keys in `applist.yaml` that this plugin reads/writes (e.g. `['brew.formulas', 'brew.casks']` or `['npm']`). Two-segment keys resolve to a list nested under a plugin block; one-segment keys to a top-level list. Informational — `add`/`remove` are config mutations handled by the store, not the plugin. |
 | `capabilities` | Declares which operations the plugin implements. Must match the methods actually defined. |
 | `compareVersions` | Optional. Override the default semver comparator for non-semver versioning schemes (brew casks, mas, etc.). |
 

@@ -92,17 +92,18 @@ macup tracks your packages in a YAML file:
 
 ```yaml
 # ~/.config/macup/applist.yaml
-brew_formulas:
-  - git
-  - curl
-  - jq
-brew_casks:
-  - firefox
-  - visual-studio-code
-npm_apps:
+brew:
+  formulas:
+    - git
+    - curl
+    - jq
+  casks:
+    - firefox
+    - visual-studio-code
+npm:
   - typescript
   - nodemon
-appstore_apps:
+appstore:
   - Xcode
 
 # Version pins — don't upgrade past this

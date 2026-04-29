@@ -30,26 +30,26 @@ afterEach(async () => {
 
 describe('regression: add/remove carry their package list intact', () => {
   it('ConfigStore.add receives every name passed to it', async () => {
-    await writeFile(applistPath, 'brew_formulas: []\n', 'utf8');
+    await writeFile(applistPath, 'brew:\n  formulas: []\n', 'utf8');
     const store = new ConfigStore({ applistPath, backupDir });
     await store.load();
 
     const input = ['git', 'curl', 'jq', 'ripgrep'];
-    const { added } = store.add('brew_formulas', input);
+    const { added } = store.add('brew.formulas', input);
 
     expect(added).toEqual(input);
-    expect(store.list('brew_formulas')).toEqual(input);
+    expect(store.list('brew.formulas')).toEqual(input);
   });
 
   it('ConfigStore.remove receives every name passed to it', async () => {
-    await writeFile(applistPath, 'brew_formulas:\n  - git\n  - curl\n  - jq\n', 'utf8');
+    await writeFile(applistPath, 'brew:\n  formulas:\n    - git\n    - curl\n    - jq\n', 'utf8');
     const store = new ConfigStore({ applistPath, backupDir });
     await store.load();
 
     const input = ['git', 'curl', 'jq'];
-    const { removed } = store.remove('brew_formulas', input);
+    const { removed } = store.remove('brew.formulas', input);
 
     expect(removed).toEqual(input);
-    expect(store.list('brew_formulas')).toEqual([]);
+    expect(store.list('brew.formulas')).toEqual([]);
   });
 });

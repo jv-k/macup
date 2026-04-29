@@ -39,9 +39,9 @@ describe('runRestore', () => {
 
   it('restores the selected backup after confirmation', async () => {
     await seed({
-      'applist_add_2024-01-01_00-00-00.yaml': 'brew_formulas:\n  - old-content\n',
+      'applist_add_2024-01-01_00-00-00.yaml': 'brew:\n  formulas:\n    - old-content\n',
     });
-    await writeFile(applistPath, 'brew_formulas:\n  - current\n', 'utf8');
+    await writeFile(applistPath, 'brew:\n  formulas:\n    - current\n', 'utf8');
     const store = new BackupStore({ applistPath, backupDir });
 
     const result = await runRestore({

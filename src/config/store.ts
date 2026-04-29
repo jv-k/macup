@@ -15,6 +15,13 @@ export interface SaveResult {
   backupPath?: string;
 }
 
+export interface LoadResult {
+  /** True iff the on-disk file was rewritten from a pre-1.x flat layout. */
+  migrated: boolean;
+  /** Backup path written before the migration overwrite, if any. */
+  migrationBackupPath?: string;
+}
+
 interface ConfigStoreDeps {
   readonly now?: () => Date;
 }
@@ -36,6 +43,94 @@ function timestamp(now: Date): string {
   );
 }
 
+// Maps the historical flat keys used pre-1.x to the dotted paths used today.
+// Drives the on-load migration; nothing else should rely on it.
+const LEGACY_KEY_MAP: ReadonlyArray<readonly [string, ApplistKey]> = [
+  ['appstore_apps', 'appstore'],
+  ['npm_apps', 'npm'],
+  ['pnpm_apps', 'pnpm'],
+  ['brew_formulas', 'brew.formulas'],
+  ['brew_casks', 'brew.casks'],
+];
+
+function migrateInPlace(doc: Document): boolean {
+  if (!(doc.contents instanceof YAMLMap)) return false;
+  let migrated = false;
+
+  // Top-level renames: appstore_apps → appstore, npm_apps → npm, pnpm_apps → pnpm.
+  // Reuses the existing node so the seq's items keep their inline/leading
+  // comments. The pair-level comment on the old key is dropped.
+  for (const [legacy, modern] of LEGACY_KEY_MAP) {
+    if (modern.includes('.')) continue;
+    if (doc.has(legacy)) {
+      const node = doc.get(legacy, true);
+      doc.set(modern, node);
+      doc.delete(legacy);
+      migrated = true;
+    }
+  }
+
+  // brew_formulas / brew_casks → brew: { formulas, casks }.
+  if (doc.has('brew_formulas') || doc.has('brew_casks')) {
+    let brew = doc.get('brew');
+    if (!(brew instanceof YAMLMap)) {
+      brew = new YAMLMap();
+      doc.set('brew', brew);
+    }
+    if (doc.has('brew_formulas')) {
+      const node = doc.get('brew_formulas', true);
+      (brew as YAMLMap).set('formulas', node);
+      doc.delete('brew_formulas');
+    }
+    if (doc.has('brew_casks')) {
+      const node = doc.get('brew_casks', true);
+      (brew as YAMLMap).set('casks', node);
+      doc.delete('brew_casks');
+    }
+    migrated = true;
+  }
+
+  return migrated;
+}
+
+function pathFor(key: ApplistKey): readonly string[] {
+  return key.split('.');
+}
+
+function resolveSeq(doc: Document, key: ApplistKey): YAMLSeq | undefined {
+  const path = pathFor(key);
+  let node: unknown = doc.contents;
+  for (const segment of path) {
+    if (!(node instanceof YAMLMap)) return undefined;
+    node = node.get(segment);
+  }
+  return node instanceof YAMLSeq ? node : undefined;
+}
+
+function ensureSeq(doc: Document, key: ApplistKey): YAMLSeq {
+  const path = pathFor(key);
+  if (!(doc.contents instanceof YAMLMap)) {
+    doc.contents = new YAMLMap();
+  }
+  let parent = doc.contents as YAMLMap;
+  for (let i = 0; i < path.length - 1; i++) {
+    const segment = path[i] as string;
+    let child = parent.get(segment);
+    if (!(child instanceof YAMLMap)) {
+      child = new YAMLMap();
+      parent.set(segment, child);
+    }
+    parent = child as YAMLMap;
+  }
+  const leaf = path[path.length - 1] as string;
+  let seq = parent.get(leaf);
+  if (!(seq instanceof YAMLSeq)) {
+    seq = new YAMLSeq();
+    parent.set(leaf, seq);
+  }
+  return seq as YAMLSeq;
+}
+
 export class ConfigStore {
   private doc: Document | null = null;
   private originalText = '';
@@ -49,7 +144,7 @@ export class ConfigStore {
     this.now = deps.now ?? (() => new Date());
   }
 
-  async load(): Promise<void> {
+  async load(): Promise<LoadResult> {
     let text: string;
     try {
       text = await readFile(this.paths.applistPath, 'utf8');
@@ -65,10 +160,36 @@ export class ConfigStore {
     }
     this.originalText = text;
     this.doc = parseDocument(text);
-    const result = ApplistSchema.safeParse(this.doc.toJS() ?? {});
-    if (!result.success) {
-      throw new ErrInvalidConfig(this.paths.applistPath, result.error.message);
+
+    let result: LoadResult = { migrated: false };
+    if (migrateInPlace(this.doc)) {
+      const backupPath = await this.persistMigration();
+      result = backupPath
+        ? { migrated: true, migrationBackupPath: backupPath }
+        : { migrated: true };
     }
+
+    const parsed = ApplistSchema.safeParse(this.doc.toJS() ?? {});
+    if (!parsed.success) {
+      throw new ErrInvalidConfig(this.paths.applistPath, parsed.error.message);
+    }
+    return result;
+  }
+
+  private async persistMigration(): Promise<string | undefined> {
+    const doc = this.requireDoc();
+    const newText = doc.toString();
+    if (newText === this.originalText) return undefined;
+    await mkdir(this.paths.backupDir, { recursive: true });
+    let backupPath: string | undefined;
+    if (this.fileExisted) {
+      backupPath = join(this.paths.backupDir, `applist_migration_${timestamp(this.now())}.yaml`);
+      await copyFile(this.paths.applistPath, backupPath);
+    }
+    await writeFile(this.paths.applistPath, newText, 'utf8');
+    this.originalText = newText;
+    this.fileExisted = true;
+    return backupPath;
   }
 
   private requireDoc(): Document {
@@ -77,8 +198,8 @@ export class ConfigStore {
   }
 
   list(key: ApplistKey): readonly string[] {
-    const seq = this.requireDoc().get(key);
-    if (!(seq instanceof YAMLSeq)) return [];
+    const seq = resolveSeq(this.requireDoc(), key);
+    if (!seq) return [];
     return seq.items.map(scalarValue);
   }
 
@@ -87,16 +208,12 @@ export class ConfigStore {
     const existing = new Set(this.list(key));
     const added: string[] = [];
     const skipped: string[] = [];
-    let seq = doc.get(key);
-    if (!(seq instanceof YAMLSeq)) {
-      seq = new YAMLSeq();
-      doc.set(key, seq);
-    }
+    const seq = ensureSeq(doc, key);
     for (const name of names) {
       if (existing.has(name)) {
         skipped.push(name);
       } else {
-        (seq as YAMLSeq).add(name);
+        seq.add(name);
         existing.add(name);
         added.push(name);
       }
@@ -114,8 +231,8 @@ export class ConfigStore {
       if (currentSet.has(name)) removed.push(name);
       else missing.push(name);
     }
-    const seq = doc.get(key);
-    if (seq instanceof YAMLSeq && removed.length > 0) {
+    const seq = resolveSeq(doc, key);
+    if (seq && removed.length > 0) {
       const toRemove = new Set(removed);
       seq.items = seq.items.filter((node) => !toRemove.has(scalarValue(node)));
     }

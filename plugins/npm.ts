@@ -84,7 +84,7 @@ const npm: Plugin = {
     category: 'Node.js',
     supportedOS: ['darwin', 'linux'],
     requires: ['npm'],
-    configKeys: ['npm_apps'],
+    configKeys: ['npm'],
     capabilities: {
       list: true,
       install: true,

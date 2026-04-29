@@ -82,7 +82,11 @@ const log = {
 async function getStore(): Promise<ConfigStore> {
   const paths = resolvePaths();
   const store = new ConfigStore(paths);
-  await store.load();
+  const result = await store.load();
+  if (result.migrated) {
+    const suffix = result.migrationBackupPath ? ` (backup: ${result.migrationBackupPath})` : '';
+    console.log(logui.info(`migrated applist.yaml to new layout${suffix}`));
+  }
   return store;
 }
 

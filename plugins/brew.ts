@@ -130,7 +130,7 @@ const brew: Plugin = {
     subtypes: ['formulas', 'casks'],
     supportedOS: ['darwin', 'linux'],
     requires: ['brew'],
-    configKeys: ['brew_formulas', 'brew_casks'],
+    configKeys: ['brew.formulas', 'brew.casks'],
     capabilities: {
       list: true,
       install: true,
@@ -140,8 +140,8 @@ const brew: Plugin = {
       outdated: true,
     },
     configKeyFor(subtype) {
-      if (subtype === 'casks') return 'brew_casks';
-      return 'brew_formulas';
+      if (subtype === 'casks') return 'brew.casks';
+      return 'brew.formulas';
     },
   },
 

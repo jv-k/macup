@@ -86,7 +86,7 @@ const pnpm: Plugin = {
     category: 'Node.js',
     supportedOS: ['darwin', 'linux'],
     requires: ['pnpm'],
-    configKeys: ['pnpm_apps'],
+    configKeys: ['pnpm'],
     capabilities: {
       list: true,
       install: true,

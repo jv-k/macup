@@ -38,8 +38,9 @@ describe('buildConfigReport', () => {
     await writeFile(
       p.applistPath,
       [
-        'brew_formulas:',
-        '  - git',
+        'brew:',
+        '  formulas:',
+        '    - git',
         'pins:',
         '  npm:',
         '    typescript: 5.3.3',
@@ -60,11 +61,11 @@ describe('buildConfigReport', () => {
 
   it('reports schema invalid with a descriptive error for a malformed applist', async () => {
     const p = paths();
-    await writeFile(p.applistPath, 'brew_formulas: "not-an-array"\n', 'utf8');
+    await writeFile(p.applistPath, 'brew:\n  formulas: "not-an-array"\n', 'utf8');
     const r = await buildConfigReport(p);
     expect(r.schemaValid).toBe(false);
     expect(r.schemaError).toBeDefined();
-    expect(r.schemaError).toContain('brew_formulas');
+    expect(r.schemaError).toContain('formulas');
   });
 
   it('surfaces the deprecation warning and legacy migration hint', async () => {

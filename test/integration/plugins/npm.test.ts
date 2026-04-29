@@ -16,10 +16,10 @@ async function makeCtx(): Promise<PluginContext> {
 }
 
 describe('npm plugin — manifest', () => {
-  it('declares npm_apps configKey, no subtypes, npm required', () => {
+  it('declares npm configKey, no subtypes, npm required', () => {
     expect(npmPlugin.manifest.id).toBe('npm');
     expect(npmPlugin.manifest.subtypes).toBeUndefined();
-    expect(npmPlugin.manifest.configKeys).toEqual(['npm_apps']);
+    expect(npmPlugin.manifest.configKeys).toEqual(['npm']);
     expect(npmPlugin.manifest.requires).toContain('npm');
     expect(npmPlugin.manifest.supportedOS).toContain('darwin');
   });

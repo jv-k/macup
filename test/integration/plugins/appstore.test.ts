@@ -16,9 +16,9 @@ async function makeCtx(): Promise<PluginContext> {
 }
 
 describe('appstore plugin — manifest', () => {
-  it('declares the canonical `appstore` id and appstore_apps configKey', () => {
+  it('declares the canonical `appstore` id and appstore configKey', () => {
     expect(appstorePlugin.manifest.id).toBe('appstore');
-    expect(appstorePlugin.manifest.configKeys).toEqual(['appstore_apps']);
+    expect(appstorePlugin.manifest.configKeys).toEqual(['appstore']);
     expect(appstorePlugin.manifest.supportedOS).toEqual(['darwin']);
     expect(appstorePlugin.manifest.requires).toContain('mas');
   });

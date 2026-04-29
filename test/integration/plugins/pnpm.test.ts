@@ -16,10 +16,10 @@ async function makeCtx(): Promise<PluginContext> {
 }
 
 describe('pnpm plugin — manifest', () => {
-  it('declares pnpm_apps configKey, no subtypes, pnpm required', () => {
+  it('declares pnpm configKey, no subtypes, pnpm required', () => {
     expect(pnpmPlugin.manifest.id).toBe('pnpm');
     expect(pnpmPlugin.manifest.subtypes).toBeUndefined();
-    expect(pnpmPlugin.manifest.configKeys).toEqual(['pnpm_apps']);
+    expect(pnpmPlugin.manifest.configKeys).toEqual(['pnpm']);
     expect(pnpmPlugin.manifest.requires).toContain('pnpm');
   });
 });

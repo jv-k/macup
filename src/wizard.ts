@@ -36,16 +36,25 @@ export interface WizardDeps {
 
 const COMMAND_LABELS: Record<string, string> = {
   list: 'List packages',
+  outdated: 'Show outdated packages',
   install: 'Install packages',
   update: 'Update outdated packages',
   add: 'Add to tracked list',
   remove: 'Remove from tracked list',
 };
 
-// Commands the wizard shows. `outdated` is a flag on `list`, not a standalone
-// command — exclude it. add/remove require positional names; they're offered
-// only when exactly one target is selected.
-const WIZARD_COMMANDS: readonly string[] = ['list', 'install', 'update', 'add', 'remove'];
+// Commands the wizard shows. `outdated` is a read-only filter — for the
+// selected plugin(s) it shells to `list --only-outdated`. The CLI runner
+// in cli.ts translates the command. add/remove require positional names;
+// they're offered only when exactly one target is selected.
+const WIZARD_COMMANDS: readonly string[] = [
+  'list',
+  'outdated',
+  'install',
+  'update',
+  'add',
+  'remove',
+];
 
 function titleCase(s: string): string {
   return s.length === 0 ? s : s[0]?.toUpperCase() + s.slice(1);

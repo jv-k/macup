@@ -121,8 +121,44 @@ describe('runWizard (multiselect)', () => {
     };
     await runWizard(deps);
     // brew has all 5, npm has no add/remove, system has only list+update.
-    // Intersection: list, update.
-    expect(receivedCommands.sort()).toEqual(['list', 'update']);
+    // All three have `outdated: true` in their capability map, so the
+    // wizard's outdated action is also offered. Intersection: list,
+    // outdated, update.
+    expect(receivedCommands.sort()).toEqual(['list', 'outdated', 'update']);
+  });
+
+  it('outdated: returned as a wizard command alongside list/update for capable plugins', async () => {
+    const result = await runWizard(
+      makeDeps({ targets: [{ pluginId: 'npm' }], command: 'outdated' }),
+    );
+    expect(result).toEqual<WizardResult>({
+      targets: [{ pluginId: 'npm' }],
+      command: 'outdated',
+    });
+  });
+
+  it('outdated: drops out of the offered commands when a target lacks the capability', async () => {
+    const noOutdated = mkPlugin('legacy', {
+      capabilities: {
+        list: true,
+        install: true,
+        update: true,
+        add: false,
+        remove: false,
+        outdated: false,
+      },
+    });
+    const receivedCommands: string[] = [];
+    await runWizard({
+      plugins: [noOutdated],
+      selectTargets: async () => [{ pluginId: 'legacy' }],
+      selectCommand: async (opts) => {
+        receivedCommands.push(...opts.map((o) => o.value));
+        return 'list';
+      },
+    });
+    expect(receivedCommands).not.toContain('outdated');
+    expect(receivedCommands).toContain('list');
   });
 
   it('add: prompts for packages and returns them in the result', async () => {

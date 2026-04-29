@@ -535,14 +535,19 @@ const main = defineCommand({
 
       let failed = false;
       for (const t of wizResult.targets) {
-        const wizArgs = [wizResult.command];
+        // The wizard's `outdated` action is a read-only view; per-plugin
+        // commands implement it as `list --only-outdated`. Translate here
+        // so plugin subcommands don't need a separate registration.
+        const baseArgs =
+          wizResult.command === 'outdated' ? ['list', '--only-outdated'] : [wizResult.command];
+        const wizArgs = [...baseArgs];
         if (t.subtype) wizArgs.push(`--subtype=${t.subtype}`);
         if (wizResult.packages) wizArgs.push(...wizResult.packages);
         const subtypeFrag = t.subtype ? ` --subtype=${t.subtype}` : '';
         const pkgFrag = wizResult.packages?.length
           ? ` ${wizResult.packages.map((p) => (p.includes(' ') ? `'${p}'` : p)).join(' ')}`
           : '';
-        const label = `${t.pluginId} ${wizResult.command}${subtypeFrag}${pkgFrag}`;
+        const label = `${t.pluginId} ${baseArgs.join(' ')}${subtypeFrag}${pkgFrag}`;
         // Distinct echo: green-on-black ` macup ` pill (matches the splash
         // badge) followed by the command in bold. The leading blank
         // separates each iteration of the wizard loop; the trailing

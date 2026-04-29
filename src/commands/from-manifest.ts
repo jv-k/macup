@@ -432,8 +432,13 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           alias: 'v',
           description: 'After each package, print a one-line trace (kind, duration, or error).',
         },
+        packages: {
+          type: 'positional',
+          required: false,
+          description: 'Optional package names to restrict the update to.',
+        },
       },
-      async run({ args }) {
+      async run({ args, rawArgs }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
         const subtype = resolved.subtype;
@@ -471,9 +476,23 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           // If config can't load (no file yet), skip filtering — update everything.
         }
 
+        const explicitNames = rawArgs.filter((a) => !a.startsWith('-') && a !== 'update');
+        if (explicitNames.length > 0) {
+          const wanted = new Set(explicitNames);
+          filtered = filtered.filter((s) => wanted.has(s.ref.name));
+        }
+
         const refs: PackageRef[] = filtered.map((s) => ({ kind, name: s.ref.name }));
         if (refs.length === 0) {
-          console.log(log.success(`All ${manifest.displayName} packages are up-to-date!`));
+          if (explicitNames.length > 0) {
+            console.log(
+              log.info(
+                `No matching outdated packages for: ${explicitNames.join(', ')}. (Use \`${manifest.id} list --only-outdated\` to see what's outdated.)`,
+              ),
+            );
+          } else {
+            console.log(log.success(`All ${manifest.displayName} packages are up-to-date!`));
+          }
           return;
         }
 

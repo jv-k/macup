@@ -51,6 +51,16 @@ export interface WizardDeps {
    * (any subset of installed ∪ tracked), or null to nav back.
    */
   readonly pickTrackedSet?: (target: Target) => Promise<readonly string[] | null>;
+  /** Reads current tracked names for the given target. Required when sync-tracked is offered. */
+  readonly currentTracked?: (target: Target) => Promise<readonly string[]>;
+  /** Fetches outdated rows for "Update selected". Required alongside pickOutdated. */
+  readonly fetchOutdated?: (target: Target) => Promise<
+    ReadonlyArray<{
+      readonly name: string;
+      readonly currentVersion?: string;
+      readonly latestVersion?: string;
+    }>
+  >;
   /** Renders the "About macup" screen when the Help target is picked. */
   readonly printAbout?: () => void;
 }
@@ -118,7 +128,81 @@ export async function pickTarget(deps: WizardDeps): Promise<Target | null> {
   }
 }
 
-export async function pickAction(_deps: WizardDeps, _target: Target): Promise<ActionResult | null> {
-  // Implemented in Task 2.
-  throw new Error('pickAction not implemented yet');
+const ACTION_LABELS: Record<WizardActionOption, string> = {
+  list: 'List all tracked',
+  update: 'Update all tracked',
+  'update-selected': 'Update selected',
+  'sync-tracked': 'Add/Remove tracked',
+  install: 'Install all tracked',
+};
+
+function actionsFor(plugin: Plugin): WizardActionOption[] {
+  const cap = plugin.manifest.capabilities;
+  const hasConfigKey = plugin.manifest.configKeys.length > 0;
+  const opts: WizardActionOption[] = [];
+  if (cap.list) opts.push('list');
+  if (cap.update) opts.push('update');
+  if (cap.update && cap.outdated) opts.push('update-selected');
+  if (cap.add && cap.remove && hasConfigKey) opts.push('sync-tracked');
+  if (cap.install) opts.push('install');
+  return opts;
+}
+
+function diffTracked(
+  current: readonly string[],
+  submitted: readonly string[],
+): { adds: string[]; removes: string[] } {
+  const currentSet = new Set(current);
+  const submittedSet = new Set(submitted);
+  const adds = submitted.filter((n) => !currentSet.has(n));
+  const removes = current.filter((n) => !submittedSet.has(n));
+  return { adds, removes };
+}
+
+export async function pickAction(deps: WizardDeps, target: Target): Promise<ActionResult | null> {
+  const plugin = deps.plugins.find((p) => p.manifest.id === target.pluginId);
+  if (!plugin) {
+    console.error(`error: plugin "${target.pluginId}" is not registered`);
+    return null;
+  }
+  const options = actionsFor(plugin).map((value) => ({ label: ACTION_LABELS[value], value }));
+  if (options.length === 0) {
+    console.error(`error: plugin "${target.pluginId}" has no actions available`);
+    return null;
+  }
+
+  while (true) {
+    const choice = await deps.selectAction(target, options);
+    if (choice === null) return null; // back to target
+
+    if (choice === 'list' || choice === 'update' || choice === 'install') {
+      return { kind: 'dispatch', target, command: choice };
+    }
+
+    if (choice === 'update-selected') {
+      if (!deps.pickOutdated || !deps.fetchOutdated) {
+        console.error(
+          'error: wizard cannot run "Update selected" without pickOutdated + fetchOutdated handlers',
+        );
+        return null;
+      }
+      const rows = await deps.fetchOutdated(target);
+      if (rows.length === 0) continue; // already up-to-date
+      const picked = await deps.pickOutdated(target, rows);
+      if (picked === null || picked.length === 0) continue;
+      return { kind: 'dispatch', target, command: 'update', packages: picked };
+    }
+
+    // 'sync-tracked'
+    if (!deps.pickTrackedSet || !deps.currentTracked) {
+      console.error(
+        'error: wizard cannot run "Add/Remove tracked" without pickTrackedSet + currentTracked handlers',
+      );
+      return null;
+    }
+    const submitted = await deps.pickTrackedSet(target);
+    if (submitted === null) continue;
+    const { adds, removes } = diffTracked(await deps.currentTracked(target), submitted);
+    return { kind: 'sync-tracked', target, adds, removes };
+  }
 }

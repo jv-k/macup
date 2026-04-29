@@ -1,7 +1,28 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { confirm, groupMultiselect, isCancel, outro, select } from '@clack/prompts';
+import {
+  autocompleteMultiselect,
+  confirm,
+  groupMultiselect,
+  isCancel,
+  outro,
+  select,
+  spinner,
+  updateSettings,
+} from '@clack/prompts';
+
+// Map keys clack doesn't handle by default. Page-up/page-down only step one
+// row (clack's action set has no page-step concept), but at minimum the
+// keys aren't ignored — and vim h/j/k/l already work.
+updateSettings({
+  aliases: {
+    '\x1b[5~': 'up', // PageUp
+    '\x1b[6~': 'down', // PageDown
+    '\x1b[H': 'up', // Home (clack has no top action — single step)
+    '\x1b[F': 'down', // End  (same caveat)
+  },
+});
 import { defineCommand, runCommand, runMain } from 'citty';
 import pc from 'picocolors';
 import { runCleanup } from './commands/cleanup';
@@ -19,6 +40,7 @@ import { ConfigStore } from './config/store';
 import { MacupError } from './errors';
 import { ExecaExecRunner } from './exec/run';
 import { BUILTIN_PLUGINS, defaultRegistry, isOnPath } from './plugins/registry';
+import type { PluginContext } from './plugins/types';
 import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
 import { getVersion } from './version';
@@ -331,9 +353,14 @@ const main = defineCommand({
         selectTargets: async (groups) => {
           // groupMultiselect takes `Record<groupLabel, Option[]>`; build from the
           // ordered groups[] so the on-screen order matches the registry order.
+          // Style each category as the inverted-pill header used in list
+          // output, so the wizard reads with the same visual hierarchy.
           const options: Record<string, Array<{ label: string; value: Target }>> = {};
           for (const g of groups) {
-            options[g.category] = g.items.map((it) => ({ label: it.label, value: it.value }));
+            options[logui.header(g.category)] = g.items.map((it) => ({
+              label: it.label,
+              value: it.value,
+            }));
           }
           const firstItem = groups[0]?.items[0];
           const kbd = pc.underline;
@@ -345,6 +372,8 @@ const main = defineCommand({
             message: `Which package managers? ${hint}`,
             options,
             selectableGroups: false,
+            // Blank line between each category for visual separation.
+            groupSpacing: 1,
             // Start the cursor on the first real item so the user lands on a
             // selectable row, but do NOT pre-toggle it: a sticky preselection
             // makes any extra toggle look like "the menu also ran brew"
@@ -367,6 +396,103 @@ const main = defineCommand({
           });
           return isCancel(choice) ? null : (choice as string);
         },
+        promptPackages: async (action, target) => {
+          const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
+          const plugin = registry.find((p) => p.manifest.id === target.pluginId);
+          if (!plugin) {
+            console.error(`error: plugin "${target.pluginId}" is not registered`);
+            return null;
+          }
+          const configKey = plugin.manifest.configKeyFor
+            ? plugin.manifest.configKeyFor(target.subtype)
+            : plugin.manifest.configKeys[0];
+          if (!configKey) {
+            console.error(`error: plugin "${target.pluginId}" has no tracked applist key`);
+            return null;
+          }
+
+          // Load the union of (system-installed, currently-tracked) so the
+          // user picks from a single arrow-key list. Tracked-but-uninstalled
+          // names also appear (so orphan tracked entries are removable).
+          const ctx: PluginContext = {
+            exec,
+            log,
+            signal: new AbortController().signal,
+          };
+          const s = spinner();
+          s.start(`Loading ${label} packages…`);
+          let statuses: Awaited<ReturnType<typeof plugin.list>>;
+          try {
+            await plugin.check(ctx);
+            statuses = await plugin.list(ctx, { subtype: target.subtype });
+          } catch (err) {
+            s.stop(`Couldn't load ${label} packages.`);
+            console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+            return null;
+          }
+          s.stop(`Loaded ${label} packages.`);
+
+          const store = await getStore();
+          const trackedNames = store.list(configKey);
+          const trackedSet = new Set(trackedNames);
+          type Entry = { name: string; installed: boolean; tracked: boolean };
+          const union = new Map<string, Entry>();
+          for (const st of statuses) {
+            if (st.installed) {
+              union.set(st.ref.name, {
+                name: st.ref.name,
+                installed: true,
+                tracked: trackedSet.has(st.ref.name),
+              });
+            }
+          }
+          for (const name of trackedNames) {
+            if (!union.has(name)) {
+              union.set(name, { name, installed: false, tracked: true });
+            }
+          }
+          const packages = [...union.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+          if (packages.length === 0) {
+            console.log(logui.info(`No packages available for ${label}.`));
+            return null;
+          }
+
+          // Build the option list:
+          //   - Tracked rows get a ✔ tick prefix on the label so they're
+          //     visually distinct (the alignment space on untracked rows
+          //     keeps names left-aligned with each other).
+          //   - For `add`, tracked rows are disabled (already in the list).
+          //   - For `remove`, untracked rows are disabled (not removable).
+          //   - Tags go in `hint` (rendered dim, not searchable) so the
+          //     autocomplete filter only matches package names.
+          const options = packages.map((p) => {
+            const tickedLabel = p.tracked ? `✔ ${p.name}` : `  ${p.name}`;
+            const tags: string[] = [];
+            if (p.tracked) tags.push('tracked');
+            if (!p.installed) tags.push('not installed');
+            const isDisabled = action === 'add' ? p.tracked : !p.tracked;
+            const opt: { label: string; value: string; hint?: string; disabled?: boolean } = {
+              label: tickedLabel,
+              value: p.name,
+            };
+            if (tags.length > 0) opt.hint = tags.join(', ');
+            if (isDisabled) opt.disabled = true;
+            return opt;
+          });
+
+          const choice = await autocompleteMultiselect<string>({
+            message: `Which packages to ${action} for ${label}? (type to filter)`,
+            options,
+            // Window size keeps the prompt navigable even with hundreds of
+            // entries (e.g. brew formula lists). Below this, arrow scrolling
+            // through the full list still works fine.
+            maxItems: 12,
+            required: true,
+          });
+          if (isCancel(choice)) return null;
+          return choice as readonly string[];
+        },
       });
 
       if (!wizResult) {
@@ -379,10 +505,19 @@ const main = defineCommand({
       for (const t of wizResult.targets) {
         const wizArgs = [wizResult.command];
         if (t.subtype) wizArgs.push(`--subtype=${t.subtype}`);
-        const label = t.subtype
-          ? `${t.pluginId} ${wizResult.command} --subtype=${t.subtype}`
-          : `${t.pluginId} ${wizResult.command}`;
-        console.log(`\n→ macup ${label}`);
+        if (wizResult.packages) wizArgs.push(...wizResult.packages);
+        const subtypeFrag = t.subtype ? ` --subtype=${t.subtype}` : '';
+        const pkgFrag = wizResult.packages?.length
+          ? ` ${wizResult.packages.map((p) => (p.includes(' ') ? `'${p}'` : p)).join(' ')}`
+          : '';
+        const label = `${t.pluginId} ${wizResult.command}${subtypeFrag}${pkgFrag}`;
+        // Distinct echo: green-on-black ` macup ` pill (matches the splash
+        // badge) followed by the command in bold. The blank line above and
+        // below visually separates each iteration of the wizard loop.
+        const useColor = shouldUseColor();
+        const badge = useColor ? pc.inverse(pc.bold(pc.green(' macup '))) : 'macup';
+        const styledLabel = useColor ? pc.bold(label) : label;
+        console.log(`\n${badge} ${styledLabel}\n`);
         const cmd = pluginSubCommands[t.pluginId];
         if (!cmd) {
           console.error(`error: plugin "${t.pluginId}" is not available`);

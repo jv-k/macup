@@ -8,6 +8,8 @@ export interface Target {
 export interface WizardResult {
   readonly targets: readonly Target[];
   readonly command: string;
+  /** Positional package names; only populated for `add`/`remove`. */
+  readonly packages?: readonly string[];
 }
 
 export interface WizardDeps {
@@ -21,6 +23,15 @@ export interface WizardDeps {
   readonly selectCommand: (
     options: ReadonlyArray<{ readonly label: string; readonly value: string }>,
   ) => Promise<string | null>;
+  /**
+   * Collects positional package names for `add`/`remove`. Required when the
+   * wizard offers those commands. Return null to nav back to the command
+   * prompt; an empty array also nav-backs (treated as "nothing to do").
+   */
+  readonly promptPackages?: (
+    action: 'add' | 'remove',
+    target: Target,
+  ) => Promise<readonly string[] | null>;
 }
 
 const COMMAND_LABELS: Record<string, string> = {
@@ -98,12 +109,11 @@ function commandIntersection(plugins: readonly Plugin[], targets: readonly Targe
 }
 
 export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> {
-  const { plugins, selectTargets, selectCommand } = deps;
+  const { plugins, selectTargets, selectCommand, promptPackages } = deps;
   const groups = buildGroups(plugins);
 
-  // Esc on the target prompt = exit wizard.
-  // Esc on the command prompt = go back to target selection (nav stack of 1).
-  // Loop implements the back-navigation.
+  // Three-level nav: Esc on target prompt exits, Esc on command prompt goes
+  // back to target selection, Esc on package prompt goes back to command.
   while (true) {
     const targets = await selectTargets(groups);
     if (targets === null || targets.length === 0) return null;
@@ -118,10 +128,27 @@ export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> 
       return null;
     }
 
-    const command = await selectCommand(
-      commands.map((c) => ({ label: COMMAND_LABELS[c] ?? c, value: c })),
-    );
-    if (command === null) continue; // back to target selection
-    return { targets, command };
+    while (true) {
+      const command = await selectCommand(
+        commands.map((c) => ({ label: COMMAND_LABELS[c] ?? c, value: c })),
+      );
+      if (command === null) break; // back to target selection
+
+      if (command === 'add' || command === 'remove') {
+        // commandIntersection already restricts add/remove to single-target
+        // selections; targets[0] is the only one.
+        const target = targets[0];
+        if (!target) break;
+        if (!promptPackages) {
+          console.error('error: wizard cannot run add/remove without a promptPackages handler');
+          return null;
+        }
+        const packages = await promptPackages(command, target);
+        if (packages === null || packages.length === 0) continue; // back to command
+        return { targets, command, packages };
+      }
+
+      return { targets, command };
+    }
   }
 }

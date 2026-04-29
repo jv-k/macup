@@ -125,6 +125,92 @@ describe('runWizard (multiselect)', () => {
     expect(receivedCommands.sort()).toEqual(['list', 'update']);
   });
 
+  it('add: prompts for packages and returns them in the result', async () => {
+    const result = await runWizard({
+      plugins: [brew, npm, system],
+      selectTargets: async () => [{ pluginId: 'npm' }],
+      selectCommand: async () => 'add',
+      promptPackages: async (action, target) => {
+        expect(action).toBe('add');
+        expect(target).toEqual({ pluginId: 'npm' });
+        return ['typescript', 'prettier'];
+      },
+    });
+    expect(result).toEqual<WizardResult>({
+      targets: [{ pluginId: 'npm' }],
+      command: 'add',
+      packages: ['typescript', 'prettier'],
+    });
+  });
+
+  it('remove: passes the action through to the prompt handler', async () => {
+    const seen: Array<{ action: string; target: Target }> = [];
+    const result = await runWizard({
+      plugins: [brew, npm, system],
+      selectTargets: async () => [{ pluginId: 'brew', subtype: 'casks' }],
+      selectCommand: async () => 'remove',
+      promptPackages: async (action, target) => {
+        seen.push({ action, target });
+        return ['arc'];
+      },
+    });
+    expect(result).toEqual<WizardResult>({
+      targets: [{ pluginId: 'brew', subtype: 'casks' }],
+      command: 'remove',
+      packages: ['arc'],
+    });
+    expect(seen).toEqual([{ action: 'remove', target: { pluginId: 'brew', subtype: 'casks' } }]);
+  });
+
+  it('add: navigates back to command selection when promptPackages returns null', async () => {
+    let commandCalls = 0;
+    const result = await runWizard({
+      plugins: [brew, npm, system],
+      selectTargets: async () => [{ pluginId: 'npm' }],
+      selectCommand: async () => {
+        commandCalls++;
+        // First call: pick add (which will be cancelled); second: pick update.
+        return commandCalls === 1 ? 'add' : 'update';
+      },
+      promptPackages: async () => null,
+    });
+    expect(result).toEqual<WizardResult>({
+      targets: [{ pluginId: 'npm' }],
+      command: 'update',
+    });
+    expect(commandCalls).toBe(2);
+  });
+
+  it('remove: navigates back to command selection when promptPackages returns []', async () => {
+    let commandCalls = 0;
+    const result = await runWizard({
+      plugins: [brew, npm, system],
+      selectTargets: async () => [{ pluginId: 'brew', subtype: 'formulas' }],
+      selectCommand: async () => {
+        commandCalls++;
+        return commandCalls === 1 ? 'remove' : 'list';
+      },
+      promptPackages: async () => [],
+    });
+    expect(result).toEqual<WizardResult>({
+      targets: [{ pluginId: 'brew', subtype: 'formulas' }],
+      command: 'list',
+    });
+    expect(commandCalls).toBe(2);
+  });
+
+  it('errors when add/remove is offered without a promptPackages handler', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const result = await runWizard({
+      plugins: [brew, npm, system],
+      selectTargets: async () => [{ pluginId: 'npm' }],
+      selectCommand: async () => 'add',
+    });
+    expect(result).toBeNull();
+    expect(errSpy.mock.calls.map((c) => c.join(' ')).join('\n')).toContain('promptPackages');
+    errSpy.mockRestore();
+  });
+
   it('returns null and prints an error when capability intersection is empty', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const onlyInstall = mkPlugin('only-install', {

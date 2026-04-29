@@ -7,9 +7,11 @@ import type {
   Plugin,
   PluginContext,
 } from '../src/plugins/types';
-import { parseMasList, parseMasOutdated } from './mas';
+import { APP_STORE_SEARCH_DIRS } from './appstore';
+import { discoverInstalledMasApps, parseMasList, parseMasOutdated, runMas } from './mas';
 
 const XCODE_ID = '497799835';
+const XCODE_BUNDLE_ID = 'com.apple.dt.Xcode';
 
 function extractCltVersion(stdout: string): string | undefined {
   for (const line of stdout.split('\n')) {
@@ -20,8 +22,17 @@ function extractCltVersion(stdout: string): string | undefined {
 }
 
 async function fetchXcodeApp(ctx: PluginContext): Promise<PackageStatus | undefined> {
-  const listOut = await ctx.exec.run('mas', ['list']);
-  const xcode = parseMasList(listOut.stdout).find((e) => e.id === XCODE_ID);
+  const listOut = await runMas(ctx, ['list']);
+  let xcode = parseMasList(listOut.stdout).find((e) => e.id === XCODE_ID);
+
+  // mas v6 omits apps lacking Spotlight metadata (`kMDItemAppStoreAdamID`),
+  // which is common for Xcode. Fall back to the same `_MASReceipt` walk
+  // used by the appstore plugin and match by bundle identifier.
+  if (!xcode) {
+    const fsApps = await discoverInstalledMasApps(ctx, APP_STORE_SEARCH_DIRS);
+    xcode = fsApps.find((e) => e.id === XCODE_BUNDLE_ID);
+  }
+
   if (!xcode) {
     return {
       ref: { kind: 'xcode-app', name: 'Xcode', id: XCODE_ID },
@@ -29,7 +40,7 @@ async function fetchXcodeApp(ctx: PluginContext): Promise<PackageStatus | undefi
       outdated: false,
     };
   }
-  const outdatedOut = await ctx.exec.run('mas', ['outdated']);
+  const outdatedOut = await runMas(ctx, ['outdated']);
   const outdated = parseMasOutdated(outdatedOut.stdout).find((e) => e.id === XCODE_ID);
   const status: PackageStatus = {
     ref: { kind: 'xcode-app', name: 'Xcode', id: XCODE_ID },
@@ -112,7 +123,7 @@ const xcode: Plugin = {
       if (ref.kind === 'xcode-clt') {
         await ctx.exec.run('xcode-select', ['--install']);
       } else {
-        const r = await ctx.exec.run('mas', ['install', ref.id ?? XCODE_ID]);
+        const r = await runMas(ctx, ['install', ref.id ?? XCODE_ID]);
         if (r.exitCode !== 0) {
           throw new Error(`mas install ${ref.id ?? XCODE_ID} exited ${r.exitCode}`);
         }
@@ -135,7 +146,7 @@ const xcode: Plugin = {
         ctx.log.info(`[dry-run] mas upgrade ${ref.id ?? XCODE_ID}`);
         continue;
       }
-      const r = await ctx.exec.run('mas', ['upgrade', ref.id ?? XCODE_ID]);
+      const r = await runMas(ctx, ['upgrade', ref.id ?? XCODE_ID]);
       if (r.exitCode !== 0) {
         throw new Error(`mas upgrade ${ref.id ?? XCODE_ID} exited ${r.exitCode}`);
       }

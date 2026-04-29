@@ -32,6 +32,15 @@ describe('ExecaExecRunner.run', () => {
     expect(r.stdout).toBe('piped-in');
   });
 
+  it('passes env vars through to the child process (extending parent env)', async () => {
+    const r = await runner.run(
+      'node',
+      ['-e', 'process.stdout.write(process.env.MACUP_TEST_VAR ?? "")'],
+      { env: { MACUP_TEST_VAR: 'hello-env' } },
+    );
+    expect(r.stdout).toBe('hello-env');
+  });
+
   it('aborts the process when the signal is aborted', async () => {
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 10);

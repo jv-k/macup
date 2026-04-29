@@ -61,6 +61,7 @@ export interface ExecRunOptions {
   readonly input?: string;
   readonly cwd?: string;
   readonly signal?: AbortSignal;
+  readonly env?: Readonly<Record<string, string>>;
 }
 
 export interface ExecRunner {

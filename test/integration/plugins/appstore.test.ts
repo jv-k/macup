@@ -1,7 +1,9 @@
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import appstorePlugin from '../../../plugins/appstore';
+import appstorePlugin, { APP_STORE_SEARCH_DIRS } from '../../../plugins/appstore';
 import { FixtureExecRunner, loadFixtures } from '../../../src/exec/fixtures';
+import type { FixtureEntry } from '../../../src/exec/fixtures';
 import type { PluginContext } from '../../../src/plugins/types';
 
 const FIXTURE_PATH = join(__dirname, '../../fixtures/recordings/mas.json');
@@ -58,6 +60,75 @@ describe('appstore plugin — list', () => {
     const ctx = await makeCtx();
     const result = await appstorePlugin.list(ctx, { onlyOutdated: true });
     expect(result).toEqual([]);
+  });
+});
+
+describe('appstore plugin — list filesystem fallback', () => {
+  it('exposes the default search dirs (/Applications and ~/Applications)', () => {
+    expect(APP_STORE_SEARCH_DIRS).toEqual(['/Applications', join(homedir(), 'Applications')]);
+  });
+
+  it('falls back to filesystem discovery when `mas list` is empty', async () => {
+    const findFixtures: FixtureEntry[] = APP_STORE_SEARCH_DIRS.map((dir) => ({
+      cmd: 'find',
+      args: [dir, '-maxdepth', '3', '-type', 'd', '-name', '_MASReceipt'],
+      result:
+        dir === '/Applications'
+          ? {
+              stdout:
+                '/Applications/Boop.app/Contents/_MASReceipt\n/Applications/Xcode.app/Contents/_MASReceipt\n',
+              stderr: '',
+              exitCode: 0,
+            }
+          : { stdout: '', stderr: '', exitCode: 0 },
+    }));
+    const fixtures: FixtureEntry[] = [
+      // mas returns nothing on stdout (the v6 broken-Spotlight case)
+      { cmd: 'mas', args: ['list'], result: { stdout: '', stderr: '', exitCode: 0 } },
+      { cmd: 'mas', args: ['outdated'], result: { stdout: '', stderr: '', exitCode: 0 } },
+      ...findFixtures,
+      {
+        cmd: 'plutil',
+        args: ['-convert', 'json', '-o', '-', '/Applications/Boop.app/Contents/Info.plist'],
+        result: {
+          stdout: JSON.stringify({
+            CFBundleIdentifier: 'com.okatbest.boop',
+            CFBundleName: 'Boop',
+            CFBundleShortVersionString: '1.4.0',
+          }),
+          stderr: '',
+          exitCode: 0,
+        },
+      },
+      {
+        cmd: 'plutil',
+        args: ['-convert', 'json', '-o', '-', '/Applications/Xcode.app/Contents/Info.plist'],
+        result: {
+          stdout: JSON.stringify({
+            CFBundleIdentifier: 'com.apple.dt.Xcode',
+            CFBundleName: 'Xcode',
+            CFBundleShortVersionString: '15.4',
+          }),
+          stderr: '',
+          exitCode: 0,
+        },
+      },
+    ];
+    const ctx: PluginContext = {
+      exec: new FixtureExecRunner({ fixtures, onPath: ['mas', 'find', 'plutil'] }),
+      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      signal: new AbortController().signal,
+    };
+    const result = await appstorePlugin.list(ctx, {});
+    // Boop is reported via the bundle ID; Xcode is filtered out (handled by xcode plugin)
+    expect(result).toEqual([
+      {
+        ref: { kind: 'appstore', name: 'Boop', id: 'com.okatbest.boop' },
+        installed: true,
+        installedVersion: '1.4.0',
+        outdated: false,
+      },
+    ]);
   });
 });
 

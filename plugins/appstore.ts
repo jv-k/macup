@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { ErrPluginUnavailable } from '../src/errors';
 import type {
   ListOptions,
@@ -7,20 +9,46 @@ import type {
   Plugin,
   PluginContext,
 } from '../src/plugins/types';
-import { parseMasList, parseMasOutdated, runMasAction } from './mas';
+import {
+  discoverInstalledMasApps,
+  parseMasList,
+  parseMasOutdated,
+  runMas,
+  runMasAction,
+} from './mas';
 
 // Xcode is handled by the dedicated xcode plugin; filter it from the
-// generic App Store view to avoid double-reporting.
-const XCODE_ID = '497799835';
+// generic App Store view to avoid double-reporting. We match either the
+// numeric Adam ID (from `mas list`) or the bundle identifier (from the
+// filesystem fallback).
+const XCODE_IDS: ReadonlySet<string> = new Set(['497799835', 'com.apple.dt.Xcode']);
+
+// Default install locations for App Store apps. The filesystem fallback
+// (used when `mas list` returns nothing) walks these for `_MASReceipt`-
+// bearing `.app` bundles. Exported so tests can register fixtures for
+// the same paths.
+export const APP_STORE_SEARCH_DIRS: readonly string[] = [
+  '/Applications',
+  join(homedir(), 'Applications'),
+];
 
 async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<PackageStatus[]> {
-  const listOut = await ctx.exec.run('mas', ['list']);
-  const installed = parseMasList(listOut.stdout).filter((e) => e.id !== XCODE_ID);
+  const listOut = await runMas(ctx, ['list']);
+  let installed = parseMasList(listOut.stdout).filter((e) => !XCODE_IDS.has(e.id));
 
-  const outdatedOut = await ctx.exec.run('mas', ['outdated']);
+  // Fallback: mas v6 returns empty stdout when apps aren't Spotlight-
+  // indexed (`kMDItemAppStoreAdamID` missing). Walk the filesystem to
+  // recover the list — entries use bundle identifiers as `id`.
+  if (installed.length === 0) {
+    installed = (await discoverInstalledMasApps(ctx, APP_STORE_SEARCH_DIRS)).filter(
+      (e) => !XCODE_IDS.has(e.id),
+    );
+  }
+
+  const outdatedOut = await runMas(ctx, ['outdated']);
   const outdatedMap = new Map<string, string>();
   for (const o of parseMasOutdated(outdatedOut.stdout)) {
-    if (o.id !== XCODE_ID) outdatedMap.set(o.id, o.latest);
+    if (!XCODE_IDS.has(o.id)) outdatedMap.set(o.id, o.latest);
   }
 
   const result: PackageStatus[] = installed.map((e) => {

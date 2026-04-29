@@ -9,6 +9,7 @@ export class ExecaExecRunner implements ExecRunner {
         input: opts.input,
         cwd: opts.cwd,
         cancelSignal: opts.signal,
+        env: opts.env,
         reject: false,
       });
       return {

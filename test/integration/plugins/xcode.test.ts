@@ -1,7 +1,9 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { APP_STORE_SEARCH_DIRS } from '../../../plugins/appstore';
 import xcodePlugin from '../../../plugins/xcode';
 import { FixtureExecRunner, loadFixtures } from '../../../src/exec/fixtures';
+import type { FixtureEntry } from '../../../src/exec/fixtures';
 import type { PluginContext } from '../../../src/plugins/types';
 
 const FIXTURE_PATH = join(__dirname, '../../fixtures/recordings/xcode.json');
@@ -51,6 +53,66 @@ describe('xcode plugin — list', () => {
     const ctx = await makeCtx();
     const result = await xcodePlugin.list(ctx, {});
     expect(result).toHaveLength(2);
+  });
+});
+
+describe('xcode plugin — list filesystem fallback', () => {
+  it('detects Xcode via _MASReceipt + Info.plist when `mas list` omits it', async () => {
+    const findFixtures: FixtureEntry[] = APP_STORE_SEARCH_DIRS.map((dir) => ({
+      cmd: 'find',
+      args: [dir, '-maxdepth', '3', '-type', 'd', '-name', '_MASReceipt'],
+      result:
+        dir === '/Applications'
+          ? {
+              stdout: '/Applications/Xcode.app/Contents/_MASReceipt\n',
+              stderr: '',
+              exitCode: 0,
+            }
+          : { stdout: '', stderr: '', exitCode: 0 },
+    }));
+    const fixtures: FixtureEntry[] = [
+      // mas v6 with broken Spotlight indexing: stdout is empty.
+      { cmd: 'mas', args: ['list'], result: { stdout: '', stderr: '', exitCode: 0 } },
+      ...findFixtures,
+      {
+        cmd: 'plutil',
+        args: ['-convert', 'json', '-o', '-', '/Applications/Xcode.app/Contents/Info.plist'],
+        result: {
+          stdout: JSON.stringify({
+            CFBundleIdentifier: 'com.apple.dt.Xcode',
+            CFBundleName: 'Xcode',
+            CFBundleShortVersionString: '26.2',
+          }),
+          stderr: '',
+          exitCode: 0,
+        },
+      },
+      { cmd: 'mas', args: ['outdated'], result: { stdout: '', stderr: '', exitCode: 0 } },
+      {
+        cmd: 'xcode-select',
+        args: ['-p'],
+        result: { stdout: '/Applications/Xcode.app/Contents/Developer\n', stderr: '', exitCode: 0 },
+      },
+      {
+        cmd: 'pkgutil',
+        args: ['--pkg-info=com.apple.pkg.CLTools_Executables'],
+        result: { stdout: 'version: 15.0.0\n', stderr: '', exitCode: 0 },
+      },
+    ];
+    const ctx: PluginContext = {
+      exec: new FixtureExecRunner({
+        fixtures,
+        onPath: ['mas', 'find', 'plutil', 'xcode-select', 'pkgutil'],
+      }),
+      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      signal: new AbortController().signal,
+    };
+    const result = await xcodePlugin.list(ctx, {});
+    const app = result.find((p) => p.ref.kind === 'xcode-app');
+    expect(app?.installed).toBe(true);
+    expect(app?.installedVersion).toBe('26.2');
+    // Adam ID stays on the ref so `mas install/upgrade 497799835` still works.
+    expect(app?.ref.id).toBe('497799835');
   });
 });
 

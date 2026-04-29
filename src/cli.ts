@@ -462,8 +462,11 @@ const main = defineCommand({
           //   - Tracked rows get a ✔ tick prefix on the label so they're
           //     visually distinct (the alignment space on untracked rows
           //     keeps names left-aligned with each other).
-          //   - For `add`, tracked rows are disabled (already in the list).
-          //   - For `remove`, untracked rows are disabled (not removable).
+          //   - All rows are selectable. Toggling a tracked row in `add`
+          //     or an untracked row in `remove` is a no-op at the store
+          //     layer (reported as `skipped` / `missing` in the output),
+          //     so we don't disable them — that just dimmed the row and
+          //     made the picker feel half-functional.
           //   - Tags go in `hint` (rendered dim, not searchable) so the
           //     autocomplete filter only matches package names.
           const options = packages.map((p) => {
@@ -471,13 +474,11 @@ const main = defineCommand({
             const tags: string[] = [];
             if (p.tracked) tags.push('tracked');
             if (!p.installed) tags.push('not installed');
-            const isDisabled = action === 'add' ? p.tracked : !p.tracked;
-            const opt: { label: string; value: string; hint?: string; disabled?: boolean } = {
+            const opt: { label: string; value: string; hint?: string } = {
               label: tickedLabel,
               value: p.name,
             };
             if (tags.length > 0) opt.hint = tags.join(', ');
-            if (isDisabled) opt.disabled = true;
             return opt;
           });
 

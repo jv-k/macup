@@ -47,8 +47,16 @@ describe('subtypeFromArgs', () => {
     expect(subtypeFromArgs(brew, { cask: true })).toBe('casks');
   });
 
+  it('maps --formula=true to the formulas subtype for brew', () => {
+    expect(subtypeFromArgs(brew, { formula: true })).toBe('formulas');
+  });
+
   it('--subtype takes precedence over --cask when both set', () => {
     expect(subtypeFromArgs(brew, { subtype: 'formulas', cask: true })).toBe('formulas');
+  });
+
+  it('--subtype takes precedence over --formula when both set', () => {
+    expect(subtypeFromArgs(brew, { subtype: 'casks', formula: true })).toBe('casks');
   });
 
   it('defaults to the first subtype when neither flag is set', () => {
@@ -107,6 +115,14 @@ describe('validateSubtypeArg', () => {
   it('treats --subtype="" like unset (returns ok=true)', () => {
     expect(validateSubtypeArg(brew, { subtype: '' })).toEqual({ ok: true });
   });
+
+  it('rejects --cask and --formula when both are set', () => {
+    const result = validateSubtypeArg(brew, { cask: true, formula: true });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('mutually exclusive');
+    }
+  });
 });
 
 describe('resolveSubtypeOrExit', () => {
@@ -140,6 +156,18 @@ describe('resolveSubtypeOrExit', () => {
   it('resolves to casks when --cask is set', () => {
     const result = resolveSubtypeOrExit(brew, { cask: true });
     expect(result).toEqual({ ok: true, subtype: 'casks' });
+  });
+
+  it('resolves to formulas when --formula is set', () => {
+    const result = resolveSubtypeOrExit(brew, { formula: true });
+    expect(result).toEqual({ ok: true, subtype: 'formulas' });
+  });
+
+  it('returns { ok: false } and sets exitCode=1 when both --cask and --formula are set', () => {
+    const result = resolveSubtypeOrExit(brew, { cask: true, formula: true });
+    expect(result).toEqual({ ok: false });
+    expect(process.exitCode).toBe(1);
+    expect(errSpy.mock.calls.map((c) => c.join(' ')).join('\n')).toContain('mutually exclusive');
   });
 
   it('returns { ok: false } and sets exitCode=1 on unknown --subtype', () => {

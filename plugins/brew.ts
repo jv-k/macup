@@ -66,9 +66,16 @@ async function fetchFormulas(ctx: PluginContext, onlyOutdated: boolean): Promise
 }
 
 async function fetchCasks(ctx: PluginContext, onlyOutdated: boolean): Promise<PackageStatus[]> {
-  const installed = parseVersionsList(
-    (await ctx.exec.run('brew', ['list', '--cask', '--versions'])).stdout,
-  );
+  // `brew list --cask --versions` aborts entirely on the first bad cask
+  // (e.g. a stale entry whose Caskfile points at a missing artifact), so a
+  // single broken cask hides every other one. If the versioned form fails,
+  // fall back to the names-only `brew list --cask` and report installs
+  // without versions — outdated state still comes from the JSON below.
+  const versioned = await ctx.exec.run('brew', ['list', '--cask', '--versions']);
+  const installed =
+    versioned.exitCode === 0
+      ? parseVersionsList(versioned.stdout)
+      : parseVersionsList((await ctx.exec.run('brew', ['list', '--cask'])).stdout);
   const outdatedRaw = await ctx.exec.runJson<OutdatedResponse>('brew', [
     'outdated',
     '--json=v2',

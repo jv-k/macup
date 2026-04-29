@@ -3,11 +3,12 @@ import type { Plugin } from '../plugins/types';
 export interface SubtypeArgs {
   readonly subtype?: string;
   readonly cask?: boolean;
+  readonly formula?: boolean;
 }
 
 /**
  * Resolve which subtype a subcommand should operate on.
- * Precedence: explicit --subtype=<name> > --cask shortcut > first declared subtype.
+ * Precedence: explicit --subtype=<name> > --cask / --formula shortcut > first declared subtype.
  * Returns undefined if the plugin has no subtypes, or if --subtype is not in the
  * plugin's declared list. Callers that want to reject unknown values should call
  * validateSubtypeArg() first.
@@ -17,7 +18,7 @@ export function subtypeFromArgs(plugin: Plugin, args: SubtypeArgs): string | und
   if (!subtypes || subtypes.length === 0) return undefined;
 
   // Treat bare `--subtype` (empty string) as unset so it falls through to
-  // the --cask shortcut or the first-subtype default, instead of hitting
+  // the shortcut flags or the first-subtype default, instead of hitting
   // `subtypes.includes('')` → false → undefined.
   if (args.subtype !== undefined && args.subtype !== '') {
     return subtypes.includes(args.subtype) ? args.subtype : undefined;
@@ -27,20 +28,32 @@ export function subtypeFromArgs(plugin: Plugin, args: SubtypeArgs): string | und
     return subtypes.includes('casks') ? 'casks' : undefined;
   }
 
+  if (args.formula) {
+    return subtypes.includes('formulas') ? 'formulas' : undefined;
+  }
+
   return subtypes[0];
 }
 
 export type ValidationResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Validate the --subtype arg against the plugin's declared subtypes.
- * Returns { ok: false, error } if --subtype is set to an unknown value, or
- * set at all on a plugin without subtypes. Returns { ok: true } otherwise.
+ * Validate the --subtype arg against the plugin's declared subtypes, and
+ * the shortcut flags (--cask, --formula) against the plugin's subtype list.
+ * Also rejects mutually-exclusive flag combinations.
  */
 export function validateSubtypeArg(plugin: Plugin, args: SubtypeArgs): ValidationResult {
+  const subtypes = plugin.manifest.subtypes;
+
+  if (args.cask && args.formula) {
+    return {
+      ok: false,
+      error: '--cask and --formula are mutually exclusive',
+    };
+  }
+
   if (args.subtype === undefined || args.subtype === '') return { ok: true };
 
-  const subtypes = plugin.manifest.subtypes;
   if (!subtypes || subtypes.length === 0) {
     return {
       ok: false,
@@ -60,8 +73,8 @@ export function validateSubtypeArg(plugin: Plugin, args: SubtypeArgs): Validatio
 
 /**
  * True iff this plugin declares more than one subtype — i.e., the CLI should
- * expose `--subtype=<name>` / `--cask` flags for it, and the wizard should
- * split it into multiple items.
+ * expose `--subtype=<name>` and the shortcut flags (--cask, --formula) for it,
+ * and the wizard should split it into multiple items.
  */
 export function pluginHasSubtypes(plugin: Plugin): boolean {
   return (plugin.manifest.subtypes?.length ?? 0) > 1;
@@ -83,6 +96,7 @@ export function resolveSubtypeOrExit(
   const sArgs: SubtypeArgs = {
     subtype: typeof args.subtype === 'string' ? args.subtype : undefined,
     cask: Boolean(args.cask),
+    formula: Boolean(args.formula),
   };
   const validation = validateSubtypeArg(plugin, sArgs);
   if (!validation.ok) {

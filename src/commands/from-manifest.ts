@@ -48,51 +48,128 @@ function makeCtx(deps: CommandDeps): PluginContext {
   };
 }
 
+function renderStatusBlock(
+  label: string,
+  statuses: PackageStatus[],
+  onlyOutdated: boolean,
+): string[] {
+  const upToDate = statuses.filter((s) => s.installed && !s.outdated);
+  const outdated = statuses.filter((s) => s.installed && s.outdated);
+  const notInstalled = statuses.filter((s) => !s.installed);
+  // Per-column name widths: padding the up-to-date column to the widest
+  // outdated name (or vice-versa) wastes horizontal space and pushes the
+  // right column further from the eye.
+  const upToDateWidth = Math.max(...upToDate.map((s) => s.ref.name.length), 0);
+  const outdatedWidth = Math.max(...outdated.map((s) => s.ref.name.length), 0);
+  const notInstalledWidth = Math.max(...notInstalled.map((s) => s.ref.name.length), 0);
+  const lines: string[] = [];
+
+  lines.push('');
+  lines.push(log.header(label, statuses.length));
+
+  const showUpToDate = !onlyOutdated && upToDate.length > 0;
+  const showOutdated = outdated.length > 0;
+
+  const upToDateBlock: string[] = [];
+  if (showUpToDate) {
+    upToDateBlock.push(`  ${log.subHeader('Up-to-date', upToDate.length)}`);
+    for (const s of upToDate) {
+      upToDateBlock.push(log.pkgUpToDate(s.ref.name, s.installedVersion ?? '', upToDateWidth));
+    }
+  }
+
+  const outdatedBlock: string[] = [];
+  if (showOutdated) {
+    outdatedBlock.push(`  ${log.outdatedHeader('Outdated', outdated.length)}`);
+    for (const s of outdated) {
+      outdatedBlock.push(
+        log.pkgOutdated(
+          s.ref.name,
+          s.installedVersion ?? '?',
+          s.latestVersion ?? '?',
+          outdatedWidth,
+        ),
+      );
+    }
+  }
+
+  if (showUpToDate && showOutdated) {
+    // Two-column when both halves have items and the terminal is wide
+    // enough; fall back to stacked otherwise so narrow windows don't wrap
+    // mid-row. The columns are top-aligned: the shorter side pads down,
+    // not centres, so the headers always sit on the same row.
+    const gap = 4;
+    const termWidth = process.stdout.columns ?? 80;
+    const leftWidth = Math.max(...upToDateBlock.map(log.visualWidth));
+    const rightWidth = Math.max(...outdatedBlock.map(log.visualWidth));
+    if (leftWidth + gap + rightWidth <= termWidth) {
+      lines.push('');
+      lines.push(
+        ...log
+          .sideBySide(upToDateBlock.join('\n'), outdatedBlock.join('\n'), { gap, vAlign: 'top' })
+          .split('\n'),
+      );
+    } else {
+      lines.push('');
+      lines.push(...upToDateBlock);
+      lines.push('');
+      lines.push(...outdatedBlock);
+    }
+  } else if (showUpToDate) {
+    lines.push('');
+    lines.push(...upToDateBlock);
+  } else if (showOutdated) {
+    lines.push('');
+    lines.push(...outdatedBlock);
+  } else if (onlyOutdated) {
+    lines.push('');
+    lines.push(log.success(`All ${label} packages are up-to-date!`));
+  }
+
+  if (!onlyOutdated && notInstalled.length > 0) {
+    lines.push('');
+    lines.push(`  ${log.errorHeader('Not installed', notInstalled.length)}`);
+    for (const s of notInstalled) {
+      lines.push(log.pkgNotInstalled(s.ref.name, notInstalledWidth));
+    }
+  }
+
+  return lines;
+}
+
+function indentBlock(lines: string[], spaces: number): string[] {
+  const pad = ' '.repeat(spaces);
+  return lines.map((l) => (l.length > 0 ? pad + l : l));
+}
+
+function kindLabel(kind: string): string {
+  return `${kind}s`.toUpperCase();
+}
+
 function renderList(pluginName: string, statuses: PackageStatus[], onlyOutdated: boolean): string {
   if (statuses.length === 0) {
     return [log.info(`No ${pluginName} packages found.`)].join('\n');
   }
 
-  const upToDate = statuses.filter((s) => s.installed && !s.outdated);
-  const outdated = statuses.filter((s) => s.installed && s.outdated);
-  const notInstalled = statuses.filter((s) => !s.installed);
-  const nameWidth = Math.max(...statuses.map((s) => s.ref.name.length), 0);
+  const distinctKinds = Array.from(new Set(statuses.map((s) => s.ref.kind)));
   const lines: string[] = [];
 
-  // Section header
+  if (distinctKinds.length <= 1) {
+    lines.push(...renderStatusBlock(pluginName, statuses, onlyOutdated));
+    lines.push('');
+    return lines.join('\n');
+  }
+
+  // Multi-kind: top-level plugin header, then a nested block per kind.
+  // Preserves the order kinds first appeared in `statuses` so plugins
+  // can choose their display order (e.g. brew lists formulas before casks).
   lines.push('');
-  lines.push(log.header(`${pluginName}`, statuses.length));
+  lines.push(log.header(pluginName, statuses.length));
 
-  // Up-to-date
-  if (!onlyOutdated && upToDate.length > 0) {
-    lines.push('');
-    lines.push(`  ${log.subHeader('Up-to-date', upToDate.length)}`);
-    for (const s of upToDate) {
-      lines.push(log.pkgUpToDate(s.ref.name, s.installedVersion ?? '', nameWidth));
-    }
-  }
-
-  // Outdated
-  if (outdated.length > 0) {
-    lines.push('');
-    lines.push(`  ${log.outdatedHeader('Outdated', outdated.length)}`);
-    for (const s of outdated) {
-      lines.push(
-        log.pkgOutdated(s.ref.name, s.installedVersion ?? '?', s.latestVersion ?? '?', nameWidth),
-      );
-    }
-  } else if (onlyOutdated) {
-    lines.push('');
-    lines.push(log.success(`All ${pluginName} packages are up-to-date!`));
-  }
-
-  // Not installed
-  if (!onlyOutdated && notInstalled.length > 0) {
-    lines.push('');
-    lines.push(`  ${log.errorHeader('Not installed', notInstalled.length)}`);
-    for (const s of notInstalled) {
-      lines.push(log.pkgNotInstalled(s.ref.name, nameWidth));
-    }
+  for (const kind of distinctKinds) {
+    const group = statuses.filter((s) => s.ref.kind === kind);
+    const block = renderStatusBlock(kindLabel(kind), group, onlyOutdated);
+    lines.push(...indentBlock(block, 2));
   }
 
   lines.push('');
@@ -146,6 +223,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           type: 'boolean',
           description: `Operate on ${manifest.subtypes?.[1] ?? 'subtype'} instead of ${manifest.subtypes?.[0] ?? ''}.`,
         },
+        formula: {
+          type: 'boolean',
+          description: `Operate on ${manifest.subtypes?.[0] ?? 'subtype'} (the default — explicit form for symmetry with --cask).`,
+        },
       }
     : {};
 
@@ -176,7 +257,16 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
       async run({ args }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
-        const subtype = resolved.subtype;
+        // For `list`, "no subtype flag" means "show every subtype" — so we
+        // override the resolveSubtypeOrExit default (first subtype) with
+        // undefined when neither --subtype nor a shortcut flag was set.
+        // install/add/remove keep the default-to-first behavior because
+        // they need a concrete subtype to act on.
+        const userSpecifiedSubtype =
+          (typeof args.subtype === 'string' && args.subtype !== '') ||
+          Boolean(args.cask) ||
+          Boolean(args.formula);
+        const subtype = userSpecifiedSubtype ? resolved.subtype : undefined;
         const showJson = Boolean(args.json);
         const showAll = Boolean(args.all);
 
@@ -197,9 +287,17 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           try {
             const store = await deps.getStore();
             const tracked = new Set<string>();
-            for (const key of manifest.configKeys) {
-              const configKey = manifest.configKeyFor ? manifest.configKeyFor(subtype) : key;
-              for (const name of store.list(configKey)) {
+            // When a subtype is specified, restrict to that subtype's
+            // config key. When unspecified, gather every tracked name
+            // across all of the plugin's config keys — otherwise plugins
+            // with multiple subtypes (e.g. brew formulas + casks) lose
+            // half their tracked set to a single configKeyFor lookup.
+            const keysToCheck =
+              subtype !== undefined && manifest.configKeyFor
+                ? [manifest.configKeyFor(subtype)]
+                : manifest.configKeys;
+            for (const key of keysToCheck) {
+              for (const name of store.list(key)) {
                 tracked.add(name);
               }
             }
@@ -441,10 +539,15 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const key = resolveConfigKey(plugin, subtype);
         const result = store.add(key, names);
         const save = await store.save('add');
-        console.log(
-          `Added ${result.added.length} to ${key}${result.skipped.length ? ` (${result.skipped.length} already present)` : ''}.`,
-        );
-        if (save.backupPath) console.log(`Backup: ${save.backupPath}`);
+        if (result.added.length > 0) {
+          console.log(log.success(`Added to ${key}: ${result.added.join(', ')}`));
+        } else {
+          console.log(log.info(`Nothing new to add to ${key} — all names already tracked.`));
+        }
+        if (result.skipped.length > 0 && result.added.length > 0) {
+          console.log(log.info(`Already tracked: ${result.skipped.join(', ')}`));
+        }
+        if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
       },
     });
   }
@@ -473,10 +576,15 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const key = resolveConfigKey(plugin, subtype);
         const result = store.remove(key, names);
         const save = await store.save('remove');
-        console.log(
-          `Removed ${result.removed.length} from ${key}${result.missing.length ? ` (${result.missing.length} not present)` : ''}.`,
-        );
-        if (save.backupPath) console.log(`Backup: ${save.backupPath}`);
+        if (result.removed.length > 0) {
+          console.log(log.success(`Removed from ${key}: ${result.removed.join(', ')}`));
+        } else {
+          console.log(log.info(`Nothing to remove from ${key} — none of the names were tracked.`));
+        }
+        if (result.missing.length > 0 && result.removed.length > 0) {
+          console.log(log.info(`Not present: ${result.missing.join(', ')}`));
+        }
+        if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
       },
     });
   }
@@ -503,8 +611,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const store = await deps.getStore();
         store.pin(manifest.id, name, version);
         const save = await store.save('pin');
-        console.log(`Pinned ${name} to max ${version} for ${manifest.id}.`);
-        if (save.backupPath) console.log(`Backup: ${save.backupPath}`);
+        console.log(log.success(`Pinned ${name} to ${version} (${manifest.id})`));
+        if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
       },
     });
 
@@ -519,8 +627,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const store = await deps.getStore();
         store.unpin(manifest.id, names[0] as string);
         const save = await store.save('unpin');
-        console.log(`Unpinned ${names[0]} for ${manifest.id}.`);
-        if (save.backupPath) console.log(`Backup: ${save.backupPath}`);
+        console.log(log.success(`Unpinned ${names[0]} (${manifest.id})`));
+        if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
       },
     });
 
@@ -535,8 +643,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const store = await deps.getStore();
         store.skip(manifest.id, names);
         const save = await store.save('skip');
-        console.log(`Skipped ${names.join(', ')} for ${manifest.id}.`);
-        if (save.backupPath) console.log(`Backup: ${save.backupPath}`);
+        console.log(log.success(`Skipped from ${manifest.id} updates: ${names.join(', ')}`));
+        if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
       },
     });
 
@@ -551,8 +659,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const store = await deps.getStore();
         store.unskip(manifest.id, names);
         const save = await store.save('unskip');
-        console.log(`Unskipped ${names.join(', ')} for ${manifest.id}.`);
-        if (save.backupPath) console.log(`Backup: ${save.backupPath}`);
+        console.log(log.success(`Unskipped (${manifest.id}): ${names.join(', ')}`));
+        if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
       },
     });
   }

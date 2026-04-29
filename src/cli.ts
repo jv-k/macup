@@ -334,21 +334,26 @@ const main = defineCommand({
           const firstItem = groups[0]?.items[0];
           const kbd = pc.underline;
           const d = pc.dim;
-          const hint = `${d('(')}${kbd('space')}${d(' to toggle · ')}${kbd('a')}${d(' for all · ')}${kbd('enter')}${d(' to confirm)')}`;
+          // groupMultiselect (unlike flat multiselect) doesn't support "a for all" —
+          // only space toggles. Don't advertise a key that does nothing.
+          const hint = `${d('(')}${kbd('space')}${d(' to toggle · ')}${kbd('enter')}${d(' to confirm)')}`;
           const choice = await groupMultiselect<Target>({
             message: `Which package managers? ${hint}`,
             options,
             selectableGroups: false,
-            // Preselect the first item so enter-with-no-toggles submits the
-            // highlighted default instead of erroring on empty selection.
-            ...(firstItem ? { initialValues: [firstItem.value], cursorAt: firstItem.value } : {}),
-            required: false,
+            // Start the cursor on the first real item so the user lands on a
+            // selectable row, but do NOT pre-toggle it: a sticky preselection
+            // makes any extra toggle look like "the menu also ran brew"
+            // because the default stays in the submission alongside the
+            // user's pick. required:true asks Clack to enforce a non-empty
+            // selection; the explicit empty-array guard below is a safety
+            // net for Clack quirks.
+            ...(firstItem ? { cursorAt: firstItem.value } : {}),
+            required: true,
           });
           if (isCancel(choice)) return null;
           const arr = choice as readonly Target[];
-          // Fallback guard: if somehow empty (e.g. future Clack change), default
-          // to the first item so enter always does something.
-          if (arr.length === 0 && firstItem) return [firstItem.value];
+          if (arr.length === 0) return null;
           return arr;
         },
         selectCommand: async (opts) => {

@@ -513,12 +513,14 @@ const main = defineCommand({
           : '';
         const label = `${t.pluginId} ${wizResult.command}${subtypeFrag}${pkgFrag}`;
         // Distinct echo: green-on-black ` macup ` pill (matches the splash
-        // badge) followed by the command in bold. The blank line above and
-        // below visually separates each iteration of the wizard loop.
+        // badge) followed by the command in bold. The leading blank
+        // separates each iteration of the wizard loop; the trailing
+        // newline comes from console.log itself — adding another `\n`
+        // here would compound with the next output's leading blank.
         const useColor = shouldUseColor();
         const badge = useColor ? pc.inverse(pc.bold(pc.green(' macup '))) : 'macup';
         const styledLabel = useColor ? pc.bold(label) : label;
-        console.log(`\n${badge} ${styledLabel}\n`);
+        console.log(`\n${badge} ${styledLabel}`);
         const cmd = pluginSubCommands[t.pluginId];
         if (!cmd) {
           console.error(`error: plugin "${t.pluginId}" is not available`);

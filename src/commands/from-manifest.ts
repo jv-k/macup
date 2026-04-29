@@ -156,13 +156,14 @@ function renderList(pluginName: string, statuses: PackageStatus[], onlyOutdated:
 
   if (distinctKinds.length <= 1) {
     lines.push(...renderStatusBlock(pluginName, statuses, onlyOutdated));
-    lines.push('');
     return lines.join('\n');
   }
 
   // Multi-kind: top-level plugin header, then a nested block per kind.
   // Preserves the order kinds first appeared in `statuses` so plugins
   // can choose their display order (e.g. brew lists formulas before casks).
+  // No trailing blank: console.log's \n + the next output's leading
+  // blank line already give one row of separation.
   lines.push('');
   lines.push(log.header(pluginName, statuses.length));
 
@@ -172,7 +173,6 @@ function renderList(pluginName: string, statuses: PackageStatus[], onlyOutdated:
     lines.push(...indentBlock(block, 2));
   }
 
-  lines.push('');
   return lines.join('\n');
 }
 

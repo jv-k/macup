@@ -1,0 +1,129 @@
+import type { PackageStatus, Plugin, PluginContext } from '../plugins/types';
+
+export interface OutdatedPluginSummary {
+  pluginId: string;
+  displayName: string;
+  /** False when the plugin's `check()` threw — we couldn't even ask. */
+  available: boolean;
+  /** Short reason string when `available` is false. */
+  reason?: string;
+  /** Outdated packages reported by the plugin (empty when up-to-date). */
+  outdated: readonly PackageStatus[];
+}
+
+export interface OutdatedReport {
+  /** Sum of `outdated.length` across all available plugins. */
+  totalOutdated: number;
+  /** One row per plugin in registry order; the composite `all` is excluded. */
+  plugins: readonly OutdatedPluginSummary[];
+}
+
+export interface OutdatedReportDeps {
+  readonly plugins: readonly Plugin[];
+  /**
+   * Factory rather than a single context: each plugin gets its own so an
+   * abort on one (e.g. via the spinner) doesn't propagate to siblings.
+   */
+  readonly makeCtx: () => PluginContext;
+}
+
+/**
+ * Run `list({ onlyOutdated: true })` against every plugin in parallel,
+ * isolating per-plugin failures so one missing binary doesn't kill the
+ * whole report. The composite `all` plugin is filtered out — it would
+ * double-count by aggregating its constituents.
+ */
+export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<OutdatedReport> {
+  const constituents = deps.plugins.filter((p) => p.manifest.id !== 'all');
+
+  const summaries = await Promise.all(
+    constituents.map(async (plugin): Promise<OutdatedPluginSummary> => {
+      const ctx = deps.makeCtx();
+      try {
+        await plugin.check(ctx);
+        const outdated = await plugin.list(ctx, { onlyOutdated: true });
+        return {
+          pluginId: plugin.manifest.id,
+          displayName: plugin.manifest.displayName,
+          available: true,
+          outdated,
+        };
+      } catch (err) {
+        return {
+          pluginId: plugin.manifest.id,
+          displayName: plugin.manifest.displayName,
+          available: false,
+          reason: err instanceof Error ? err.message : String(err),
+          outdated: [],
+        };
+      }
+    }),
+  );
+
+  const totalOutdated = summaries.reduce((sum, s) => sum + s.outdated.length, 0);
+  return { plugins: summaries, totalOutdated };
+}
+
+export interface FormatOptions {
+  /** If true, wraps status glyphs and labels in ANSI. */
+  color?: boolean;
+  /**
+   * How many package names to show per plugin before truncating to a
+   * `+N` suffix. Truncation keeps the line scannable for plugins with
+   * dozens of outdated entries (brew, mostly).
+   */
+  maxNames?: number;
+}
+
+/**
+ * Render a one-pane outdated summary. Layout:
+ *
+ *     ! brew      (8 outdated)  deno · gh · netlify-cli · pipenv +4
+ *     ! npm       (3 outdated)  bun · eslint · prettier
+ *     ✓ pnpm      up to date
+ *     ? appstore  unavailable: mas not on PATH
+ *
+ *     11 packages outdated · run `macup all update` to upgrade
+ */
+export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions = {}): string {
+  const color = opts.color ?? false;
+  const maxNames = opts.maxNames ?? 6;
+  const green = (s: string) => (color ? `\x1b[32m${s}\x1b[0m` : s);
+  const yellow = (s: string) => (color ? `\x1b[33m${s}\x1b[0m` : s);
+  const dim = (s: string) => (color ? `\x1b[2m${s}\x1b[0m` : s);
+
+  const idPad = Math.max(4, ...report.plugins.map((p) => p.pluginId.length));
+
+  const lines: string[] = [];
+  lines.push('');
+
+  for (const p of report.plugins) {
+    const id = p.pluginId.padEnd(idPad);
+    if (!p.available) {
+      lines.push(`  ${dim('?')} ${id}  ${dim(`unavailable: ${p.reason ?? 'unknown'}`)}`);
+      continue;
+    }
+    if (p.outdated.length === 0) {
+      lines.push(`  ${green('✓')} ${id}  ${dim('up to date')}`);
+      continue;
+    }
+    const names = p.outdated.slice(0, maxNames).map((s) => s.ref.name);
+    const more = p.outdated.length > maxNames ? ` +${p.outdated.length - maxNames}` : '';
+    const namesStr = `${names.join(' · ')}${more}`;
+    lines.push(
+      `  ${yellow('!')} ${id}  ${yellow(`(${p.outdated.length} outdated)`)}  ${dim(namesStr)}`,
+    );
+  }
+
+  lines.push('');
+  if (report.totalOutdated === 0) {
+    lines.push(`  ${green('Everything up to date.')}`);
+  } else {
+    const noun = report.totalOutdated === 1 ? 'package' : 'packages';
+    lines.push(
+      `  ${yellow(`${report.totalOutdated} ${noun} outdated`)}  ${dim('· run `macup all update` to upgrade')}`,
+    );
+  }
+
+  return lines.join('\n');
+}

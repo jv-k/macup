@@ -29,6 +29,7 @@ import { runCleanup } from './commands/cleanup';
 import { buildConfigReport, formatConfigReport } from './commands/config';
 import { commandsFromManifest } from './commands/from-manifest';
 import { formatInstallReport, installCompletions } from './commands/install-completions';
+import { buildOutdatedReport, formatOutdatedReport } from './commands/outdated';
 import { buildPluginsReport, formatPluginsReport } from './commands/plugins';
 import { runRestore } from './commands/restore';
 import { generateBashCompletions } from './completions/bash';
@@ -163,6 +164,15 @@ const main = defineCommand({
       type: 'boolean',
       description: 'List built-in plugins and whether each is available on this machine.',
     },
+    outdated: {
+      type: 'boolean',
+      description:
+        'Cross-plugin outdated summary: counts and (truncated) names per plugin, run in parallel.',
+    },
+    json: {
+      type: 'boolean',
+      description: 'Emit JSON instead of formatted text (currently honoured by --outdated).',
+    },
     completions: {
       type: 'string',
       required: false,
@@ -202,6 +212,22 @@ const main = defineCommand({
         onPath: (b) => isOnPath(b),
       });
       console.log(formatPluginsReport(report, { color: shouldUseColor() }));
+      return;
+    }
+
+    if (args.outdated) {
+      const report = await buildOutdatedReport({
+        plugins: registry,
+        // One controller per plugin would be ideal (so an abort on one
+        // doesn't propagate); for now share the parent's signal so Ctrl-C
+        // still cancels the whole batch.
+        makeCtx: () => ({ exec, log, signal: new AbortController().signal }),
+      });
+      if (args.json) {
+        console.log(JSON.stringify(report, null, 2));
+      } else {
+        console.log(formatOutdatedReport(report, { color: shouldUseColor() }));
+      }
       return;
     }
 

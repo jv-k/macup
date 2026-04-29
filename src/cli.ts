@@ -122,6 +122,36 @@ for (const plugin of registry) {
   });
 }
 
+// Cross-plugin outdated summary as a top-level subcommand. Lives outside
+// the plugin loop because it's an aggregator over the registry, not a
+// per-plugin command — but it sits next to plugin subcommands in citty's
+// dispatch table so `macup outdated` works the same way as `macup brew list`.
+const outdatedCommand = defineCommand({
+  meta: {
+    name: 'outdated',
+    description: 'Show outdated packages across every registered plugin in one pane.',
+  },
+  args: {
+    json: {
+      type: 'boolean',
+      description: 'Emit JSON instead of formatted text.',
+    },
+  },
+  async run({ args }) {
+    const report = await buildOutdatedReport({
+      plugins: registry,
+      makeCtx: () => ({ exec, log, signal: new AbortController().signal }),
+    });
+    if (args.json) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(formatOutdatedReport(report, { color: shouldUseColor() }));
+    }
+  },
+});
+
+const topLevelSubCommands = { ...pluginSubCommands, outdated: outdatedCommand };
+
 // Startup: log warnings for plugins that can't load (missing binaries).
 for (const plugin of BUILTIN_PLUGINS) {
   const { id, requires, supportedOS } = plugin.manifest;
@@ -140,7 +170,7 @@ const main = defineCommand({
     description:
       'macup — macOS package update tool with plugin architecture, pins, skip, interactive wizard, and shell completions.',
   },
-  subCommands: pluginSubCommands,
+  subCommands: topLevelSubCommands,
   args: {
     config: {
       type: 'boolean',
@@ -164,15 +194,6 @@ const main = defineCommand({
       type: 'boolean',
       description: 'List built-in plugins and whether each is available on this machine.',
     },
-    outdated: {
-      type: 'boolean',
-      description:
-        'Cross-plugin outdated summary: counts and (truncated) names per plugin, run in parallel.',
-    },
-    json: {
-      type: 'boolean',
-      description: 'Emit JSON instead of formatted text (currently honoured by --outdated).',
-    },
     completions: {
       type: 'string',
       required: false,
@@ -189,7 +210,7 @@ const main = defineCommand({
     // If the first raw arg is a known plugin id, the subcommand already
     // handled it — bail to avoid double output.
     const first = rawArgs[0];
-    if (first && pluginSubCommands[first]) return;
+    if (first && first in topLevelSubCommands) return;
 
     if (typeof args.logo === 'string') {
       let scale = 1;
@@ -212,22 +233,6 @@ const main = defineCommand({
         onPath: (b) => isOnPath(b),
       });
       console.log(formatPluginsReport(report, { color: shouldUseColor() }));
-      return;
-    }
-
-    if (args.outdated) {
-      const report = await buildOutdatedReport({
-        plugins: registry,
-        // One controller per plugin would be ideal (so an abort on one
-        // doesn't propagate); for now share the parent's signal so Ctrl-C
-        // still cancels the whole batch.
-        makeCtx: () => ({ exec, log, signal: new AbortController().signal }),
-      });
-      if (args.json) {
-        console.log(JSON.stringify(report, null, 2));
-      } else {
-        console.log(formatOutdatedReport(report, { color: shouldUseColor() }));
-      }
       return;
     }
 
@@ -658,6 +663,13 @@ function showCustomHelp() {
   }
   console.log('');
 
+  // Top-level (cross-plugin) commands
+  console.log(logui.header('TOP-LEVEL COMMANDS'));
+  console.log(
+    `  ${s.bold('outdated'.padEnd(pad))} Show outdated packages across every plugin in one pane  ${s.dim('[--json]')}`,
+  );
+  console.log('');
+
   // Pin / Skip
   console.log(logui.header('PINS & SKIP'));
   console.log(
@@ -698,6 +710,9 @@ function showCustomHelp() {
     `  ${s.dim('macup')} ${s.bold('brew list --all')}              Show all installed formulas`,
   );
   console.log(`  ${s.dim('macup')} ${s.bold('brew list --only-outdated')}    Show only outdated`);
+  console.log(
+    `  ${s.dim('macup')} ${s.bold('outdated')}                     Outdated summary across every plugin`,
+  );
   console.log(
     `  ${s.dim('macup')} ${s.bold('npm list --json')}              JSON output for scripting`,
   );

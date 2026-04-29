@@ -6,6 +6,7 @@ import {
   confirm,
   groupMultiselect,
   isCancel,
+  note,
   outro,
   select,
   spinner,
@@ -104,47 +105,40 @@ const log = {
 };
 function printAboutScreen(): void {
   const useColor = shouldUseColor();
-  const s = useColor ? pc : null;
-  const title = (t: string) => (s ? s.cyan(s.bold(t)) : t);
-  const dim = (t: string) => (s ? s.dim(t) : t);
-  const code = (t: string) => (s ? s.bold(t) : t);
-  const badge = useColor ? pc.inverse(pc.bold(pc.green(' macup '))) : 'macup';
+  const dim = (t: string) => (useColor ? pc.dim(t) : t);
+  const code = (t: string) => (useColor ? pc.bold(t) : t);
+  const head = (t: string) => (useColor ? pc.bold(pc.cyan(t)) : t);
 
   const lines: string[] = [];
-  lines.push('');
-  lines.push(`  ${badge}  ${dim('— macOS package update tool')}`);
-  lines.push('');
-  lines.push('  Tracks and updates developer packages on macOS — Homebrew formulas/casks,');
-  lines.push('  npm globals, pnpm globals, Mac App Store, Xcode, and system updates — all');
+  lines.push('macup tracks and updates developer packages on macOS — Homebrew formulas/casks,');
+  lines.push('npm globals, pnpm globals, Mac App Store, Xcode, and system updates — all from');
   lines.push(
-    `  from one tool. Your tracked list lives in ${code('~/.config/macup/applist.yaml')} so`,
+    `one tool. Your tracked list lives in ${code('~/.config/macup/applist.yaml')} so you can`,
   );
-  lines.push('  you can commit it to dotfiles.');
+  lines.push('commit it to dotfiles.');
   lines.push('');
-
-  lines.push(`  ${title('Common commands')}`);
-  lines.push(`    ${code('macup outdated')}              ${dim('Cross-plugin outdated summary')}`);
+  lines.push(head('Common commands'));
+  lines.push(`  ${code('macup outdated')}              ${dim('Cross-plugin outdated summary')}`);
   lines.push(
-    `    ${code('macup all update')}            ${dim('Update everything (with confirmation)')}`,
+    `  ${code('macup all update')}            ${dim('Update everything (with confirmation)')}`,
   );
-  lines.push(`    ${code('macup brew list')}             ${dim('List tracked Homebrew packages')}`);
-  lines.push(`    ${code('macup brew add git curl')}     ${dim('Track new packages')}`);
-  lines.push(`    ${code('macup --help')}                ${dim('Full reference')}`);
-  lines.push(`    ${code('macup --plugins')}             ${dim('Which backends are available')}`);
+  lines.push(`  ${code('macup brew list')}             ${dim('List tracked Homebrew packages')}`);
+  lines.push(`  ${code('macup brew add git curl')}     ${dim('Track new packages')}`);
+  lines.push(`  ${code('macup --help')}                ${dim('Full reference')}`);
+  lines.push(`  ${code('macup --plugins')}             ${dim('Which backends are available')}`);
   lines.push('');
-
-  lines.push(`  ${title('In this wizard')}`);
-  lines.push(`    ${dim('•')} Space toggles a row, Enter confirms, Esc nav-backs one step.`);
+  lines.push(head('In this wizard'));
+  lines.push(`  ${dim('•')} Space toggles a row, Enter confirms, Esc nav-backs one step.`);
   lines.push(
-    `    ${dim('•')} On the package picker, type to filter; ${code('✔')} marks already-tracked rows.`,
+    `  ${dim('•')} On the package picker, type to filter; ${code('✔')} marks already-tracked rows.`,
   );
-  lines.push(`    ${dim('•')} Pick ${code('Help')} again any time to see this screen.`);
+  lines.push(`  ${dim('•')} Pick ${code('Help')} again any time to see this screen.`);
   lines.push('');
+  lines.push(`${dim('Docs:')} ${code('https://github.com/jv-k/macup')}`);
 
-  lines.push(`  ${dim('Docs:')} ${code('https://github.com/jv-k/macup')}`);
-  lines.push('');
-
-  console.log(lines.join('\n'));
+  // Clack's `note` renders a framed panel with a title — that's the
+  // "main window" look we want, integrated with the wizard's prompt frame.
+  note(lines.join('\n'), 'About macup / how to use it');
 }
 
 async function getStore(): Promise<ConfigStore> {

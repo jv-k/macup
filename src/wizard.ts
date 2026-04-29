@@ -48,15 +48,12 @@ const COMMAND_LABELS: Record<string, string> = {
   update: 'Update outdated packages',
   add: 'Add to tracked list',
   remove: 'Remove from tracked list',
-  about: 'Help — about macup and how to use it',
 };
 
 // Commands the wizard shows. `outdated` is a read-only filter — for the
-// selected plugin(s) it shells to `list --only-outdated`. `about` is a
-// pseudo-command: the CLI runner prints a help screen and loops back
-// without dispatching to any plugin. The CLI runner in cli.ts handles
-// both translations. add/remove require positional names; they're
-// offered only when exactly one target is selected.
+// selected plugin(s) it shells to `list --only-outdated`. add/remove
+// require positional names; they're offered only when exactly one
+// target is selected.
 const WIZARD_COMMANDS: readonly string[] = [
   'list',
   'outdated',
@@ -64,14 +61,16 @@ const WIZARD_COMMANDS: readonly string[] = [
   'update',
   'add',
   'remove',
-  'about',
 ];
 
-// Commands that exit the per-plugin command menu without reaching a
-// real plugin dispatch — they're CLI-runner-handled. Listed here so
-// commandIntersection can offer them unconditionally and skip the
-// per-plugin capability check that the others go through.
-const STANDALONE_COMMANDS: ReadonlySet<string> = new Set(['about']);
+/**
+ * Synthetic plugin id used for the Help entry on the target prompt.
+ * The wizard short-circuits when this is selected: the CLI's printAbout
+ * handler renders the help panel, and the prompt re-runs.
+ */
+export const WIZARD_HELP_PLUGIN_ID = '__about__';
+const WIZARD_HELP_CATEGORY = 'Help';
+const WIZARD_HELP_LABEL = 'About macup / how to use';
 
 function titleCase(s: string): string {
   return s.length === 0 ? s : s[0]?.toUpperCase() + s.slice(1);
@@ -112,7 +111,15 @@ function buildGroups(plugins: readonly Plugin[]): Array<{
       });
     }
   }
-  return Array.from(groups, ([category, items]) => ({ category, items }));
+  // Append the Help entry as its own category at the end so it sits
+  // visually below every plugin group. The synthetic pluginId is
+  // intercepted by runWizard's outer loop.
+  const out = Array.from(groups, ([category, items]) => ({ category, items }));
+  out.push({
+    category: WIZARD_HELP_CATEGORY,
+    items: [{ label: WIZARD_HELP_LABEL, value: { pluginId: WIZARD_HELP_PLUGIN_ID } }],
+  });
+  return out;
 }
 
 function commandIntersection(plugins: readonly Plugin[], targets: readonly Target[]): string[] {
@@ -123,13 +130,6 @@ function commandIntersection(plugins: readonly Plugin[], targets: readonly Targe
   const multiTarget = targets.length > 1;
   const commands: string[] = [];
   for (const cmd of WIZARD_COMMANDS) {
-    // Standalone commands (e.g. `about`) bypass the capability check
-    // because they don't dispatch to a plugin — the CLI runner handles
-    // them directly.
-    if (STANDALONE_COMMANDS.has(cmd)) {
-      commands.push(cmd);
-      continue;
-    }
     // add/remove require positional package names — only meaningful for a
     // single target.
     if (multiTarget && (cmd === 'add' || cmd === 'remove')) continue;
@@ -151,12 +151,21 @@ export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> 
     const targets = await selectTargets(groups);
     if (targets === null || targets.length === 0) return null;
 
+    // Help short-circuit: any selection that includes the synthetic Help
+    // entry renders the about panel and re-prompts the target selector.
+    // Other selections in the same submission are discarded — the user
+    // explicitly asked for help, not an action.
+    if (targets.some((t) => t.pluginId === WIZARD_HELP_PLUGIN_ID)) {
+      if (!printAbout) {
+        console.error('error: wizard cannot show About screen without a printAbout handler');
+        return null;
+      }
+      printAbout();
+      continue;
+    }
+
     const commands = commandIntersection(plugins, targets);
-    // Standalone commands (about) are always available and don't represent
-    // a real action. If nothing else is in the intersection, there's
-    // genuinely no plugin work to offer — bail with the same error as
-    // before.
-    if (commands.every((c) => STANDALONE_COMMANDS.has(c))) {
+    if (commands.length === 0) {
       console.error(
         `error: no command is supported by all selected targets (${targets
           .map((t) => (t.subtype ? `${t.pluginId}:${t.subtype}` : t.pluginId))
@@ -170,15 +179,6 @@ export async function runWizard(deps: WizardDeps): Promise<WizardResult | null> 
         commands.map((c) => ({ label: COMMAND_LABELS[c] ?? c, value: c })),
       );
       if (command === null) break; // back to target selection
-
-      if (command === 'about') {
-        if (!printAbout) {
-          console.error('error: wizard cannot show About screen without a printAbout handler');
-          return null;
-        }
-        printAbout();
-        continue; // back to command prompt with the same targets retained
-      }
 
       if (command === 'add' || command === 'remove') {
         // commandIntersection already restricts add/remove to single-target

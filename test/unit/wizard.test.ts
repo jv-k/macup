@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Plugin, PluginManifest } from '../../src/plugins/types';
-import { type Target, type WizardDeps, type WizardResult, runWizard } from '../../src/wizard';
+import {
+  type Target,
+  WIZARD_HELP_PLUGIN_ID,
+  type WizardDeps,
+  type WizardResult,
+  runWizard,
+} from '../../src/wizard';
 
 function mkPlugin(id: string, extra?: Partial<PluginManifest>): Plugin {
   return {
@@ -121,41 +127,63 @@ describe('runWizard (multiselect)', () => {
     };
     await runWizard(deps);
     // brew has all 5, npm has no add/remove, system has only list+update.
-    // All three have `outdated: true`, so outdated is offered. `about`
-    // is a standalone help action always available regardless of plugin
-    // capabilities. Intersection: about, list, outdated, update.
-    expect(receivedCommands.sort()).toEqual(['about', 'list', 'outdated', 'update']);
+    // All three have `outdated: true`, so outdated is offered. Intersection:
+    // list, outdated, update.
+    expect(receivedCommands.sort()).toEqual(['list', 'outdated', 'update']);
   });
 
-  it('about: invokes printAbout, retains targets, and loops back to the command prompt', async () => {
+  it('help: invokes printAbout when the synthetic Help target is selected, then re-prompts targets', async () => {
     let aboutCalls = 0;
-    let commandCalls = 0;
+    let targetCalls = 0;
     const result = await runWizard({
       plugins: [brew, npm, system],
-      selectTargets: async () => [{ pluginId: 'npm' }],
-      selectCommand: async () => {
-        commandCalls++;
-        // First time: pick about (which loops back). Second: pick list.
-        return commandCalls === 1 ? 'about' : 'list';
+      selectTargets: async () => {
+        targetCalls++;
+        // First call: pick the Help entry (which loops back). Second:
+        // pick a real plugin so the wizard can settle.
+        return targetCalls === 1 ? [{ pluginId: WIZARD_HELP_PLUGIN_ID }] : [{ pluginId: 'npm' }];
       },
+      selectCommand: async () => 'list',
       printAbout: () => {
         aboutCalls++;
       },
     });
     expect(aboutCalls).toBe(1);
-    expect(commandCalls).toBe(2);
+    expect(targetCalls).toBe(2);
     expect(result).toEqual<WizardResult>({
       targets: [{ pluginId: 'npm' }],
       command: 'list',
     });
   });
 
-  it('about: errors and exits when picked but no printAbout handler is wired', async () => {
+  it('help: a selection mixing Help with a real plugin is treated as Help-only (action discarded)', async () => {
+    let aboutCalls = 0;
+    let targetCalls = 0;
+    const result = await runWizard({
+      plugins: [brew, npm, system],
+      selectTargets: async () => {
+        targetCalls++;
+        return targetCalls === 1
+          ? [{ pluginId: 'npm' }, { pluginId: WIZARD_HELP_PLUGIN_ID }]
+          : null;
+      },
+      selectCommand: async () => {
+        throw new Error('selectCommand should not be reached when Help is in the selection');
+      },
+      printAbout: () => {
+        aboutCalls++;
+      },
+    });
+    expect(aboutCalls).toBe(1);
+    expect(result).toBeNull();
+  });
+
+  it('help: errors and exits when the Help entry is picked but no printAbout handler is wired', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const result = await runWizard({
       plugins: [brew, npm, system],
-      selectTargets: async () => [{ pluginId: 'npm' }],
-      selectCommand: async () => 'about',
+      selectTargets: async () => [{ pluginId: WIZARD_HELP_PLUGIN_ID }],
+      selectCommand: async () => 'list',
       // printAbout intentionally omitted
     });
     expect(result).toBeNull();

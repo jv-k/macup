@@ -60,7 +60,7 @@ describe('update subcommand — positional names', () => {
       getStore: async () => emptyStore(),
     });
     const subCmds = cmd.subCommands as SubCommandsDef;
-    await runCommand(subCmds.update as CommandDef, { rawArgs: ['update', 'alpha'] });
+    await runCommand(subCmds.update as CommandDef, { rawArgs: ['alpha'] });
     expect(plugin.update).toHaveBeenCalledTimes(1);
     const refs = (plugin.update as ReturnType<typeof vi.fn>).mock.calls[0]?.[1];
     expect(refs.map((r: { name: string }) => r.name)).toEqual(['alpha']);
@@ -74,7 +74,7 @@ describe('update subcommand — positional names', () => {
       getStore: async () => emptyStore(),
     });
     const subCmds = cmd.subCommands as SubCommandsDef;
-    await runCommand(subCmds.update as CommandDef, { rawArgs: ['update'] });
+    await runCommand(subCmds.update as CommandDef, { rawArgs: [] });
     expect(plugin.update).toHaveBeenCalledTimes(2);
     const names = (plugin.update as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1][0].name);
     expect(names.sort()).toEqual(['alpha', 'beta']);
@@ -88,7 +88,7 @@ describe('update subcommand — positional names', () => {
       getStore: async () => emptyStore(),
     });
     const subCmds = cmd.subCommands as SubCommandsDef;
-    await runCommand(subCmds.update as CommandDef, { rawArgs: ['update', 'gamma'] });
+    await runCommand(subCmds.update as CommandDef, { rawArgs: ['gamma'] });
     expect(plugin.update).not.toHaveBeenCalled();
   });
 });

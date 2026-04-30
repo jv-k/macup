@@ -210,6 +210,15 @@ function resolveConfigKey(plugin: Plugin, subtype: string | undefined) {
   return first;
 }
 
+// Render the CLI flag a user would type to scope a command to `subtype`.
+// Empty for plugins without subtypes; trailing space lets callers compose
+// directly into a command string without conditional whitespace.
+function subtypeCliFlag(subtype: string | undefined): string {
+  if (subtype === 'casks') return '--cask ';
+  if (subtype === 'formulas') return '--formula ';
+  return '';
+}
+
 export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): CommandDef {
   const { manifest } = plugin;
   const hasSubtypes = pluginHasSubtypes(plugin);
@@ -362,11 +371,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           refs = [...store.list(key)].map((name) => ({ kind, name }));
         }
         if (refs.length === 0 && manifest.configKeys.length > 0) {
-          console.log(
-            log.info(
-              `No tracked packages found. Add packages first: macup ${manifest.id} add <name...>`,
-            ),
-          );
+          const emptyKey = resolveConfigKey(plugin, subtype);
+          console.log(log.info(`No packages tracked in ${emptyKey}.`));
+          console.log(log.trace(`macup ${manifest.id} add ${subtypeCliFlag(subtype)}<name>`));
           return;
         }
         if (plugin.install) {
@@ -476,7 +483,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           // If config can't load (no file yet), skip filtering — update everything.
         }
 
-        const explicitNames = rawArgs.filter((a) => !a.startsWith('-') && a !== 'update');
+        const explicitNames = rawArgs.filter((a) => !a.startsWith('-'));
         if (explicitNames.length > 0) {
           const wanted = new Set(explicitNames);
           filtered = filtered.filter((s) => wanted.has(s.ref.name));
@@ -560,11 +567,20 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const save = await store.save('add');
         if (result.added.length > 0) {
           console.log(log.success(`Added to ${key}: ${result.added.join(', ')}`));
+          if (result.skipped.length > 0) {
+            console.log(log.info(`Already tracked: ${result.skipped.join(', ')}`));
+          }
         } else {
-          console.log(log.info(`Nothing new to add to ${key} — all names already tracked.`));
-        }
-        if (result.skipped.length > 0 && result.added.length > 0) {
-          console.log(log.info(`Already tracked: ${result.skipped.join(', ')}`));
+          // Every name was already tracked. Echo them and suggest install
+          // (the action a user typing `add <name>` is most likely after).
+          console.log(log.info(`Already tracked in ${key}: ${result.skipped.join(', ')}`));
+          if (manifest.capabilities.install) {
+            console.log(
+              log.trace(
+                `macup ${manifest.id} install ${subtypeCliFlag(subtype)}${result.skipped.join(' ')}`,
+              ),
+            );
+          }
         }
         if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
       },
@@ -597,11 +613,18 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const save = await store.save('remove');
         if (result.removed.length > 0) {
           console.log(log.success(`Removed from ${key}: ${result.removed.join(', ')}`));
+          if (result.missing.length > 0) {
+            console.log(log.info(`Not present: ${result.missing.join(', ')}`));
+          }
         } else {
-          console.log(log.info(`Nothing to remove from ${key} — none of the names were tracked.`));
-        }
-        if (result.missing.length > 0 && result.removed.length > 0) {
-          console.log(log.info(`Not present: ${result.missing.join(', ')}`));
+          // Nothing matched. Echo the names so the user sees what they
+          // typed and point at `list` to find the tracked equivalents.
+          console.log(log.info(`Not tracked in ${key}: ${result.missing.join(', ')}`));
+          if (manifest.capabilities.list) {
+            console.log(
+              log.trace(`macup ${manifest.id} list ${subtypeCliFlag(subtype)}`.trimEnd()),
+            );
+          }
         }
         if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
       },

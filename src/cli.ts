@@ -40,6 +40,7 @@ import { resolveConfigPaths } from './config/paths';
 import { ConfigStore } from './config/store';
 import { MacupError } from './errors';
 import { ExecaExecRunner } from './exec/run';
+import { TracingExecRunner } from './exec/tracing';
 import { BUILTIN_PLUGINS, defaultRegistry, isOnPath } from './plugins/registry';
 import type { Plugin, PluginContext } from './plugins/types';
 import * as logui from './ui/log';
@@ -94,8 +95,18 @@ async function handleError<T>(fn: () => Promise<T>): Promise<T | undefined> {
   }
 }
 
+// Global --verbose / -V: trace every shell call (cmd + args + exit + duration
+// + stdout/stderr) to stderr. Detected before citty parses argv so the flag
+// can be stripped — subcommands don't declare it and would otherwise reject
+// it as unknown. -v is reserved by --version.
+const verbose = process.argv.includes('--verbose') || process.argv.includes('-V');
+if (verbose) {
+  process.argv = process.argv.filter((a) => a !== '--verbose' && a !== '-V');
+}
+
 const registry = defaultRegistry();
-const exec = new ExecaExecRunner();
+const baseExec = new ExecaExecRunner();
+const exec = verbose ? new TracingExecRunner(baseExec, { color: shouldUseColor() }) : baseExec;
 const log = {
   info: (m: string) => console.log(m),
   warn: (m: string) => console.warn(m),
@@ -451,7 +462,12 @@ const main = defineCommand({
           // the About panel before re-prompting.
           type Row = { label: string; value: Target | null; disabled?: true };
           const options: Row[] = [];
-          for (const g of groups) {
+          for (let gi = 0; gi < groups.length; gi++) {
+            // Blank disabled row between groups for visual breathing
+            // room. Skipped for the first group (no leading gap).
+            if (gi > 0) options.push({ label: '', value: null, disabled: true });
+            const g = groups[gi];
+            if (!g) continue;
             // Disabled header row carrying the inverted-pill category tag.
             // value is `null` (any non-undefined sentinel works for a
             // disabled row — clack will never return it).
@@ -461,7 +477,7 @@ const main = defineCommand({
             }
           }
           const choice = await select<Target | null>({
-            message: 'Which package manager?',
+            message: 'Which package manager?\n',
             options,
           });
           if (isCancel(choice) || choice === null) return null;
@@ -612,7 +628,7 @@ if (process.argv.includes('--version') || process.argv.includes('-v')) {
   console.log(
     logui.splashBlock({
       version: getVersion(),
-      description: 'A plugin-based CLI for tracking and updating developer packages on macOS.',
+      description: 'A CLI tool for tracking and updating apps + packages on macOS.',
       author: 'John Valai <git@jvk.to>',
       homepage: 'https://github.com/jv-k/macup',
       color: shouldUseColor(),
@@ -706,6 +722,7 @@ function showCustomHelp() {
   console.log(logui.header('GLOBAL OPTIONS'));
   console.log(`  ${s.cyan('--help, -h')}              Show this help`);
   console.log(`  ${s.cyan('--version, -v')}           Show version with logo`);
+  console.log(`  ${s.cyan('--verbose, -V')}           Trace every shell call to stderr`);
   console.log(`  ${s.cyan('--config')}                Show config path, schema, pins/skip counts`);
   console.log(`  ${s.cyan('--cleanup')}               Delete all backup files`);
   console.log(`  ${s.cyan('--restore')}               Restore config from a backup`);

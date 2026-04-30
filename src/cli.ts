@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import {
   autocompleteMultiselect,
   confirm,
+  groupMultiselect,
   isCancel,
   note,
   outro,
@@ -45,13 +46,7 @@ import type { Plugin, PluginContext } from './plugins/types';
 import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
 import { getVersion } from './version';
-import {
-  type ActionResult,
-  type Target,
-  WIZARD_HELP_PLUGIN_ID,
-  pickAction,
-  pickTarget,
-} from './wizard';
+import { type ActionResult, type Target, pickAction, pickTarget } from './wizard';
 
 function shouldUseColor(): boolean {
   if (process.env.NO_COLOR) return false;
@@ -426,35 +421,44 @@ const main = defineCommand({
       const target = await pickTarget({
         plugins: registry,
         selectTarget: async (groups) => {
-          // Flat single-pick `select`: each row carries the category as
-          // an inverted-pill prefix on its label so the visual hierarchy
-          // is preserved row-by-row. clack's `select` is single-pick by
-          // design (no toggling, no warn-after-the-fact); arrow keys
-          // navigate, enter submits.
-          // Plugin categories render as the inverted-pill header used in
-          // list output. The synthetic `Help` category's tag is rendered
-          // dim (plain text, no pill) so the header reads as a subdued
-          // footer; the row label itself stays normal so it's still
-          // legible alongside the plugin rows.
-          const options: Array<{ label: string; value: Target }> = [];
-          const useColor = shouldUseColor();
+          // groupMultiselect renders each category as a standalone
+          // inverted-pill header above its rows — the visual hierarchy
+          // the spec asks for. Although the picker is technically multi-
+          // select, the wizard operates on a single target: we take only
+          // the first item from the submission and warn if the user
+          // toggled more than one.
+          const options: Record<string, Array<{ label: string; value: Target }>> = {};
           for (const g of groups) {
-            const isHelp = g.items.some((it) => it.value.pluginId === WIZARD_HELP_PLUGIN_ID);
-            const tag = isHelp
-              ? useColor
-                ? pc.dim(g.category.toUpperCase())
-                : g.category.toUpperCase()
-              : logui.header(g.category);
-            for (const it of g.items) {
-              options.push({ label: `${tag}  ${it.label}`, value: it.value });
-            }
+            options[logui.header(g.category)] = g.items.map((it) => ({
+              label: it.label,
+              value: it.value,
+            }));
           }
-          const choice = await select<Target>({
-            message: 'Which package manager?',
+          const firstItem = groups[0]?.items[0];
+          const kbd = pc.underline;
+          const d = pc.dim;
+          const hint = `${d('(pick one — ')}${kbd('space')}${d(' to toggle · ')}${kbd('enter')}${d(' to confirm)')}`;
+          const choice = await groupMultiselect<Target>({
+            message: `Which package manager? ${hint}`,
             options,
+            selectableGroups: false,
+            groupSpacing: 1,
+            ...(firstItem ? { cursorAt: firstItem.value } : {}),
+            required: true,
           });
           if (isCancel(choice)) return null;
-          return choice as Target;
+          const arr = choice as readonly Target[];
+          if (arr.length === 0) return null;
+          if (arr.length > 1) {
+            const first = arr[0];
+            const label = first
+              ? `${first.pluginId}${first.subtype ? `:${first.subtype}` : ''}`
+              : '';
+            console.log(
+              logui.info(`Picked ${arr.length} categories — using only the first (${label}).`),
+            );
+          }
+          return arr[0] ?? null;
         },
         selectAction: async () => null, // unused at the target stage
         printAbout: () => printAboutScreen(),

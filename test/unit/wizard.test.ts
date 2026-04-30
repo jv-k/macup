@@ -178,8 +178,8 @@ describe('pickAction — option gating', () => {
     expect(offered).toEqual<WizardActionOption[]>([
       'list',
       'update',
-      'update-selected',
       'sync-tracked',
+      'update-selected',
       'install',
     ]);
   });

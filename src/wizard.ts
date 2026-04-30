@@ -129,11 +129,11 @@ export async function pickTarget(deps: WizardDeps): Promise<Target | null> {
 }
 
 const ACTION_LABELS: Record<WizardActionOption, string> = {
-  list: 'List all tracked',
-  update: 'Update all tracked',
-  'update-selected': 'Update selected',
-  'sync-tracked': 'Add/Remove tracked',
-  install: 'Install all tracked',
+  list: 'List tracked',
+  update: 'Update tracked',
+  'sync-tracked': 'Add/Remove',
+  'update-selected': 'Update selectively',
+  install: 'Install tracked',
 };
 
 function actionsFor(plugin: Plugin): WizardActionOption[] {
@@ -142,8 +142,8 @@ function actionsFor(plugin: Plugin): WizardActionOption[] {
   const opts: WizardActionOption[] = [];
   if (cap.list) opts.push('list');
   if (cap.update) opts.push('update');
-  if (cap.update && cap.outdated) opts.push('update-selected');
   if (cap.add && cap.remove && hasConfigKey) opts.push('sync-tracked');
+  if (cap.update && cap.outdated) opts.push('update-selected');
   if (cap.install) opts.push('install');
   return opts;
 }

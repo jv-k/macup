@@ -4,7 +4,6 @@ import { homedir } from 'node:os';
 import {
   autocompleteMultiselect,
   confirm,
-  groupMultiselect,
   isCancel,
   note,
   outro,
@@ -421,44 +420,24 @@ const main = defineCommand({
       const target = await pickTarget({
         plugins: registry,
         selectTarget: async (groups) => {
-          // groupMultiselect takes `Record<groupLabel, Option[]>`; build
-          // from the ordered groups[] so the on-screen order matches the
-          // registry order. Each category is styled as the inverted-pill
-          // header used in list output for visual consistency.
-          const options: Record<string, Array<{ label: string; value: Target }>> = {};
+          // Flat single-pick `select`: each row carries the category as
+          // an inverted-pill prefix on its label so the visual hierarchy
+          // is preserved row-by-row. clack's `select` is single-pick by
+          // design (no toggling, no warn-after-the-fact); arrow keys
+          // navigate, enter submits.
+          const options: Array<{ label: string; value: Target }> = [];
           for (const g of groups) {
-            options[logui.header(g.category)] = g.items.map((it) => ({
-              label: it.label,
-              value: it.value,
-            }));
+            const pill = logui.header(g.category);
+            for (const it of g.items) {
+              options.push({ label: `${pill}  ${it.label}`, value: it.value });
+            }
           }
-          const firstItem = groups[0]?.items[0];
-          const kbd = pc.underline;
-          const d = pc.dim;
-          const hint = `${d('(')}${kbd('space')}${d(' to toggle · ')}${kbd('enter')}${d(' to confirm)')}`;
-          // Single-pick semantics: groupMultiselect is the only group-aware
-          // picker clack ships, so we keep it for layout but enforce a
-          // single selection by taking only the first item from the
-          // submitted array (warn if the user picked more than one).
-          const choice = await groupMultiselect<Target>({
-            message: `Which package manager? ${hint}`,
+          const choice = await select<Target>({
+            message: 'Which package manager?',
             options,
-            selectableGroups: false,
-            groupSpacing: 1,
-            ...(firstItem ? { cursorAt: firstItem.value } : {}),
-            required: true,
           });
           if (isCancel(choice)) return null;
-          const arr = choice as readonly Target[];
-          if (arr.length === 0) return null;
-          if (arr.length > 1) {
-            console.log(
-              logui.info(
-                `Picked ${arr.length} categories — using only the first (${arr[0]?.pluginId}${arr[0]?.subtype ? `:${arr[0]?.subtype}` : ''}).`,
-              ),
-            );
-          }
-          return arr[0] ?? null;
+          return choice as Target;
         },
         selectAction: async () => null, // unused at the target stage
         printAbout: () => printAboutScreen(),
@@ -821,13 +800,17 @@ async function promptTrackedSetPicker(target: Target): Promise<readonly string[]
     return null;
   }
 
+  // Pre-selection (`initialValues` below) renders the checkbox state for
+  // tracked rows; we don't add a separate ✔ glyph to the label, since
+  // unticking a row would leave a stale ✔ in place and confuse the
+  // signal. The "tracked" / "not installed" tags go in `hint` (dim,
+  // non-searchable) so the autocomplete filter only matches names.
   const options = packages.map((p) => {
-    const tickedLabel = p.tracked ? `✔ ${p.name}` : `  ${p.name}`;
     const tags: string[] = [];
     if (p.tracked) tags.push('tracked');
     if (!p.installed) tags.push('not installed');
     const opt: { label: string; value: string; hint?: string } = {
-      label: tickedLabel,
+      label: p.name,
       value: p.name,
     };
     if (tags.length > 0) opt.hint = tags.join(', ');
@@ -873,7 +856,18 @@ async function applySyncTracked(
   const store = await getStore();
   if (adds.length > 0) store.add(key, [...adds]);
   if (removes.length > 0) store.remove(key, [...removes]);
-  await store.save('sync-tracked');
+  try {
+    await store.save('sync-tracked');
+  } catch (err) {
+    // The in-memory doc has already been mutated; without a successful
+    // save the on-disk state and the wizard's view of "tracked" will
+    // diverge for the rest of this session. Surface the error rather
+    // than silently continuing.
+    console.error(
+      `error: failed to save tracked-list changes (${err instanceof Error ? err.message : String(err)})`,
+    );
+    return;
+  }
   const useColor = shouldUseColor();
   const parts: string[] = [];
   for (const a of adds) parts.push(useColor ? pc.green(`+${a}`) : `+${a}`);

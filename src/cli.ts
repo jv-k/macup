@@ -6,6 +6,7 @@ import {
   confirm,
   groupMultiselect,
   isCancel,
+  note,
   outro,
   select,
   spinner,
@@ -102,6 +103,45 @@ const log = {
   error: (m: string) => console.error(m),
   debug: () => {},
 };
+
+function printAboutScreen(): void {
+  const useColor = shouldUseColor();
+  const dim = (t: string) => (useColor ? pc.dim(t) : t);
+  const code = (t: string) => (useColor ? pc.bold(t) : t);
+  const head = (t: string) => (useColor ? pc.bold(pc.cyan(t)) : t);
+
+  const lines: string[] = [];
+  lines.push('macup tracks and updates developer packages on macOS — Homebrew formulas/casks,');
+  lines.push('npm globals, pnpm globals, Mac App Store, Xcode, and system updates — all from');
+  lines.push(
+    `one tool. Your tracked list lives in ${code('~/.config/macup/applist.yaml')} so you can`,
+  );
+  lines.push('commit it to dotfiles.');
+  lines.push('');
+  lines.push(head('Common commands'));
+  lines.push(`  ${code('macup outdated')}              ${dim('Cross-plugin outdated summary')}`);
+  lines.push(
+    `  ${code('macup all update')}            ${dim('Update everything (with confirmation)')}`,
+  );
+  lines.push(`  ${code('macup brew list')}             ${dim('List tracked Homebrew packages')}`);
+  lines.push(`  ${code('macup brew add git curl')}     ${dim('Track new packages')}`);
+  lines.push(`  ${code('macup --help')}                ${dim('Full reference')}`);
+  lines.push(`  ${code('macup --plugins')}             ${dim('Which backends are available')}`);
+  lines.push('');
+  lines.push(head('In this wizard'));
+  lines.push(`  ${dim('•')} Space toggles a row, Enter confirms, Esc nav-backs one step.`);
+  lines.push(
+    `  ${dim('•')} On the package picker, type to filter; ${code('✔')} marks already-tracked rows.`,
+  );
+  lines.push(`  ${dim('•')} Pick ${code('Help')} again any time to see this screen.`);
+  lines.push('');
+  lines.push(`${dim('Docs:')} ${code('https://github.com/jv-k/macup')}`);
+
+  // Clack's `note` renders a framed panel with a title — that's the
+  // "main window" look we want, integrated with the wizard's prompt frame.
+  note(lines.join('\n'), 'About macup / how to use it');
+}
+
 async function getStore(): Promise<ConfigStore> {
   const paths = resolvePaths();
   const store = new ConfigStore(paths);
@@ -421,7 +461,7 @@ const main = defineCommand({
           return arr[0] ?? null;
         },
         selectAction: async () => null, // unused at the target stage
-        printAbout: () => showCustomHelp(),
+        printAbout: () => printAboutScreen(),
       });
       if (!target) {
         // Esc at target picker → exit wizard.

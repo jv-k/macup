@@ -45,7 +45,13 @@ import type { Plugin, PluginContext } from './plugins/types';
 import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
 import { getVersion } from './version';
-import { type ActionResult, type Target, pickAction, pickTarget } from './wizard';
+import {
+  type ActionResult,
+  type Target,
+  WIZARD_HELP_PLUGIN_ID,
+  pickAction,
+  pickTarget,
+} from './wizard';
 
 function shouldUseColor(): boolean {
   if (process.env.NO_COLOR) return false;
@@ -425,11 +431,22 @@ const main = defineCommand({
           // is preserved row-by-row. clack's `select` is single-pick by
           // design (no toggling, no warn-after-the-fact); arrow keys
           // navigate, enter submits.
+          // Plugin categories render as the inverted-pill header used in
+          // list output. The synthetic `Help` category's tag is rendered
+          // dim (plain text, no pill) so the header reads as a subdued
+          // footer; the row label itself stays normal so it's still
+          // legible alongside the plugin rows.
           const options: Array<{ label: string; value: Target }> = [];
+          const useColor = shouldUseColor();
           for (const g of groups) {
-            const pill = logui.header(g.category);
+            const isHelp = g.items.some((it) => it.value.pluginId === WIZARD_HELP_PLUGIN_ID);
+            const tag = isHelp
+              ? useColor
+                ? pc.dim(g.category.toUpperCase())
+                : g.category.toUpperCase()
+              : logui.header(g.category);
             for (const it of g.items) {
-              options.push({ label: `${pill}  ${it.label}`, value: it.value });
+              options.push({ label: `${tag}  ${it.label}`, value: it.value });
             }
           }
           const choice = await select<Target>({

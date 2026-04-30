@@ -4,7 +4,6 @@ import { homedir } from 'node:os';
 import {
   autocompleteMultiselect,
   confirm,
-  groupMultiselect,
   isCancel,
   note,
   outro,
@@ -421,44 +420,30 @@ const main = defineCommand({
       const target = await pickTarget({
         plugins: registry,
         selectTarget: async (groups) => {
-          // groupMultiselect renders each category as a standalone
-          // inverted-pill header above its rows — the visual hierarchy
-          // the spec asks for. Although the picker is technically multi-
-          // select, the wizard operates on a single target: we take only
-          // the first item from the submission and warn if the user
-          // toggled more than one.
-          const options: Record<string, Array<{ label: string; value: Target }>> = {};
+          // Single-pick `select` with disabled "header" rows for category
+          // pills — the cursor skips disabled rows automatically, so each
+          // arrow press lands on the next selectable plugin (or Help).
+          // Pressing Enter on any selectable row triggers it immediately;
+          // no two-step toggle/submit. Help is a regular row that returns
+          // its synthetic target — pickTarget intercepts it and renders
+          // the About panel before re-prompting.
+          type Row = { label: string; value: Target | null; disabled?: true };
+          const options: Row[] = [];
           for (const g of groups) {
-            options[logui.header(g.category)] = g.items.map((it) => ({
-              label: it.label,
-              value: it.value,
-            }));
+            // Disabled header row carrying the inverted-pill category tag.
+            // value is `null` (any non-undefined sentinel works for a
+            // disabled row — clack will never return it).
+            options.push({ label: logui.header(g.category), value: null, disabled: true });
+            for (const it of g.items) {
+              options.push({ label: `  ${it.label}`, value: it.value });
+            }
           }
-          const firstItem = groups[0]?.items[0];
-          const kbd = pc.underline;
-          const d = pc.dim;
-          const hint = `${d('(pick one — ')}${kbd('space')}${d(' to toggle · ')}${kbd('enter')}${d(' to confirm)')}`;
-          const choice = await groupMultiselect<Target>({
-            message: `Which package manager? ${hint}`,
+          const choice = await select<Target | null>({
+            message: 'Which package manager?',
             options,
-            selectableGroups: false,
-            groupSpacing: 1,
-            ...(firstItem ? { cursorAt: firstItem.value } : {}),
-            required: true,
           });
-          if (isCancel(choice)) return null;
-          const arr = choice as readonly Target[];
-          if (arr.length === 0) return null;
-          if (arr.length > 1) {
-            const first = arr[0];
-            const label = first
-              ? `${first.pluginId}${first.subtype ? `:${first.subtype}` : ''}`
-              : '';
-            console.log(
-              logui.info(`Picked ${arr.length} categories — using only the first (${label}).`),
-            );
-          }
-          return arr[0] ?? null;
+          if (isCancel(choice) || choice === null) return null;
+          return choice as Target;
         },
         selectAction: async () => null, // unused at the target stage
         printAbout: () => printAboutScreen(),

@@ -6,7 +6,6 @@ import {
   confirm,
   groupMultiselect,
   isCancel,
-  note,
   outro,
   select,
   spinner,
@@ -46,7 +45,7 @@ import type { PluginContext } from './plugins/types';
 import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
 import { getVersion } from './version';
-import { type Target, type WizardResult, runWizard } from './wizard';
+import { type ActionResult, type Target, pickAction, pickTarget } from './wizard';
 
 function shouldUseColor(): boolean {
   if (process.env.NO_COLOR) return false;
@@ -103,44 +102,6 @@ const log = {
   error: (m: string) => console.error(m),
   debug: () => {},
 };
-function printAboutScreen(): void {
-  const useColor = shouldUseColor();
-  const dim = (t: string) => (useColor ? pc.dim(t) : t);
-  const code = (t: string) => (useColor ? pc.bold(t) : t);
-  const head = (t: string) => (useColor ? pc.bold(pc.cyan(t)) : t);
-
-  const lines: string[] = [];
-  lines.push('macup tracks and updates developer packages on macOS — Homebrew formulas/casks,');
-  lines.push('npm globals, pnpm globals, Mac App Store, Xcode, and system updates — all from');
-  lines.push(
-    `one tool. Your tracked list lives in ${code('~/.config/macup/applist.yaml')} so you can`,
-  );
-  lines.push('commit it to dotfiles.');
-  lines.push('');
-  lines.push(head('Common commands'));
-  lines.push(`  ${code('macup outdated')}              ${dim('Cross-plugin outdated summary')}`);
-  lines.push(
-    `  ${code('macup all update')}            ${dim('Update everything (with confirmation)')}`,
-  );
-  lines.push(`  ${code('macup brew list')}             ${dim('List tracked Homebrew packages')}`);
-  lines.push(`  ${code('macup brew add git curl')}     ${dim('Track new packages')}`);
-  lines.push(`  ${code('macup --help')}                ${dim('Full reference')}`);
-  lines.push(`  ${code('macup --plugins')}             ${dim('Which backends are available')}`);
-  lines.push('');
-  lines.push(head('In this wizard'));
-  lines.push(`  ${dim('•')} Space toggles a row, Enter confirms, Esc nav-backs one step.`);
-  lines.push(
-    `  ${dim('•')} On the package picker, type to filter; ${code('✔')} marks already-tracked rows.`,
-  );
-  lines.push(`  ${dim('•')} Pick ${code('Help')} again any time to see this screen.`);
-  lines.push('');
-  lines.push(`${dim('Docs:')} ${code('https://github.com/jv-k/macup')}`);
-
-  // Clack's `note` renders a framed panel with a title — that's the
-  // "main window" look we want, integrated with the wizard's prompt frame.
-  note(lines.join('\n'), 'About macup / how to use it');
-}
-
 async function getStore(): Promise<ConfigStore> {
   const paths = resolvePaths();
   const store = new ConfigStore(paths);
@@ -413,18 +374,17 @@ const main = defineCommand({
       }),
     );
 
-    // Wizard runs in a loop: after each operation completes we return to
-    // the target-selection menu. The user exits by pressing Escape at
-    // either prompt (selectTargets or selectCommand returning null) or
-    // Ctrl-C (handled by the SIGINT handler in from-manifest.ts).
+    // Wizard runs as a two-level loop:
+    //   outer: pickTarget → choose category (or Esc to exit)
+    //   inner: pickAction → choose action, execute, repeat (Esc → outer)
     while (true) {
-      const wizResult: WizardResult | null = await runWizard({
+      const target = await pickTarget({
         plugins: registry,
-        selectTargets: async (groups) => {
-          // groupMultiselect takes `Record<groupLabel, Option[]>`; build from the
-          // ordered groups[] so the on-screen order matches the registry order.
-          // Style each category as the inverted-pill header used in list
-          // output, so the wizard reads with the same visual hierarchy.
+        selectTarget: async (groups) => {
+          // groupMultiselect takes `Record<groupLabel, Option[]>`; build
+          // from the ordered groups[] so the on-screen order matches the
+          // registry order. Each category is styled as the inverted-pill
+          // header used in list output for visual consistency.
           const options: Record<string, Array<{ label: string; value: Target }>> = {};
           for (const g of groups) {
             options[logui.header(g.category)] = g.items.map((it) => ({
@@ -435,201 +395,164 @@ const main = defineCommand({
           const firstItem = groups[0]?.items[0];
           const kbd = pc.underline;
           const d = pc.dim;
-          // groupMultiselect (unlike flat multiselect) doesn't support "a for all" —
-          // only space toggles. Don't advertise a key that does nothing.
           const hint = `${d('(')}${kbd('space')}${d(' to toggle · ')}${kbd('enter')}${d(' to confirm)')}`;
+          // Single-pick semantics: groupMultiselect is the only group-aware
+          // picker clack ships, so we keep it for layout but enforce a
+          // single selection by taking only the first item from the
+          // submitted array (warn if the user picked more than one).
           const choice = await groupMultiselect<Target>({
-            message: `Which package managers? ${hint}`,
+            message: `Which package manager? ${hint}`,
             options,
             selectableGroups: false,
-            // Blank line between each category for visual separation.
             groupSpacing: 1,
-            // Start the cursor on the first real item so the user lands on a
-            // selectable row, but do NOT pre-toggle it: a sticky preselection
-            // makes any extra toggle look like "the menu also ran brew"
-            // because the default stays in the submission alongside the
-            // user's pick. required:true asks Clack to enforce a non-empty
-            // selection; the explicit empty-array guard below is a safety
-            // net for Clack quirks.
             ...(firstItem ? { cursorAt: firstItem.value } : {}),
             required: true,
           });
           if (isCancel(choice)) return null;
           const arr = choice as readonly Target[];
           if (arr.length === 0) return null;
-          return arr;
+          if (arr.length > 1) {
+            console.log(
+              logui.info(
+                `Picked ${arr.length} categories — using only the first (${arr[0]?.pluginId}${arr[0]?.subtype ? `:${arr[0]?.subtype}` : ''}).`,
+              ),
+            );
+          }
+          return arr[0] ?? null;
         },
-        selectCommand: async (opts) => {
-          const choice = await select({
-            message: 'What do you want to do?',
-            options: opts as Array<{ label: string; value: string }>,
-          });
-          return isCancel(choice) ? null : (choice as string);
-        },
-        promptPackages: async (action, target) => {
-          const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
-          const plugin = registry.find((p) => p.manifest.id === target.pluginId);
-          if (!plugin) {
-            console.error(`error: plugin "${target.pluginId}" is not registered`);
-            return null;
-          }
-          const configKey = plugin.manifest.configKeyFor
-            ? plugin.manifest.configKeyFor(target.subtype)
-            : plugin.manifest.configKeys[0];
-          if (!configKey) {
-            console.error(`error: plugin "${target.pluginId}" has no tracked applist key`);
-            return null;
-          }
-
-          // Load the union of (system-installed, currently-tracked) so the
-          // user picks from a single arrow-key list. Tracked-but-uninstalled
-          // names also appear (so orphan tracked entries are removable).
-          const ctx: PluginContext = {
-            exec,
-            log,
-            signal: new AbortController().signal,
-          };
-          const s = spinner();
-          s.start(`Loading ${label} packages…`);
-          let statuses: Awaited<ReturnType<typeof plugin.list>>;
-          try {
-            await plugin.check(ctx);
-            statuses = await plugin.list(ctx, { subtype: target.subtype });
-          } catch (err) {
-            s.stop(`Couldn't load ${label} packages.`);
-            console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
-            return null;
-          }
-          s.stop(`Loaded ${label} packages.`);
-
-          const store = await getStore();
-          const trackedNames = store.list(configKey);
-          const trackedSet = new Set(trackedNames);
-          type Entry = { name: string; installed: boolean; tracked: boolean };
-          const union = new Map<string, Entry>();
-          for (const st of statuses) {
-            if (st.installed) {
-              union.set(st.ref.name, {
-                name: st.ref.name,
-                installed: true,
-                tracked: trackedSet.has(st.ref.name),
-              });
-            }
-          }
-          for (const name of trackedNames) {
-            if (!union.has(name)) {
-              union.set(name, { name, installed: false, tracked: true });
-            }
-          }
-          const packages = [...union.values()].sort((a, b) => a.name.localeCompare(b.name));
-
-          if (packages.length === 0) {
-            console.log(logui.info(`No packages available for ${label}.`));
-            return null;
-          }
-
-          // Build the option list:
-          //   - Tracked rows get a ✔ tick prefix on the label so they're
-          //     visually distinct (the alignment space on untracked rows
-          //     keeps names left-aligned with each other).
-          //   - All rows are selectable. Toggling a tracked row in `add`
-          //     or an untracked row in `remove` is a no-op at the store
-          //     layer (reported as `skipped` / `missing` in the output),
-          //     so we don't disable them — that just dimmed the row and
-          //     made the picker feel half-functional.
-          //   - Tags go in `hint` (rendered dim, not searchable) so the
-          //     autocomplete filter only matches package names.
-          const options = packages.map((p) => {
-            const tickedLabel = p.tracked ? `✔ ${p.name}` : `  ${p.name}`;
-            const tags: string[] = [];
-            if (p.tracked) tags.push('tracked');
-            if (!p.installed) tags.push('not installed');
-            const opt: { label: string; value: string; hint?: string } = {
-              label: tickedLabel,
-              value: p.name,
-            };
-            if (tags.length > 0) opt.hint = tags.join(', ');
-            return opt;
-          });
-
-          const choice = await autocompleteMultiselect<string>({
-            message: `Which packages to ${action} for ${label}? (type to filter)`,
-            options,
-            // Window size keeps the prompt navigable even with hundreds of
-            // entries (e.g. brew formula lists). Below this, arrow scrolling
-            // through the full list still works fine.
-            maxItems: 12,
-            required: true,
-          });
-          if (isCancel(choice)) return null;
-          return choice as readonly string[];
-        },
-        printAbout: () => printAboutScreen(),
+        selectAction: async () => null, // unused at the target stage
+        printAbout: () => showCustomHelp(),
       });
-
-      if (!wizResult) {
-        // Clack's cancelled-prompt rendering already closes the frame visually;
-        // adding outro() on top produces a double-gap, so we just exit.
+      if (!target) {
+        // Esc at target picker → exit wizard.
         return;
       }
 
-      let failed = false;
-      for (const t of wizResult.targets) {
-        // The wizard's `outdated` action is a read-only view; per-plugin
-        // commands implement it as `list --only-outdated`. Translate here
-        // so plugin subcommands don't need a separate registration.
-        const baseArgs =
-          wizResult.command === 'outdated' ? ['list', '--only-outdated'] : [wizResult.command];
-        const wizArgs = [...baseArgs];
-        if (t.subtype) wizArgs.push(`--subtype=${t.subtype}`);
-        if (wizResult.packages) wizArgs.push(...wizResult.packages);
-        const subtypeFrag = t.subtype ? ` --subtype=${t.subtype}` : '';
-        const pkgFrag = wizResult.packages?.length
-          ? ` ${wizResult.packages.map((p) => (p.includes(' ') ? `'${p}'` : p)).join(' ')}`
+      // Inner loop: keep showing the submenu until the user hits Esc.
+      while (true) {
+        const result: ActionResult | null = await pickAction(
+          {
+            plugins: registry,
+            selectTarget: async () => null, // unused at the action stage
+            selectAction: async (t, opts) => {
+              // Sticky inverted-pill header — printed on every prompt
+              // iteration so the user always sees which category they're
+              // operating on. Placing the print inside selectAction (vs.
+              // the outer loop) keeps the pill present even when
+              // pickAction internally re-prompts (e.g. Update-selected
+              // empty / cancelled).
+              console.log(`\n${logui.header(pluginCategoryFor(t, registry))}`);
+              const choice = await select({
+                message: 'What do you want to do?',
+                options: opts.map((o) => ({ label: o.label, value: o.value })),
+              });
+              return isCancel(choice) ? null : (choice as (typeof opts)[number]['value']);
+            },
+            fetchOutdated: async (t) => {
+              const plugin = registry.find((p) => p.manifest.id === t.pluginId);
+              if (!plugin) return [];
+              const ctx: PluginContext = {
+                exec,
+                log,
+                signal: new AbortController().signal,
+              };
+              const s = spinner();
+              s.start(`Checking ${plugin.manifest.displayName} for outdated packages…`);
+              try {
+                await plugin.check(ctx);
+                const statuses = await plugin.list(ctx, {
+                  subtype: t.subtype,
+                  onlyOutdated: true,
+                });
+                s.stop(`Checked ${plugin.manifest.displayName}.`);
+                if (statuses.length === 0) {
+                  // Print BEFORE returning so the user sees the message
+                  // before pickAction's loop re-renders the action prompt.
+                  console.log(logui.info('Already up-to-date.'));
+                  return [];
+                }
+                return statuses.map((st) => ({
+                  name: st.ref.name,
+                  currentVersion: st.installedVersion,
+                  latestVersion: st.latestVersion,
+                }));
+              } catch (err) {
+                s.stop(`Couldn't check ${plugin.manifest.displayName}.`);
+                console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+                return [];
+              }
+            },
+            pickOutdated: async (_t, rows) => {
+              const choice = await autocompleteMultiselect<string>({
+                message: 'Which packages to update? (type to filter)',
+                options: rows.map((r) => {
+                  const opt: { label: string; value: string; hint?: string } = {
+                    label: r.name,
+                    value: r.name,
+                  };
+                  if (r.currentVersion && r.latestVersion) {
+                    opt.hint = `${r.currentVersion} → ${r.latestVersion}`;
+                  }
+                  return opt;
+                }),
+                maxItems: 12,
+                required: true,
+              });
+              return isCancel(choice) ? null : (choice as readonly string[]);
+            },
+            currentTracked: async (t) => {
+              const plugin = registry.find((p) => p.manifest.id === t.pluginId);
+              if (!plugin) return [];
+              const key = plugin.manifest.configKeyFor
+                ? plugin.manifest.configKeyFor(t.subtype)
+                : plugin.manifest.configKeys[0];
+              if (!key) return [];
+              const store = await getStore();
+              return store.list(key);
+            },
+            pickTrackedSet: async (t) => promptTrackedSetPicker(t),
+          },
+          target,
+        );
+
+        if (!result) break; // Esc at submenu → back to pickTarget.
+
+        if (result.kind === 'sync-tracked') {
+          await applySyncTracked(result);
+          continue; // stay in submenu
+        }
+
+        // kind === 'dispatch'
+        const wizArgs: string[] = [result.command];
+        if (result.target.subtype) wizArgs.push(`--subtype=${result.target.subtype}`);
+        if (result.packages) wizArgs.push(...result.packages);
+        const subtypeFrag = result.target.subtype ? ` --subtype=${result.target.subtype}` : '';
+        const pkgFrag = result.packages?.length
+          ? ` ${result.packages.map((p) => (p.includes(' ') ? `'${p}'` : p)).join(' ')}`
           : '';
-        const label = `${t.pluginId} ${baseArgs.join(' ')}${subtypeFrag}${pkgFrag}`;
-        // Distinct echo: green-on-black ` macup ` pill (matches the splash
-        // badge) followed by the command in bold. The leading blank
-        // separates each iteration of the wizard loop; the trailing
-        // newline comes from console.log itself — adding another `\n`
-        // here would compound with the next output's leading blank.
+        const label = `${result.target.pluginId} ${result.command}${subtypeFrag}${pkgFrag}`;
         const useColor = shouldUseColor();
         const badge = useColor ? pc.inverse(pc.bold(pc.green(' macup '))) : 'macup';
         const styledLabel = useColor ? pc.bold(label) : label;
         console.log(`\n${badge} ${styledLabel}`);
-        const cmd = pluginSubCommands[t.pluginId];
+
+        const cmd = pluginSubCommands[result.target.pluginId];
         if (!cmd) {
-          console.error(`error: plugin "${t.pluginId}" is not available`);
-          process.exitCode = 1;
-          failed = true;
-          break;
+          console.error(`error: plugin "${result.target.pluginId}" is not available`);
+          // Reset so the next loop iteration isn't poisoned.
+          if (process.exitCode && process.exitCode !== 0) process.exitCode = 0;
+          continue;
         }
-        // Subcommands signal failure two ways: setting process.exitCode (validation
-        // paths like resolveSubtypeOrExit + requireNames) or throwing (subprocess
-        // runs via withSpinner). Handle both and stop the current operation either
-        // way so we don't pile on cascading updates against a user already seeing
-        // an error. Control still returns to the outer wizard loop afterwards.
         try {
           await runCommand(cmd, { rawArgs: wizArgs });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          console.error(`error running ${t.pluginId} ${wizResult.command}: ${msg}`);
-          process.exitCode = 1;
-          failed = true;
-          break;
+          console.error(`error running ${result.target.pluginId} ${result.command}: ${msg}`);
         }
-        if (process.exitCode && process.exitCode !== 0) {
-          failed = true;
-          break;
-        }
+        // Reset exit code between submenu actions so a previous failure
+        // doesn't poison the next iteration.
+        if (process.exitCode && process.exitCode !== 0) process.exitCode = 0;
       }
-
-      // Reset exitCode between operations so a previous failure doesn't
-      // poison the next one. The failure was already surfaced to the user
-      // via stderr; this lets them try another operation from the menu.
-      if (failed) process.exitCode = 0;
-      // Operations already render their own trailing whitespace (list/header
-      // blocks, success messages) — don't add another blank line here.
     }
   },
 });
@@ -774,4 +697,146 @@ function showCustomHelp() {
     `  ${s.dim('macup')} ${s.bold('--install-completions')}          Install shell completions`,
   );
   console.log('');
+}
+
+/**
+ * Returns the human-readable category label for a target. Falls back to the
+ * plugin's displayName if no `category` is set on the manifest. When the
+ * target carries a subtype, suffixes the category with `· <subtype>`.
+ */
+function pluginCategoryFor(target: Target, plugins: typeof registry): string {
+  const plugin = plugins.find((p) => p.manifest.id === target.pluginId);
+  if (!plugin) return target.pluginId;
+  const cat = plugin.manifest.category ?? plugin.manifest.displayName;
+  if (target.subtype) return `${cat} · ${target.subtype}`;
+  return cat;
+}
+
+/**
+ * "Add/Remove tracked" picker. Loads installed ∪ tracked rows for the
+ * given target, pre-checks rows that are already tracked, and returns the
+ * user-submitted set (or null if they cancelled).
+ *
+ * Pre-selection uses clack's `initialValues` (the supported API for
+ * autocompleteMultiselect in @clack/prompts 1.2). The per-option
+ * `selected: boolean` documented in some plan drafts is NOT exposed by
+ * the installed version — `initialValues` is the canonical knob.
+ */
+async function promptTrackedSetPicker(target: Target): Promise<readonly string[] | null> {
+  const plugin = registry.find((p) => p.manifest.id === target.pluginId);
+  if (!plugin) {
+    console.error(`error: plugin "${target.pluginId}" is not registered`);
+    return null;
+  }
+  const configKey = plugin.manifest.configKeyFor
+    ? plugin.manifest.configKeyFor(target.subtype)
+    : plugin.manifest.configKeys[0];
+  if (!configKey) {
+    console.error(`error: plugin "${target.pluginId}" has no tracked applist key`);
+    return null;
+  }
+  const ctx: PluginContext = {
+    exec,
+    log,
+    signal: new AbortController().signal,
+  };
+  const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
+  const s = spinner();
+  s.start(`Loading ${label} packages…`);
+  let statuses: Awaited<ReturnType<typeof plugin.list>>;
+  try {
+    await plugin.check(ctx);
+    statuses = await plugin.list(ctx, { subtype: target.subtype });
+  } catch (err) {
+    s.stop(`Couldn't load ${label} packages.`);
+    console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+  s.stop(`Loaded ${label} packages.`);
+
+  const store = await getStore();
+  const trackedNames = store.list(configKey);
+  const trackedSet = new Set(trackedNames);
+
+  type Entry = { name: string; installed: boolean; tracked: boolean };
+  const union = new Map<string, Entry>();
+  for (const st of statuses) {
+    if (st.installed) {
+      union.set(st.ref.name, {
+        name: st.ref.name,
+        installed: true,
+        tracked: trackedSet.has(st.ref.name),
+      });
+    }
+  }
+  for (const name of trackedNames) {
+    if (!union.has(name)) {
+      union.set(name, { name, installed: false, tracked: true });
+    }
+  }
+  const packages = [...union.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  if (packages.length === 0) {
+    console.log(logui.info(`No packages available for ${label}.`));
+    return null;
+  }
+
+  const options = packages.map((p) => {
+    const tickedLabel = p.tracked ? `✔ ${p.name}` : `  ${p.name}`;
+    const tags: string[] = [];
+    if (p.tracked) tags.push('tracked');
+    if (!p.installed) tags.push('not installed');
+    const opt: { label: string; value: string; hint?: string } = {
+      label: tickedLabel,
+      value: p.name,
+    };
+    if (tags.length > 0) opt.hint = tags.join(', ');
+    return opt;
+  });
+
+  const choice = await autocompleteMultiselect<string>({
+    message: `Tracked packages for ${label} (toggle to add/remove, type to filter)`,
+    options,
+    initialValues: [...trackedNames],
+    maxItems: 12,
+    required: false,
+  });
+  return isCancel(choice) ? null : (choice as readonly string[]);
+}
+
+/**
+ * Applies a sync-tracked ActionResult: stages adds + removes against the
+ * ConfigStore and commits in a single save. Echoes a one-line summary
+ * (`[ TRACKED ] +foo -bar`) so the user can see what changed without
+ * having to open applist.yaml.
+ */
+async function applySyncTracked(
+  result: Extract<ActionResult, { kind: 'sync-tracked' }>,
+): Promise<void> {
+  const { target, adds, removes } = result;
+  const plugin = registry.find((p) => p.manifest.id === target.pluginId);
+  if (!plugin) {
+    console.error(`error: plugin "${target.pluginId}" is not registered`);
+    return;
+  }
+  const key = plugin.manifest.configKeyFor
+    ? plugin.manifest.configKeyFor(target.subtype)
+    : plugin.manifest.configKeys[0];
+  if (!key) {
+    console.error(`error: plugin "${target.pluginId}" has no tracked applist key`);
+    return;
+  }
+  if (adds.length === 0 && removes.length === 0) {
+    console.log(`\n${logui.header('TRACKED')} no changes`);
+    return;
+  }
+  const store = await getStore();
+  if (adds.length > 0) store.add(key, [...adds]);
+  if (removes.length > 0) store.remove(key, [...removes]);
+  await store.save('sync-tracked');
+  const useColor = shouldUseColor();
+  const parts: string[] = [];
+  for (const a of adds) parts.push(useColor ? pc.green(`+${a}`) : `+${a}`);
+  for (const r of removes) parts.push(useColor ? pc.red(`-${r}`) : `-${r}`);
+  console.log(`\n${logui.header('TRACKED')} ${parts.join(' ')}`);
 }

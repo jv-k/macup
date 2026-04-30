@@ -45,13 +45,7 @@ import type { Plugin, PluginContext } from './plugins/types';
 import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
 import { getVersion } from './version';
-import {
-  type ActionResult,
-  type Target,
-  WIZARD_HELP_PLUGIN_ID,
-  pickAction,
-  pickTarget,
-} from './wizard';
+import { type ActionResult, type Target, pickAction, pickTarget } from './wizard';
 
 function shouldUseColor(): boolean {
   if (process.env.NO_COLOR) return false;
@@ -419,6 +413,12 @@ const main = defineCommand({
       }),
     );
 
+    // Help is rendered once at session start as a framed note above
+    // the first prompt, so it's visible "in the main window" without
+    // taking up a row in the plugin selector. Subsequent iterations of
+    // the wizard loop show the prompt without repeating the note.
+    printAboutScreen();
+
     // Wizard runs as a two-level loop:
     //   outer: pickTarget → choose category (or Esc to exit)
     //   inner: pickAction → choose action, execute, repeat (Esc → outer)
@@ -432,21 +432,13 @@ const main = defineCommand({
           // design (no toggling, no warn-after-the-fact); arrow keys
           // navigate, enter submits.
           // Plugin categories render as the inverted-pill header used in
-          // list output. The synthetic `Help` category's tag is rendered
-          // dim (plain text, no pill) so the header reads as a subdued
-          // footer; the row label itself stays normal so it's still
-          // legible alongside the plugin rows.
+          // list output, prefixed onto each row's label so the visual
+          // hierarchy is preserved row-by-row in a flat select list.
           const options: Array<{ label: string; value: Target }> = [];
-          const useColor = shouldUseColor();
           for (const g of groups) {
-            const isHelp = g.items.some((it) => it.value.pluginId === WIZARD_HELP_PLUGIN_ID);
-            const tag = isHelp
-              ? useColor
-                ? pc.dim(g.category.toUpperCase())
-                : g.category.toUpperCase()
-              : logui.header(g.category);
+            const pill = logui.header(g.category);
             for (const it of g.items) {
-              options.push({ label: `${tag}  ${it.label}`, value: it.value });
+              options.push({ label: `${pill}  ${it.label}`, value: it.value });
             }
           }
           const choice = await select<Target>({

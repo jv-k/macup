@@ -67,8 +67,6 @@ export interface WizardDeps {
 
 /** Synthetic plugin id for the Help entry on the target prompt. */
 export const WIZARD_HELP_PLUGIN_ID = '__about__';
-const WIZARD_HELP_CATEGORY = 'Help';
-const WIZARD_HELP_LABEL = 'About macup / how to use';
 
 function titleCase(s: string): string {
   return s.length === 0 ? s : s[0]?.toUpperCase() + s.slice(1);
@@ -102,12 +100,7 @@ function buildGroups(plugins: readonly Plugin[]): Array<{
       });
     }
   }
-  const out = Array.from(groups, ([category, items]) => ({ category, items }));
-  out.push({
-    category: WIZARD_HELP_CATEGORY,
-    items: [{ label: WIZARD_HELP_LABEL, value: { pluginId: WIZARD_HELP_PLUGIN_ID } }],
-  });
-  return out;
+  return Array.from(groups, ([category, items]) => ({ category, items }));
 }
 
 export async function pickTarget(deps: WizardDeps): Promise<Target | null> {

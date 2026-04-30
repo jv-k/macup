@@ -86,7 +86,11 @@ describe('pickTarget', () => {
     ]);
   });
 
-  it('appends a Help entry as its own group at the end', async () => {
+  it('does not inject a synthetic Help entry into the target groups', async () => {
+    // Help lives outside the picker now (rendered as a `note()` once at
+    // wizard session start by the CLI), so the picker shows only real
+    // plugin categories. Locking that contract in: no group should
+    // carry the synthetic help plugin id.
     let groupsSeen: ReadonlyArray<{
       readonly category: string;
       readonly items: ReadonlyArray<{ readonly label: string; readonly value: Target }>;
@@ -99,11 +103,15 @@ describe('pickTarget', () => {
         },
       }),
     );
-    const last = groupsSeen[groupsSeen.length - 1];
-    expect(last?.items[0]?.value.pluginId).toBe(WIZARD_HELP_PLUGIN_ID);
+    const allItems = groupsSeen.flatMap((g) => g.items);
+    expect(allItems.some((it) => it.value.pluginId === WIZARD_HELP_PLUGIN_ID)).toBe(false);
   });
 
-  it('invokes printAbout and re-prompts when the Help entry is selected', async () => {
+  it('still routes a synthetic Help target to printAbout if a custom selectTarget yields one', async () => {
+    // Defensive coverage: even though buildGroups no longer surfaces
+    // Help, pickTarget keeps the short-circuit so an external caller
+    // (or future tweak) can still trigger the about screen via the
+    // synthetic id without further wiring.
     let aboutCalls = 0;
     let pickCalls = 0;
     const result = await pickTarget(
@@ -122,7 +130,7 @@ describe('pickTarget', () => {
     expect(result).toEqual<Target>({ pluginId: 'npm' });
   });
 
-  it('errors and returns null when Help is picked but no printAbout handler is wired', async () => {
+  it('errors and returns null when a Help target is yielded but no printAbout handler is wired', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const result = await pickTarget(
       emptyDeps({

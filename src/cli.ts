@@ -103,6 +103,28 @@ const log = {
   debug: () => {},
 };
 
+/**
+ * How many rows clack should keep visible at once in an
+ * `autocompleteMultiselect`. Capped to fit the current terminal height
+ * minus a buffer for the prompt frame, message, hint, and validation
+ * line; never below 8 (so even small terminals show a usable window).
+ */
+function pickerMaxItems(total: number): number {
+  const rows = process.stdout.rows ?? 24;
+  const cap = Math.max(8, rows - 10);
+  return Math.min(total, cap);
+}
+
+/**
+ * Composes the prompt message: bold-ish title, then a dim count summary,
+ * then a dim parenthetical hint. Falls back to plain text when color
+ * is disabled (NO_COLOR or non-TTY).
+ */
+function pickerMessage(title: string, summary: string, hint: string): string {
+  if (!shouldUseColor()) return `${title}  ·  ${summary}  ${hint}`;
+  return `${title}  ${pc.dim(`· ${summary}`)}  ${pc.dim(hint)}`;
+}
+
 function printAboutScreen(): void {
   const useColor = shouldUseColor();
   const dim = (t: string) => (useColor ? pc.dim(t) : t);
@@ -508,8 +530,13 @@ const main = defineCommand({
               }
             },
             pickOutdated: async (_t, rows) => {
+              const total = rows.length;
               const choice = await autocompleteMultiselect<string>({
-                message: 'Which packages to update? (type to filter)',
+                message: pickerMessage(
+                  'Which packages to update?',
+                  `${total} outdated`,
+                  '(toggle to select, type to filter)',
+                ),
                 options: rows.map((r) => {
                   const opt: { label: string; value: string; hint?: string } = {
                     label: r.name,
@@ -520,7 +547,7 @@ const main = defineCommand({
                   }
                   return opt;
                 }),
-                maxItems: 12,
+                maxItems: pickerMaxItems(total),
                 required: true,
               });
               return isCancel(choice) ? null : (choice as readonly string[]);
@@ -821,11 +848,19 @@ async function promptTrackedSetPicker(target: Target): Promise<readonly string[]
     return opt;
   });
 
+  const total = packages.length;
+  const installedCount = packages.filter((p) => p.installed).length;
+  const trackedCount = trackedNames.length;
+  const summary = `${total} ${total === 1 ? 'package' : 'packages'} · ${trackedCount} tracked · ${installedCount} installed`;
   const choice = await autocompleteMultiselect<string>({
-    message: `Tracked packages for ${label} (toggle to add/remove, type to filter)`,
+    message: pickerMessage(
+      `Tracked packages for ${label}`,
+      summary,
+      '(toggle to add/remove, type to filter)',
+    ),
     options,
     initialValues: [...trackedNames],
-    maxItems: 12,
+    maxItems: pickerMaxItems(total),
     required: false,
   });
   return isCancel(choice) ? null : (choice as readonly string[]);

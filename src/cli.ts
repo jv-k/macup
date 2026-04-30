@@ -41,7 +41,7 @@ import { ConfigStore } from './config/store';
 import { MacupError } from './errors';
 import { ExecaExecRunner } from './exec/run';
 import { BUILTIN_PLUGINS, defaultRegistry, isOnPath } from './plugins/registry';
-import type { PluginContext } from './plugins/types';
+import type { Plugin, PluginContext } from './plugins/types';
 import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
 import { getVersion } from './version';
@@ -558,8 +558,6 @@ const main = defineCommand({
         const cmd = pluginSubCommands[result.target.pluginId];
         if (!cmd) {
           console.error(`error: plugin "${result.target.pluginId}" is not available`);
-          // Reset so the next loop iteration isn't poisoned.
-          if (process.exitCode && process.exitCode !== 0) process.exitCode = 0;
           continue;
         }
         try {
@@ -723,7 +721,7 @@ function showCustomHelp() {
  * plugin's displayName if no `category` is set on the manifest. When the
  * target carries a subtype, suffixes the category with `· <subtype>`.
  */
-function pluginCategoryFor(target: Target, plugins: typeof registry): string {
+function pluginCategoryFor(target: Target, plugins: readonly Plugin[]): string {
   const plugin = plugins.find((p) => p.manifest.id === target.pluginId);
   if (!plugin) return target.pluginId;
   const cat = plugin.manifest.category ?? plugin.manifest.displayName;

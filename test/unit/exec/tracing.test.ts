@@ -30,7 +30,7 @@ function makeInner() {
   });
 }
 
-describe('TracingExecRunner — fallback (inner runner doesn\'t honor stream callbacks)', () => {
+describe("TracingExecRunner — fallback (inner runner doesn't honor stream callbacks)", () => {
   it('emits pre-trace header, buffered output, then summary line', async () => {
     const out: string[] = [];
     const t = new TracingExecRunner(makeInner(), { print: (l) => out.push(l), color: false });
@@ -38,7 +38,7 @@ describe('TracingExecRunner — fallback (inner runner doesn\'t honor stream cal
     expect(r.stdout).toBe('git\nnode\n');
     expect(out[0]).toBe('$ brew list');
     expect(out.slice(1, 3)).toEqual(['  git', '  node']);
-    expect(out[3]).toMatch(/^  ↳ exit=0 · \d+ms$/);
+    expect(out[3]).toMatch(/^ {2}↳ exit=0 · \d+ms$/);
   });
 
   it('shows non-zero exit and routes stderr through the red branch', async () => {
@@ -48,7 +48,7 @@ describe('TracingExecRunner — fallback (inner runner doesn\'t honor stream cal
     expect(r.exitCode).toBe(1);
     expect(out[0]).toBe('$ brew boom');
     expect(out[1]).toBe('  Error: nope');
-    expect(out[2]).toMatch(/^  ↳ exit=1 · \d+ms$/);
+    expect(out[2]).toMatch(/^ {2}↳ exit=1 · \d+ms$/);
   });
 
   it('clips long output lines with a "+N chars" suffix', async () => {
@@ -85,7 +85,11 @@ class StreamingFakeRunner implements ExecRunner {
     private readonly exitCode = 0,
   ) {}
 
-  async run(_cmd: string, _args: readonly string[], opts: ExecRunOptions = {}): Promise<ExecResult> {
+  async run(
+    _cmd: string,
+    _args: readonly string[],
+    opts: ExecRunOptions = {},
+  ): Promise<ExecResult> {
     for (const chunk of this.stdoutChunks) opts.onStdout?.(chunk);
     for (const chunk of this.stderrChunks) opts.onStderr?.(chunk);
     return {
@@ -108,15 +112,12 @@ describe('TracingExecRunner — live streaming', () => {
   it('emits chunks as they arrive, coalescing mid-line splits', async () => {
     const out: string[] = [];
     // "Downloading…\nInstalling…\nDone\n" arriving in three weird chunks
-    const inner = new StreamingFakeRunner(
-      ['Downloa', 'ding…\nInstal', 'ling…\nDone\n'],
-      [],
-    );
+    const inner = new StreamingFakeRunner(['Downloa', 'ding…\nInstal', 'ling…\nDone\n'], []);
     const t = new TracingExecRunner(inner, { print: (l) => out.push(l), color: false });
     await t.run('brew', ['upgrade', '--cask', 'dotnet-sdk']);
     expect(out[0]).toBe('$ brew upgrade --cask dotnet-sdk');
     expect(out.slice(1, 4)).toEqual(['  Downloading…', '  Installing…', '  Done']);
-    expect(out[4]).toMatch(/^  ↳ exit=0 · \d+ms$/);
+    expect(out[4]).toMatch(/^ {2}↳ exit=0 · \d+ms$/);
   });
 
   it('does not duplicate streamed lines via the buffered fallback', async () => {

@@ -6,9 +6,9 @@
 // to stdout. --debug mode bypasses this sink entirely (TracingExecRunner
 // owns presentation).
 
+import type { StreamSource, UiSink } from '../exec/streaming';
 import * as log from './log';
 import type { StatusBar } from './status-bar';
-import type { StreamSource, UiSink } from '../exec/streaming';
 
 // Patterns scanned across query/check chunks so genuine failures aren't
 // silently swallowed. Conservative — only the `^Error:` / `^Warning:`

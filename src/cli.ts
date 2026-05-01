@@ -38,12 +38,12 @@ import { MacupError } from './errors';
 import { ExecaExecRunner } from './exec/run';
 import { StreamingExecRunner } from './exec/streaming';
 import { TracingExecRunner } from './exec/tracing';
-import { StatusBarSink } from './ui/status-bar-sink';
-import { supportsScrollRegions } from './ui/terminal-caps';
 import { BUILTIN_PLUGINS, defaultRegistry, isOnPath } from './plugins/registry';
 import type { Plugin, PluginContext } from './plugins/types';
 import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
+import { StatusBarSink } from './ui/status-bar-sink';
+import { supportsScrollRegions } from './ui/terminal-caps';
 import { getVersion } from './version';
 import { type ActionResult, type Target, pickAction, pickTarget } from './wizard';
 

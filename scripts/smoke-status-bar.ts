@@ -34,7 +34,10 @@ async function main() {
   await sleep(800);
 
   console.log('  → about to stream output for 3 seconds');
-  await exec.run('sh', ['-c', 'for i in 1 2 3 4 5 6 7 8 9 10; do echo "Downloading chunk $i…"; sleep 0.3; done']);
+  await exec.run('sh', [
+    '-c',
+    'for i in 1 2 3 4 5 6 7 8 9 10; do echo "Downloading chunk $i…"; sleep 0.3; done',
+  ]);
   console.log('  → stream done');
   await sleep(400);
 
@@ -46,7 +49,10 @@ async function main() {
   await sleep(800);
 
   bar.update('Step 3: a longer stream while the bar still animates');
-  await exec.run('sh', ['-c', 'for i in 1 2 3 4 5; do echo "Compiling module $i …"; sleep 0.4; done']);
+  await exec.run('sh', [
+    '-c',
+    'for i in 1 2 3 4 5; do echo "Compiling module $i …"; sleep 0.4; done',
+  ]);
 
   bar.stop();
   console.log('');

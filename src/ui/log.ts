@@ -244,7 +244,7 @@ export function splashBlock(opts: {
   termWidth?: number;
 }): string {
   const color = opts.color ?? useColor;
-  const logo = renderAppleLogo({ color, scale: .76 });
+  const logo = renderAppleLogo({ color, scale: 0.76 });
   const logoWidth = Math.max(0, ...logo.split('\n').map(visualWidth));
 
   const gap = 3;

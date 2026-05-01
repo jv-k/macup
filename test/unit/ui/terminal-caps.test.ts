@@ -16,9 +16,9 @@ describe('supportsScrollRegions', () => {
     expect(
       supportsScrollRegions(env({ TMUX: '/tmp/tmux-501/default,12345,0', TERM: 'tmux-256color' })),
     ).toBe(true);
-    expect(
-      supportsScrollRegions(env({ STY: '12345.pts-0.host', TERM: 'screen-256color' })),
-    ).toBe(true);
+    expect(supportsScrollRegions(env({ STY: '12345.pts-0.host', TERM: 'screen-256color' }))).toBe(
+      true,
+    );
     expect(supportsScrollRegions(env({ TERM: 'tmux-256color' }))).toBe(true);
     expect(supportsScrollRegions(env({ TERM: 'screen-256color' }))).toBe(true);
   });
@@ -30,17 +30,15 @@ describe('supportsScrollRegions', () => {
   });
 
   it('honors MACUP_STATUS_BAR=off as the user opt-out', () => {
-    expect(
-      supportsScrollRegions(env({ TERM: 'xterm-256color', MACUP_STATUS_BAR: 'off' })),
-    ).toBe(false);
-    expect(
-      supportsScrollRegions(env({ TERM: 'tmux-256color', MACUP_STATUS_BAR: 'off' })),
-    ).toBe(false);
+    expect(supportsScrollRegions(env({ TERM: 'xterm-256color', MACUP_STATUS_BAR: 'off' }))).toBe(
+      false,
+    );
+    expect(supportsScrollRegions(env({ TERM: 'tmux-256color', MACUP_STATUS_BAR: 'off' }))).toBe(
+      false,
+    );
   });
 
   it('still honors MACUP_STATUS_BAR=force on a dumb terminal (escape hatch)', () => {
-    expect(
-      supportsScrollRegions(env({ TERM: 'dumb', MACUP_STATUS_BAR: 'force' })),
-    ).toBe(true);
+    expect(supportsScrollRegions(env({ TERM: 'dumb', MACUP_STATUS_BAR: 'force' }))).toBe(true);
   });
 });

@@ -44,8 +44,10 @@ describe('StatusBar — lifecycle', () => {
     bar.start('Updating dotnet-sdk');
     const joined = writes.join('');
     // Set scroll region to rows 1..29 (bottom row 30 reserved for bar).
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: assert exact ANSI DECSTBM emission
     expect(joined).toMatch(/\x1b\[1;29r/);
     // Move cursor to bar row + clear it.
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: assert exact ANSI cursor + EL2 emission
     expect(joined).toMatch(/\x1b\[30;1H\x1b\[2K/);
     // Initial message rendered.
     expect(joined).toMatch(/Updating dotnet-sdk/);
@@ -65,6 +67,7 @@ describe('StatusBar — lifecycle', () => {
     // Reset region to default (no params).
     expect(joined).toContain('\x1b[r');
     // Clear the bar row.
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: assert exact ANSI cursor + EL2 emission
     expect(joined).toMatch(/\x1b\[30;1H\x1b\[2K/);
   });
 

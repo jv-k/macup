@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { StatusBarSink } from '../../../src/ui/status-bar-sink';
 import type { StatusBar } from '../../../src/ui/status-bar';
+import { StatusBarSink } from '../../../src/ui/status-bar-sink';
 
 // Lightweight fake bar with just the surface area the sink touches.
 function fakeBar() {
@@ -20,7 +20,7 @@ function fakeBar() {
 }
 
 describe('StatusBarSink — routing', () => {
-  it('user-action chunks land in the bar\'s box pane', () => {
+  it("user-action chunks land in the bar's box pane", () => {
     const { bar, pushed } = fakeBar();
     const sink = new StatusBarSink(bar);
     sink.onUserAction('==> Downloading\n', 'stdout');

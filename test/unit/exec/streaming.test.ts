@@ -29,7 +29,11 @@ class StreamingFakeInner implements ExecRunner {
     private readonly stderrChunks: readonly string[],
     private readonly exitCode = 0,
   ) {}
-  async run(_cmd: string, _args: readonly string[], opts: ExecRunOptions = {}): Promise<ExecResult> {
+  async run(
+    _cmd: string,
+    _args: readonly string[],
+    opts: ExecRunOptions = {},
+  ): Promise<ExecResult> {
     for (const chunk of this.stdoutChunks) opts.onStdout?.(chunk);
     for (const chunk of this.stderrChunks) opts.onStderr?.(chunk);
     return {

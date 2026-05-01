@@ -9,8 +9,8 @@
 // a matching prebuild, or an environment that hasn't run the build
 // scripts to chmod the spawn-helper).
 
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -65,8 +65,10 @@ describeIfPty('StatusBar — pty integration', () => {
     expect(all).toContain('DRIVER_DONE');
 
     // Scroll region installed: top=1, bottom=23 (last row reserved for bar).
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: assert exact ANSI DECSTBM emission
     expect(all).toMatch(/\x1b\[1;23r/);
     // Bar row addressed (row 24, col 1) and cleared at least once.
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: assert exact ANSI cursor + EL2 emission
     expect(all).toMatch(/\x1b\[24;1H\x1b\[2K/);
     // Initial message reached the terminal.
     expect(all).toContain('Updating dotnet-sdk');
@@ -78,6 +80,7 @@ describeIfPty('StatusBar — pty integration', () => {
     expect(all).toContain('\x1b7');
     expect(all).toContain('\x1b8');
     // Scroll region reset on stop().
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: assert exact ANSI DECSTBM reset
     expect(all).toMatch(/\x1b\[r/);
   });
 });

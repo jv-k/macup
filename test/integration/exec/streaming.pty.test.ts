@@ -2,8 +2,8 @@
 // subprocess chunks reach the user's terminal in order via process.stdout
 // when the inner runner streams them.
 
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const __filename = fileURLToPath(import.meta.url);

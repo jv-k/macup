@@ -12,14 +12,18 @@ const baseOpts = {
 describe('splashBlock', () => {
   it('renders side-by-side when the terminal fits the logo + header', () => {
     const out = splashBlock({ ...baseOpts, termWidth: 80 });
-    // Side-by-side: every non-empty line contains the header content
-    // alongside logo characters (i.e. the bullet appears to the right
-    // of a logo column, not at column 0).
+    // Side-by-side layout: header is on the LEFT, logo on the RIGHT.
+    // The bullet line therefore starts with `• Author:` and extends
+    // past the header column with logo glyphs.
     const lines = out.split('\n');
     const bulletLine = lines.find((l) => l.includes('Author:'));
     expect(bulletLine).toBeDefined();
-    // The line should start with logo glyphs/spaces, not the bullet itself.
-    expect(bulletLine?.startsWith('•')).toBe(false);
+    expect(bulletLine?.startsWith('• Author:')).toBe(true);
+    // Side-by-side guard: the rendered line must be wider than the
+    // header content alone (a stacked render would equal the header's
+    // own visual width).
+    const headerOnlyWidth = visualWidth(`• Author: ${baseOpts.author}`);
+    expect(visualWidth(bulletLine ?? '')).toBeGreaterThan(headerOnlyWidth);
   });
 
   it('falls back to stacked layout when the logo + homepage URL cannot both fit', () => {

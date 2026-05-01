@@ -11,10 +11,48 @@ import type {
   PluginContext,
 } from '../plugins/types';
 import * as log from '../ui/log';
+import { StatusBar } from '../ui/status-bar';
+import { supportsScrollRegions } from '../ui/terminal-caps';
 import { pluginHasSubtypes, resolveSubtypeOrExit } from './subtype';
 
-async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
-  if (!process.stdout.isTTY) return fn();
+// When --verbose is on, the TracingExecRunner streams shell output live to
+// stderr; an animated status bar over the same rows would clobber that
+// output. cli.ts calls setVerboseMode(true) at startup in that case to
+// suppress the bar across all install/update/health-check call sites.
+let verboseMode = false;
+export function setVerboseMode(v: boolean): void {
+  verboseMode = v;
+}
+
+// Module-level StatusBar shared across all spinner calls. Exported so
+// cli.ts can wire it to the StreamingExecRunner's UiSink — chunks from
+// `kind: 'user-action'` exec calls flow into bar.pushBox() during the
+// user-action spinner's lifetime.
+export const statusBar = new StatusBar();
+
+async function runWithBar<T>(
+  message: string,
+  options: { box?: boolean },
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (supportsScrollRegions()) {
+    statusBar.start(message);
+    if (options.box) statusBar.openBox(message);
+    try {
+      const result = await fn();
+      if (options.box) statusBar.closeBox();
+      statusBar.stop();
+      console.log(log.success(`${message.replace(/\.{3}$/, '')} done.`));
+      return result;
+    } catch (err) {
+      if (options.box) statusBar.closeBox();
+      statusBar.stop();
+      console.log(log.error(`${message.replace(/\.{3}$/, '')} failed.`));
+      throw err;
+    }
+  }
+  // Multiplexer / dumb-term fallback: clack spinner, animates on a
+  // single line via \r. Works reliably where DECSTBM is sketchy.
   const s = spinner();
   s.start(message);
   try {
@@ -25,6 +63,21 @@ async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T>
     s.stop(`${message.replace(/\.{3}$/, '')} failed.`);
     throw err;
   }
+}
+
+// Default spinner: animated bar only. Used for queries (list, outdated,
+// health checks) where the underlying chatter is dev-internal noise.
+async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
+  if (verboseMode || !process.stdout.isTTY) return fn();
+  return runWithBar(message, {}, fn);
+}
+
+// User-action spinner: bar + boxed pane that surfaces the subprocess's
+// real output (downloads, sudo prompts, success messages). Used for
+// install/upgrade flows where the user wants to *see* what's happening.
+async function withUserActionSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
+  if (verboseMode || !process.stdout.isTTY) return fn();
+  return runWithBar(message, { box: true }, fn);
 }
 
 export interface CommandDeps {
@@ -394,7 +447,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             console.log('');
             console.log(log.header(`Installing ${manifest.displayName}`));
             console.log('');
-            await withSpinner(`Installing ${manifest.displayName}...`, async () => {
+            await withUserActionSpinner(`Installing ${manifest.displayName}...`, async () => {
               await plugin.install?.(makeCtx(deps), [], {});
             });
             return;
@@ -407,7 +460,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             const ref = refs[i] as PackageRef;
             const started = Date.now();
             try {
-              await withSpinner(
+              await withUserActionSpinner(
                 log.counter(i + 1, refs.length, 'Installing', ref.name),
                 async () => {
                   await plugin.install?.(makeCtx(deps), [ref], {});
@@ -524,9 +577,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             const ref = refs[i] as PackageRef;
             const started = Date.now();
             try {
-              await withSpinner(log.counter(i + 1, refs.length, 'Updating', ref.name), async () => {
-                await plugin.update?.(makeCtx(deps), [ref], {});
-              });
+              await withUserActionSpinner(
+                log.counter(i + 1, refs.length, 'Updating', ref.name),
+                async () => {
+                  await plugin.update?.(makeCtx(deps), [ref], {});
+                },
+              );
               if (verbose) {
                 console.log(log.trace(`${ref.kind} · ${Date.now() - started}ms`));
               }

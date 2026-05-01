@@ -18,6 +18,15 @@ export interface OutdatedReport {
   plugins: readonly OutdatedPluginSummary[];
 }
 
+export interface OutdatedProgress {
+  readonly pluginId: string;
+  readonly displayName: string;
+  /** Total constituent plugins being queried (excludes the `all` aggregator). */
+  readonly total: number;
+  /** 1-based count of plugins that have settled (success or failure) so far. */
+  readonly completed: number;
+}
+
 export interface OutdatedReportDeps {
   readonly plugins: readonly Plugin[];
   /**
@@ -25,6 +34,11 @@ export interface OutdatedReportDeps {
    * abort on one (e.g. via the spinner) doesn't propagate to siblings.
    */
   readonly makeCtx: () => PluginContext;
+  /**
+   * Optional progress hook fired once per plugin as its check+list settles.
+   * Used by the CLI to drive a spinner; tests can omit it.
+   */
+  readonly onProgress?: (event: OutdatedProgress) => void;
 }
 
 /**
@@ -35,6 +49,8 @@ export interface OutdatedReportDeps {
  */
 export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<OutdatedReport> {
   const constituents = deps.plugins.filter((p) => p.manifest.id !== 'all');
+  const total = constituents.length;
+  let completed = 0;
 
   const summaries = await Promise.all(
     constituents.map(async (plugin): Promise<OutdatedPluginSummary> => {
@@ -56,6 +72,14 @@ export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<Out
           reason: err instanceof Error ? err.message : String(err),
           outdated: [],
         };
+      } finally {
+        completed += 1;
+        deps.onProgress?.({
+          pluginId: plugin.manifest.id,
+          displayName: plugin.manifest.displayName,
+          total,
+          completed,
+        });
       }
     }),
   );
@@ -85,6 +109,19 @@ export interface FormatOptions {
  *
  *     11 packages outdated · run `macup all update` to upgrade
  */
+/**
+ * Inverse-video bold pill matching log.ts header() styling, parameterised
+ * on `color` so callers (including tests) don't have to monkey with
+ * NO_COLOR or TTY detection. Rendered as `\n  <pill>\n` so it can be
+ * printed standalone above a spinner before aggregation begins.
+ */
+export function formatOutdatedHeader(opts: { color?: boolean } = {}): string {
+  const color = opts.color ?? false;
+  const label = ' OUTDATED ';
+  if (!color) return `\n  ${label.trim()}\n`;
+  return `\n  \x1b[33m\x1b[7m\x1b[1m${label}\x1b[0m\n`;
+}
+
 export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions = {}): string {
   const color = opts.color ?? false;
   const maxNames = opts.maxNames ?? 6;
@@ -95,8 +132,6 @@ export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions
   const idPad = Math.max(4, ...report.plugins.map((p) => p.pluginId.length));
 
   const lines: string[] = [];
-  lines.push('');
-
   for (const p of report.plugins) {
     const id = p.pluginId.padEnd(idPad);
     if (!p.available) {

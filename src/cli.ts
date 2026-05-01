@@ -19,9 +19,13 @@ import { defineCommand, runCommand, runMain } from 'citty';
 import pc from 'picocolors';
 import { runCleanup } from './commands/cleanup';
 import { buildConfigReport, formatConfigReport } from './commands/config';
-import { commandsFromManifest } from './commands/from-manifest';
+import { commandsFromManifest, setVerboseMode, statusBar } from './commands/from-manifest';
 import { formatInstallReport, installCompletions } from './commands/install-completions';
-import { buildOutdatedReport, formatOutdatedReport } from './commands/outdated';
+import {
+  buildOutdatedReport,
+  formatOutdatedHeader,
+  formatOutdatedReport,
+} from './commands/outdated';
 import { buildPluginsReport, formatPluginsReport } from './commands/plugins';
 import { runRestore } from './commands/restore';
 import { generateBashCompletions } from './completions/bash';
@@ -32,7 +36,10 @@ import { resolveConfigPaths } from './config/paths';
 import { ConfigStore } from './config/store';
 import { MacupError } from './errors';
 import { ExecaExecRunner } from './exec/run';
+import { StreamingExecRunner } from './exec/streaming';
 import { TracingExecRunner } from './exec/tracing';
+import { StatusBarSink } from './ui/status-bar-sink';
+import { supportsScrollRegions } from './ui/terminal-caps';
 import { BUILTIN_PLUGINS, defaultRegistry, isOnPath } from './plugins/registry';
 import type { Plugin, PluginContext } from './plugins/types';
 import * as logui from './ui/log';
@@ -87,18 +94,47 @@ async function handleError<T>(fn: () => Promise<T>): Promise<T | undefined> {
   }
 }
 
-// Global --verbose / -V: trace every shell call (cmd + args + exit + duration
-// + stdout/stderr) to stderr. Detected before citty parses argv so the flag
-// can be stripped — subcommands don't declare it and would otherwise reject
-// it as unknown. -v is reserved by --version.
+// Two verbosity flags, distinct semantics:
+//   --verbose / -V : curated user output. user-action subprocess chunks
+//                    stream live to scrollback (no box). query/check
+//                    chatter stays hidden. Pinned bar still active.
+//   --debug   / -D : raw full trace. Every shell call (kind included)
+//                    is annotated with `$ cmd args  exit=N · Nms` and
+//                    its full stdout/stderr to stderr. No bar, no box.
+// Both intercepted from argv before citty so subcommands don't reject
+// them. -v is reserved by --version.
+const debug = process.argv.includes('--debug') || process.argv.includes('-D');
 const verbose = process.argv.includes('--verbose') || process.argv.includes('-V');
-if (verbose) {
-  process.argv = process.argv.filter((a) => a !== '--verbose' && a !== '-V');
+if (debug || verbose) {
+  process.argv = process.argv.filter(
+    (a) => a !== '--debug' && a !== '-D' && a !== '--verbose' && a !== '-V',
+  );
 }
+
+// Streaming + pinned StatusBar are paired: the runner routes subprocess
+// chunks through a UiSink, and the bar reserves the last row via DECSTBM.
+// Default-on wherever a real TTY is detected; users with a flaky terminal
+// can opt out with MACUP_STATUS_BAR=off, which falls back to the original
+// ExecaExecRunner + clack inline spinner.
+const canPin = process.stdout.isTTY === true && supportsScrollRegions();
+const useStreaming = !debug && canPin;
+// setVerboseMode only suppresses the clack/bar spinners when --debug is
+// on (TracingExecRunner owns the screen then). --verbose keeps the bar
+// + bar's box pane; the bar's sink in verbose mode also tees to stdout.
+setVerboseMode(debug);
 
 const registry = defaultRegistry();
 const baseExec = new ExecaExecRunner();
-const exec = verbose ? new TracingExecRunner(baseExec, { color: shouldUseColor() }) : baseExec;
+let exec: ExecaExecRunner | TracingExecRunner | StreamingExecRunner = baseExec;
+if (debug) {
+  exec = new TracingExecRunner(baseExec, { color: shouldUseColor() });
+} else if (useStreaming) {
+  // user-action chunks always land in the bar's box pane. In --verbose
+  // they additionally tee to stdout so the user gets a grep-able copy
+  // in their scrollback above the box.
+  const sink = new StatusBarSink(statusBar, { teeUserActionToStdout: verbose });
+  exec = new StreamingExecRunner(baseExec, sink);
+}
 const log = {
   info: (m: string) => console.log(m),
   warn: (m: string) => console.warn(m),
@@ -203,15 +239,36 @@ const outdatedCommand = defineCommand({
     },
   },
   async run({ args }) {
+    // JSON callers want a pristine payload — skip both the pill header
+    // and the spinner so nothing leaks onto stdout before the JSON.
+    if (args.json) {
+      const report = await buildOutdatedReport({
+        plugins: registry,
+        makeCtx: () => ({ exec, log, signal: new AbortController().signal }),
+      });
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+
+    const color = shouldUseColor();
+    // Print the pill upfront so it stays visible above the spinner
+    // throughout aggregation (mirrors the wizard's sticky-category
+    // pattern). The total count is reported in the summary footer
+    // rather than baked into the pill — we don't have it yet here.
+    process.stdout.write(formatOutdatedHeader({ color }));
+
+    const useSpinner = process.stdout.isTTY === true;
+    const s = useSpinner ? spinner() : null;
+    s?.start('Checking plugins…');
     const report = await buildOutdatedReport({
       plugins: registry,
       makeCtx: () => ({ exec, log, signal: new AbortController().signal }),
+      onProgress: (e) => {
+        s?.message(`Checking plugins… (${e.completed}/${e.total}) ${e.displayName}`);
+      },
     });
-    if (args.json) {
-      console.log(JSON.stringify(report, null, 2));
-    } else {
-      console.log(formatOutdatedReport(report, { color: shouldUseColor() }));
-    }
+    s?.stop(`Checked ${report.plugins.length} plugin(s).`);
+    console.log(formatOutdatedReport(report, { color }));
   },
 });
 
@@ -728,7 +785,8 @@ function showCustomHelp() {
   console.log(logui.header('GLOBAL OPTIONS'));
   console.log(`  ${s.cyan('--help, -h')}              Show this help`);
   console.log(`  ${s.cyan('--version, -v')}           Show version with logo`);
-  console.log(`  ${s.cyan('--verbose, -V')}           Trace every shell call to stderr`);
+  console.log(`  ${s.cyan('--verbose, -V')}           Stream user-facing output to scrollback`);
+  console.log(`  ${s.cyan('--debug, -D')}             Trace every shell call to stderr (dev mode)`);
   console.log(`  ${s.cyan('--config')}                Show config path, schema, pins/skip counts`);
   console.log(`  ${s.cyan('--cleanup')}               Delete all backup files`);
   console.log(`  ${s.cyan('--restore')}               Restore config from a backup`);

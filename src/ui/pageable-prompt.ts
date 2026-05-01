@@ -8,11 +8,17 @@ interface OptionLike {
 
 export interface PageableAutocompleteOptions<T extends OptionLike> extends AutocompleteOptions<T> {
   /**
-   * Step size for PgUp/PgDn (and Home/End, which jump to the edges).
-   * Defaults to 10. The CLI passes the prompt's `maxItems` so a page-step
-   * matches the visible window.
+   * Fixed step size for PgUp/PgDn. Defaults to 10. Ignored when
+   * `pageStep` is also provided.
    */
   readonly pageSize?: number;
+  /**
+   * Dynamic step size: invoked on every PgUp/PgDn press to determine
+   * the current page worth of items. Lets multi-column renders
+   * recompute the step from the current grid layout (cols × rows)
+   * rather than baking it in at construction time.
+   */
+  readonly pageStep?: () => number;
 }
 
 /**
@@ -29,20 +35,26 @@ export interface PageableAutocompleteOptions<T extends OptionLike> extends Autoc
  * effective behavior is "go to top" / "go to bottom".
  */
 export class PageableAutocompletePrompt<T extends OptionLike> extends AutocompletePrompt<T> {
-  private readonly pageSize: number;
+  private readonly resolvePageStep: () => number;
 
   constructor(opts: PageableAutocompleteOptions<T>) {
     super(opts);
-    this.pageSize = Math.max(2, opts.pageSize ?? 10);
+    if (opts.pageStep) {
+      this.resolvePageStep = opts.pageStep;
+    } else {
+      const fixed = Math.max(2, opts.pageSize ?? 10);
+      this.resolvePageStep = () => fixed;
+    }
 
     this.on('key', (_char, key) => {
       if (!key) return;
+      const pageStep = Math.max(2, this.resolvePageStep());
       switch (key.name) {
         case 'pageup':
-          this.stepBy('up', this.pageSize - 1);
+          this.stepBy('up', pageStep - 1);
           break;
         case 'pagedown':
-          this.stepBy('down', this.pageSize - 1);
+          this.stepBy('down', pageStep - 1);
           break;
         case 'home':
           // Step a generous N — clack wraps; a few list-lengths is

@@ -11,9 +11,9 @@ import {
   S_STEP_ERROR,
   S_STEP_SUBMIT,
   isCancel as clackIsCancel,
-  limitOptions,
 } from '@clack/prompts';
 import pc from 'picocolors';
+import { visualWidth } from './log';
 import { PageableAutocompletePrompt } from './pageable-prompt';
 
 export interface PickerOption<Value> {
@@ -74,24 +74,117 @@ const radioOpt = (
   }
 };
 
+interface GridLayout {
+  /** Number of columns in the rendered grid. ≥1. */
+  cols: number;
+  /** Rows per column (the visible row count regardless of `cols`). */
+  rowsPerCol: number;
+  /** Total visible items per page = cols × rowsPerCol. */
+  pageItems: number;
+}
+
 /**
- * Pageable multi-select prompt.
+ * Computes a column-major grid layout sized to fit the terminal width.
+ * Each column is wide enough for the longest visible label plus a
+ * separator. Falls back to single-column when the terminal is too
+ * narrow for any 2-column layout.
+ */
+function gridLayout(
+  options: ReadonlyArray<PickerOption<unknown>>,
+  rowsPerCol: number,
+  termWidth: number,
+): GridLayout {
+  if (options.length === 0) {
+    return { cols: 1, rowsPerCol, pageItems: rowsPerCol };
+  }
+  // Width budget: terminal minus prompt frame ("│  " ≈ 3) and a small
+  // safety margin. Column separator costs 2 spaces between columns.
+  const usable = Math.max(20, termWidth - 4);
+  const colSep = 2;
+  // Use the inactive-state rendered width — every column slot has the
+  // same glyph + space + label structure, so this is the worst case
+  // for any state the row might land in during navigation.
+  const widest = Math.max(...options.map((o) => visualWidth(opt(o, 'inactive'))), 20);
+  const cols = Math.max(1, Math.floor((usable + colSep) / (widest + colSep)));
+  return { cols, rowsPerCol, pageItems: cols * rowsPerCol };
+}
+
+/**
+ * Renders the visible page (`cols × rowsPerCol` items) as a column-major
+ * grid: items fill column 1 top-to-bottom, then column 2, then column 3.
+ * That matches the user's expectation that ↓ moves visually down — the
+ * underlying 1D cursor `+= 1` move walks down a column, and at the
+ * column foot wraps to the top of the next column.
  *
- * Same API and rendering vocabulary as clack's stock
- * `autocompleteMultiselect`, plus:
- *   - PgUp / PgDn step the cursor by one visible window's worth.
- *   - Home / End jump to the top / bottom.
- *   - A right-aligned `N/M` page indicator on the message line, computed
- *     from the focused row and `maxItems`.
+ * Returns one rendered line per visible row, NOT including the prompt
+ * frame (caller prepends `│  `).
+ */
+function renderColumnGrid<Value>(
+  filtered: ReadonlyArray<PickerOption<Value>>,
+  cursor: number,
+  layout: GridLayout,
+  styled: (option: PickerOption<Value>, active: boolean) => string,
+): string[] {
+  const { cols, rowsPerCol, pageItems } = layout;
+  const page = Math.floor(cursor / pageItems);
+  const start = page * pageItems;
+  const end = Math.min(start + pageItems, filtered.length);
+  const visible = filtered.slice(start, end);
+
+  // Rendered cells indexed by column-major position within the page.
+  const cells: string[] = visible.map((o, i) => styled(o, start + i === cursor));
+
+  // Per-column widths so cells in the same column align.
+  const colWidths: number[] = new Array(cols).fill(0);
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rowsPerCol; r++) {
+      const i = c * rowsPerCol + r;
+      if (i >= cells.length) break;
+      const width = visualWidth(cells[i] ?? '');
+      if (width > (colWidths[c] ?? 0)) colWidths[c] = width;
+    }
+  }
+
+  const rows: string[] = [];
+  for (let r = 0; r < rowsPerCol; r++) {
+    const parts: string[] = [];
+    for (let c = 0; c < cols; c++) {
+      const i = c * rowsPerCol + r;
+      if (i >= cells.length) break;
+      const cell = cells[i] ?? '';
+      const padding = (colWidths[c] ?? 0) - visualWidth(cell);
+      parts.push(cell + ' '.repeat(Math.max(0, padding)));
+    }
+    if (parts.length > 0) rows.push(parts.join('  '));
+  }
+  return rows;
+}
+
+/**
+ * Pageable multi-select prompt with optional multi-column layout.
  *
- * Typing-to-filter still works via the underlying AutocompletePrompt's
- * `userInput` plumbing, just like clack's stock prompt.
+ * Adds these on top of clack's stock `autocompleteMultiselect`:
+ *   - Multi-column grid (column-major) sized to fit the terminal width;
+ *     1D cursor moves naturally walk down one column and wrap into the
+ *     next, matching arrow-key intuition.
+ *   - PgUp / PgDn step by one full page (cols × rowsPerCol items).
+ *   - Home / End jump to the start / end of the filtered list.
+ *   - Page indicator `(page A/B)` rendered when the list spans multiple
+ *     pages.
+ *   - Dim help footer below the option list.
+ *
+ * Typing-to-filter works via the underlying AutocompletePrompt's
+ * `userInput` plumbing, unchanged from clack's stock prompt.
  */
 export async function pageableAutocompleteMultiselect<Value>(
   opts: PickerOptions<Value>,
 ): Promise<readonly Value[] | symbol> {
   const required = opts.required ?? true;
-  const maxItems = opts.maxItems;
+  const rowsPerCol = opts.maxItems ?? 10;
+  // Mutable holder so the pageStep callback can read the latest layout
+  // computed in render(). render() runs before any keypress, so by the
+  // time PgUp/PgDn fires, this is populated.
+  let layout: GridLayout = { cols: 1, rowsPerCol, pageItems: rowsPerCol };
 
   const prompt: PageableAutocompletePrompt<PickerOption<Value>> = new PageableAutocompletePrompt<
     PickerOption<Value>
@@ -99,7 +192,7 @@ export async function pageableAutocompleteMultiselect<Value>(
     options: opts.options,
     multiple: true,
     initialValue: opts.initialValues ? [...opts.initialValues] : undefined,
-    pageSize: maxItems ?? 10,
+    pageStep: () => layout.pageItems,
     validate(value) {
       if (required && (value === undefined || (Array.isArray(value) && value.length === 0))) {
         return `Please select at least one option.\n${pc.reset(
@@ -113,10 +206,14 @@ export async function pageableAutocompleteMultiselect<Value>(
       return undefined;
     },
     render(this: PageableAutocompletePrompt<PickerOption<Value>>) {
+      // Recompute layout each render so terminal resizes and filter
+      // changes (which alter the visible widest label) take effect.
+      layout = gridLayout(this.filteredOptions, rowsPerCol, process.stdout.columns ?? 80);
+
       const titleLine = `${pc.gray(S_BAR)}\n${getStepSymbol(this.state)}  ${opts.message}${pageIndicator(
         this.cursor,
         this.filteredOptions.length,
-        maxItems,
+        layout.pageItems,
       )}\n`;
 
       const filterLine = renderFilterLine(this.userInputWithCursor);
@@ -138,7 +235,7 @@ export async function pageableAutocompleteMultiselect<Value>(
         }${selected.length > 0 ? `\n${pc.gray(S_BAR)}` : ''}`;
       }
 
-      // Active render: filter input + visible window of options.
+      // Active render: filter input + visible grid of options.
       const styled = (option: PickerOption<Value>, active: boolean): string => {
         const isSelected = (this.selectedValues as Value[]).includes(option.value as Value);
         if (active && isSelected) return opt(option, 'active-selected');
@@ -147,27 +244,21 @@ export async function pageableAutocompleteMultiselect<Value>(
         return opt(option, 'inactive');
       };
 
-      const visible = limitOptions({
-        cursor: this.cursor,
-        options: this.filteredOptions,
-        maxItems,
-        style: styled,
-      });
-
-      const empty =
+      const body =
         this.filteredOptions.length === 0
           ? `${pc.gray(S_BAR)}  ${pc.dim('No matches.')}`
-          : visible.map((line) => `${pc.gray(S_BAR)}  ${line}`).join('\n');
+          : renderColumnGrid(this.filteredOptions, this.cursor, layout, styled)
+              .map((line) => `${pc.gray(S_BAR)}  ${line}`)
+              .join('\n');
 
       const footer = renderHelpFooter();
 
       const errorLine = this.error ? `\n${pc.yellow(S_BAR_END)}  ${pc.yellow(this.error)}` : '';
 
-      return `${titleLine}${filterLine}\n${empty}\n${footer}${errorLine}`;
+      return `${titleLine}${filterLine}\n${body}\n${footer}${errorLine}`;
     },
   });
 
-  // Coerce the resolved value into the array of plain Values the caller expects.
   const resolved = await prompt.prompt();
   if (clackIsCancel(resolved)) return resolved;
   const arr = (resolved as PickerOption<Value>[] | undefined) ?? [];
@@ -182,7 +273,8 @@ export async function pageableAutocompleteMultiselect<Value>(
 export async function pageableSelect<Value>(
   opts: Omit<PickerOptions<Value>, 'initialValues'> & { initialValue?: Value },
 ): Promise<Value | symbol> {
-  const maxItems = opts.maxItems;
+  const rowsPerCol = opts.maxItems ?? 10;
+  let layout: GridLayout = { cols: 1, rowsPerCol, pageItems: rowsPerCol };
 
   const prompt: PageableAutocompletePrompt<PickerOption<Value>> = new PageableAutocompletePrompt<
     PickerOption<Value>
@@ -190,12 +282,14 @@ export async function pageableSelect<Value>(
     options: opts.options,
     multiple: false,
     initialValue: opts.initialValue !== undefined ? [opts.initialValue] : undefined,
-    pageSize: maxItems ?? 10,
+    pageStep: () => layout.pageItems,
     render(this: PageableAutocompletePrompt<PickerOption<Value>>) {
+      layout = gridLayout(this.filteredOptions, rowsPerCol, process.stdout.columns ?? 80);
+
       const titleLine = `${pc.gray(S_BAR)}\n${getStepSymbol(this.state)}  ${opts.message}${pageIndicator(
         this.cursor,
         this.filteredOptions.length,
-        maxItems,
+        layout.pageItems,
       )}\n`;
 
       const filterLine = renderFilterLine(this.userInputWithCursor);
@@ -212,17 +306,12 @@ export async function pageableSelect<Value>(
       const styled = (option: PickerOption<Value>, active: boolean): string =>
         radioOpt(option, active ? 'active' : 'inactive');
 
-      const visible = limitOptions({
-        cursor: this.cursor,
-        options: this.filteredOptions,
-        maxItems,
-        style: styled,
-      });
-
       const body =
         this.filteredOptions.length === 0
           ? `${pc.gray(S_BAR)}  ${pc.dim('No matches.')}`
-          : visible.map((line) => `${pc.gray(S_BAR)}  ${line}`).join('\n');
+          : renderColumnGrid(this.filteredOptions, this.cursor, layout, styled)
+              .map((line) => `${pc.gray(S_BAR)}  ${line}`)
+              .join('\n');
 
       return `${titleLine}${filterLine}\n${body}\n${renderHelpFooter()}`;
     },
@@ -252,15 +341,16 @@ function renderFilterLine(userInputWithCursor: string): string {
 }
 
 function pageIndicator(cursor: number, total: number, maxItems: number | undefined): string {
-  if (!maxItems || maxItems <= 0 || total <= maxItems) {
-    return total > 0 ? `  ${pc.dim(`(${total})`)}` : '';
-  }
+  // No paging needed → no indicator. The total count already lives in
+  // the title's summary fragment.
+  if (!maxItems || maxItems <= 0 || total <= maxItems) return '';
   const page = Math.floor(cursor / maxItems) + 1;
   const pages = Math.max(1, Math.ceil(total / maxItems));
-  return `  ${pc.dim(`(${total} · page ${page}/${pages})`)}`;
+  return `  ${pc.dim(`(page ${page}/${pages})`)}`;
 }
 
 function renderHelpFooter(): string {
-  const dim = pc.dim;
-  return `${pc.gray(S_BAR_END)}  ${dim('↑/↓ navigate · PgUp/PgDn page · Home/End jump · space toggle · enter submit · type to filter')}`;
+  return `${pc.gray(S_BAR_END)}  ${pc.dim(
+    '↑/↓ next · PgUp/PgDn page · Home/End jump · space toggle · enter submit · type to filter',
+  )}`;
 }

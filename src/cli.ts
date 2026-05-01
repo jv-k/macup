@@ -119,13 +119,14 @@ function pickerMaxItems(total: number): number {
 }
 
 /**
- * Composes the prompt message: bold-ish title, then a dim count summary,
- * then a dim parenthetical hint. Falls back to plain text when color
- * is disabled (NO_COLOR or non-TTY).
+ * Composes the prompt message: title plus a dim count summary. The
+ * keyboard hints (PgUp/PgDn, type to filter, etc.) live in the picker's
+ * own dim help footer below the option list, so the title doesn't need
+ * to repeat them.
  */
-function pickerMessage(title: string, summary: string, hint: string): string {
-  if (!shouldUseColor()) return `${title}  ·  ${summary}  ${hint}`;
-  return `${title}  ${pc.dim(`· ${summary}`)}  ${pc.dim(hint)}`;
+function pickerMessage(title: string, summary: string): string {
+  if (!shouldUseColor()) return `${title}  ·  ${summary}`;
+  return `${title}  ${pc.dim(`· ${summary}`)}`;
 }
 
 function printAboutScreen(): void {
@@ -446,23 +447,20 @@ const main = defineCommand({
         plugins: registry,
         selectTarget: async (groups) => {
           // Single-pick `select` with disabled "header" rows for category
-          // pills — the cursor skips disabled rows automatically, so each
-          // arrow press lands on the next selectable plugin (or Help).
-          // Pressing Enter on any selectable row triggers it immediately;
-          // no two-step toggle/submit. Help is a regular row that returns
-          // its synthetic target — pickTarget intercepts it and renders
-          // the About panel before re-prompting.
+          // pills and disabled "spacer" rows between groups. The cursor
+          // skips disabled rows automatically. Spacers use an
+          // ANSI-overwrite trick to look truly blank: the label starts
+          // with `\x1b[0m\b\b ` which resets clack's strikethrough/gray
+          // styling, then backs up over the bullet+space clack drew and
+          // writes a plain space, leaving the row visually empty (with
+          // the prompt frame intact).
+          const SPACER_LABEL = '\x1b[0m\b\b ';
           type Row = { label: string; value: Target | null; disabled?: true };
           const options: Row[] = [];
           for (let gi = 0; gi < groups.length; gi++) {
-            // Blank disabled row between groups for visual breathing
-            // room. Skipped for the first group (no leading gap).
-            if (gi > 0) options.push({ label: '', value: null, disabled: true });
+            if (gi > 0) options.push({ label: SPACER_LABEL, value: null, disabled: true });
             const g = groups[gi];
             if (!g) continue;
-            // Disabled header row carrying the inverted-pill category tag.
-            // value is `null` (any non-undefined sentinel works for a
-            // disabled row — clack will never return it).
             options.push({ label: logui.header(g.category), value: null, disabled: true });
             for (const it of g.items) {
               options.push({ label: `  ${it.label}`, value: it.value });
@@ -540,11 +538,7 @@ const main = defineCommand({
             pickOutdated: async (_t, rows) => {
               const total = rows.length;
               const choice = await pageableAutocompleteMultiselect<string>({
-                message: pickerMessage(
-                  'Which packages to update?',
-                  `${total} outdated`,
-                  '(toggle to select, type to filter, PgUp/PgDn to page)',
-                ),
+                message: pickerMessage('Which packages to update?', `${total} outdated`),
                 options: rows.map((r) => {
                   const opt: { label: string; value: string; hint?: string } = {
                     label: r.name,
@@ -862,11 +856,7 @@ async function promptTrackedSetPicker(target: Target): Promise<readonly string[]
   const trackedCount = trackedNames.length;
   const summary = `${total} ${total === 1 ? 'package' : 'packages'} · ${trackedCount} tracked · ${installedCount} installed`;
   const choice = await pageableAutocompleteMultiselect<string>({
-    message: pickerMessage(
-      `Tracked packages for ${label}`,
-      summary,
-      '(toggle to add/remove, type to filter, PgUp/PgDn to page)',
-    ),
+    message: pickerMessage(`Tracked packages for ${label}`, summary),
     options,
     initialValues: [...trackedNames],
     maxItems: pickerMaxItems(total),

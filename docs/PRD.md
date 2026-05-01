@@ -1,7 +1,7 @@
 # macup — Product Requirements Document
 
 > **Status:** v1.0.0 shipped (TypeScript rewrite). Distribution (Phase 8) pending.
-> **Last updated:** 2026-04-22
+> **Last updated:** 2026-05-01
 > **Owner:** John Valai
 
 ---
@@ -98,13 +98,15 @@ macup <plugin> <command> [args]
 
 | Plugin | Capabilities |
 |---|---|
-| `brew` | list, install, update, add, remove (formulas + casks) |
-| `npm` | list, install, update, add, remove |
-| `pnpm` | list, install, update, add, remove |
-| `appstore` | list, update |
-| `xcode` | list, update |
-| `system` | list, update (softwareupdate wrapper) |
+| `brew` | list, outdated, install, update, add, remove (formulas + casks) |
+| `npm` | list, outdated, install, update, add, remove |
+| `pnpm` | list, outdated, install, update, add, remove |
+| `appstore` | list, outdated, install, update, add, remove |
+| `xcode` | list, outdated, install, update |
+| `system` | list, outdated, install, update (softwareupdate wrapper) |
 | `all` | Composite — fans out across all plugins |
+
+A top-level `macup outdated` (and the `macup --outdated` shortcut) aggregates the per-plugin `outdated` results behind a spinner with progress, and supports `--json` for scripting.
 
 ### 5.2 Declarative manifest (`applist.yaml`)
 
@@ -122,7 +124,8 @@ skip:
 
 - XDG-compliant path resolution (`$XDG_CONFIG_HOME/macup/applist.yaml`)
 - Comment-preserving YAML round-trip (CST-based)
-- Legacy `~/.config/macos-updatetool/` auto-migration
+- Hierarchical layout (e.g. `brew.formulas` / `brew.casks`) with on-load auto-migration from older flat shapes
+- Legacy `~/.config/macos-updatetool/` directory auto-migration
 
 ### 5.3 Safety mechanisms
 
@@ -135,8 +138,14 @@ skip:
 ### 5.4 Interactive wizard
 
 Running `macup` with no args drops into a TTY-aware `@clack/prompts` flow:
-- Select plugin → select command → (for brew: select subtype) → execute
-- Graceful fallback to `--help` in non-TTY contexts
+
+1. **Help / About** — first prompt offers an "About macup" entry rendered via clack `note()`; selecting any other entry falls through to the target picker.
+2. **Pick a target** — plugins are grouped by `category` (e.g. "Node.js" for npm + pnpm, "macOS" for appstore/xcode/system) using `groupMultiselect`, with disabled header rows separating groups.
+3. **Pick an action** — capability-gated submenu (only actions the plugin advertises in its `manifest.capabilities` show up). The chosen target is rendered as a sticky pill above the prompt; Add/Remove diffs are previewed inline before confirmation.
+4. **Pick packages** (for `add` / `remove` / scoped `update`) — paged autocomplete picker with PgUp/PgDn, page indicator, count summary, and a multi-column grid layout.
+5. **Execute** — subprocess output streams into an inline bordered window (see §5.6); errors are indented and dimmed under the spinner line.
+
+Falls back to `--help` in non-TTY contexts.
 
 ### 5.5 Selective updates
 
@@ -148,8 +157,11 @@ Running `macup` with no args drops into a TTY-aware `@clack/prompts` flow:
 
 - **Shell completions** — zsh, bash, fish (manifest-driven, auto-extend per plugin)
 - **Context-aware help** — generated from plugin manifests, no dead arrays
-- **`--json` output** — structured output for `list` commands
+- **`--json` output** — structured output for `list` and `outdated` commands
 - **`--version`, `--config`, `--plugins`** — standard introspection (`--plugins` shows per-plugin availability with reasons when a binary is missing or the OS is unsupported)
+- **`--verbose` / `-V`** — curated user output: subprocess chunks from `kind: 'user-action'` calls (install/upgrade flows) stream live to scrollback in addition to the boxed pane; query/check chatter stays hidden. The pinned status bar remains active.
+- **`--debug` / `-D`** — raw full trace via `TracingExecRunner`: every shell call (kind included) annotated with `$ cmd args`, line-buffered live stdout/stderr, and a `↳ exit=N · Nms` summary on completion. Output goes to stderr so JSON-piped flows stay clean. Suppresses the bar.
+- **Pinned status bar + box pane** (TTY default on emulators that support DECSTBM scroll regions; opt out with `MACUP_STATUS_BAR=off`) — the last terminal row is reserved for a pinned status line; install/upgrade flows additionally open an N-row bordered box pane just above it where subprocess output streams live. Adapts to SIGWINCH. Falls back to the clack inline spinner on dumb terms or under `--debug`.
 
 ### 5.7 Distribution
 
@@ -310,6 +322,13 @@ src/plugins/selection.ts  — Pin/skip resolver (pure function)
 /plugins/system.ts
 /plugins/all.ts           — Composite with per-plugin error isolation
 
+src/exec/run.ts           — ExecaExecRunner (default subprocess runner)
+src/exec/streaming.ts     — StreamingExecRunner decorator → UiSink (TTY default)
+src/exec/tracing.ts       — TracingExecRunner decorator (--debug)
+src/ui/status-bar.ts      — Pinned bottom-row bar + DECSTBM box pane
+src/ui/status-bar-sink.ts — UiSink adapter: chunks → bar pane / notices
+src/ui/terminal-caps.ts   — Capability probe for scroll-region support
+
 src/bundles/              — Bundle host (v1.1)
 ├── schema.ts             — zod schema + parser
 ├── loader.ts             — file/URL/GitHub resolution + extends flattening
@@ -327,7 +346,8 @@ Bundles are a **layer above plugins** — they resolve per-plugin package lists 
 - **Runtime:** Node ≥ 20 primary; Bun ≥ 1.1 for dev + `--compile`
 - **CLI dispatch:** citty
 - **Interactive prompts:** @clack/prompts
-- **Subprocess:** execa (funnelled through `src/exec/run.ts`)
+- **Live UI:** log-update (inline bordered streaming window) + picocolors
+- **Subprocess:** execa (funnelled through `src/exec/run.ts`, decorated by tracing/windowing runners)
 - **YAML:** `yaml` (CST for comment preservation)
 - **Schema:** zod
 - **Testing:** vitest (180+ tests: unit, integration, regression, conformance)
@@ -387,11 +407,12 @@ Tracked in [GitHub issues](https://github.com/jv-k/macos-updatetool/issues):
 ### 8.3 Mid-term (v1.1 — scriptability + bundles)
 
 - **Bundles** — the headline v1.1 feature (see §5.8)
-- **#8** `--json` for all commands (not just `list`)
+- **Streaming progress** — shipped: `StreamingExecRunner` routes user-action subprocess chunks into a pinned `StatusBar`'s box pane on TTY-capable emulators; `--verbose` tees them to scrollback; `--debug` swaps in `TracingExecRunner` for full annotated traces.
+- **#8** `--json` for all commands (`outdated` already shipped; remaining gaps tracked under this issue)
 - **#9** `macup check` for shell prompts / cron
 - **#11** `macup info` system info dashboard
 - **#12** Changelog / diff view before updates
-- **#16** File logging (`--log`, `MACUP_LOG`)
+- **#16** File logging (`--log`, `MACUP_LOG`) — distinct from `--verbose`; persists traces to disk for post-hoc inspection
 
 ### 8.4 Long-term (v1.2+ — ecosystem)
 
@@ -404,7 +425,6 @@ Tracked in [GitHub issues](https://github.com/jv-k/macos-updatetool/issues):
 
 ### 8.5 Speculative (post-1.2)
 
-- **Streaming progress** for long `brew upgrade` / `npm update` runs
 - **Package search** in wizard's `add` flow
 - **Third-party plugin ecosystem** (`macup-plugin-*` npm packages)
 - **`brew search` / `npm search` integration** in wizard

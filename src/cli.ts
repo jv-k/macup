@@ -448,20 +448,24 @@ const main = defineCommand({
         selectTarget: async (groups) => {
           // Single-pick `select` with disabled "header" rows for category
           // pills and disabled "spacer" rows between groups. The cursor
-          // skips disabled rows automatically. Spacers use an
-          // ANSI-overwrite trick to look truly blank: the label starts
-          // with `\x1b[0m\b\b ` which resets clack's strikethrough/gray
-          // styling, then backs up over the bullet+space clack drew and
-          // writes a plain space, leaving the row visually empty (with
-          // the prompt frame intact).
-          const SPACER_LABEL = '\x1b[0m\b\b ';
+          // skips disabled rows automatically. Both kinds of disabled row
+          // use an ANSI-overwrite prefix: `\x1b[0m` resets clack's
+          // strikethrough/gray styling, then `\b\b ` backs up over the
+          // bullet+space clack drew and writes a plain space — erasing
+          // the bullet glyph entirely. Spacers end there (truly blank
+          // line); pills continue with their own styled label.
+          const HIDE_BULLET = '\x1b[0m\b\b ';
           type Row = { label: string; value: Target | null; disabled?: true };
           const options: Row[] = [];
           for (let gi = 0; gi < groups.length; gi++) {
-            if (gi > 0) options.push({ label: SPACER_LABEL, value: null, disabled: true });
+            if (gi > 0) options.push({ label: HIDE_BULLET, value: null, disabled: true });
             const g = groups[gi];
             if (!g) continue;
-            options.push({ label: logui.header(g.category), value: null, disabled: true });
+            options.push({
+              label: `${HIDE_BULLET}${logui.header(g.category)}`,
+              value: null,
+              disabled: true,
+            });
             for (const it of g.items) {
               options.push({ label: `  ${it.label}`, value: it.value });
             }
@@ -599,7 +603,23 @@ const main = defineCommand({
           await runCommand(cmd, { rawArgs: wizArgs });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          console.error(`error running ${result.target.pluginId} ${result.command}: ${msg}`);
+          // Indent + dim the failure block so it visually sits under the
+          // spinner's `◇  N/M Updating <pkg>` line rather than barging
+          // out at column 0. First line gets a dim ↳ arrow at the
+          // command-content column; continuation lines (e.g. multi-line
+          // stderr from brew's xcrun + Warning + Error blocks) sit one
+          // indent deeper.
+          const useColor = shouldUseColor();
+          const dim = (s: string) => (useColor ? pc.dim(s) : s);
+          const arrow = useColor ? pc.dim('↳') : '↳';
+          const lines = msg.split('\n');
+          const head = lines[0] ?? msg;
+          console.error(
+            `  ${arrow} ${dim(`${result.target.pluginId} ${result.command} failed: ${head}`)}`,
+          );
+          for (const line of lines.slice(1)) {
+            console.error(`    ${dim(line)}`);
+          }
         }
         // Reset exit code between submenu actions so a previous failure
         // doesn't poison the next iteration.

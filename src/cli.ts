@@ -1,16 +1,8 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import {
-  autocompleteMultiselect,
-  confirm,
-  isCancel,
-  note,
-  outro,
-  select,
-  spinner,
-  updateSettings,
-} from '@clack/prompts';
+import { confirm, isCancel, note, outro, select, spinner, updateSettings } from '@clack/prompts';
+import { pageableAutocompleteMultiselect } from './ui/picker';
 
 // Map keys clack doesn't handle by default. Page-up/page-down only step one
 // row (clack's action set has no page-step concept), but at minimum the
@@ -547,11 +539,11 @@ const main = defineCommand({
             },
             pickOutdated: async (_t, rows) => {
               const total = rows.length;
-              const choice = await autocompleteMultiselect<string>({
+              const choice = await pageableAutocompleteMultiselect<string>({
                 message: pickerMessage(
                   'Which packages to update?',
                   `${total} outdated`,
-                  '(toggle to select, type to filter)',
+                  '(toggle to select, type to filter, PgUp/PgDn to page)',
                 ),
                 options: rows.map((r) => {
                   const opt: { label: string; value: string; hint?: string } = {
@@ -869,11 +861,11 @@ async function promptTrackedSetPicker(target: Target): Promise<readonly string[]
   const installedCount = packages.filter((p) => p.installed).length;
   const trackedCount = trackedNames.length;
   const summary = `${total} ${total === 1 ? 'package' : 'packages'} · ${trackedCount} tracked · ${installedCount} installed`;
-  const choice = await autocompleteMultiselect<string>({
+  const choice = await pageableAutocompleteMultiselect<string>({
     message: pickerMessage(
       `Tracked packages for ${label}`,
       summary,
-      '(toggle to add/remove, type to filter)',
+      '(toggle to add/remove, type to filter, PgUp/PgDn to page)',
     ),
     options,
     initialValues: [...trackedNames],

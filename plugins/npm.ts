@@ -68,7 +68,10 @@ async function runAll(
       ctx.log.info(`[dry-run] npm ${action} -g ${ref.name}`);
       continue;
     }
-    const r = await ctx.exec.run('npm', [action, '-g', ref.name], { signal: ctx.signal });
+    const r = await ctx.exec.run('npm', [action, '-g', ref.name], {
+      signal: ctx.signal,
+      kind: 'user-action',
+    });
     if (r.exitCode !== 0) {
       throw new Error(
         `npm ${action} -g ${ref.name} exited ${r.exitCode}: ${r.stderr.trim() || r.stdout.trim()}`,

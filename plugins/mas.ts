@@ -135,7 +135,11 @@ export async function runMasAction(
       ctx.log.info(`[dry-run] mas ${action} ${target}`);
       continue;
     }
-    const r = await runMas(ctx, [action, target]);
+    const r = await ctx.exec.run('mas', [action, target], {
+      signal: ctx.signal,
+      env: MAS_ENV,
+      kind: 'user-action',
+    });
     if (r.exitCode !== 0) {
       throw new Error(
         `mas ${action} ${target} exited ${r.exitCode}: ${r.stderr.trim() || r.stdout.trim()}`,

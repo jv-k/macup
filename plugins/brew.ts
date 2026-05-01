@@ -114,7 +114,7 @@ async function runAll(
       continue;
     }
     const args = ref.kind === 'cask' ? [action, '--cask', ref.name] : [action, ref.name];
-    const r = await ctx.exec.run('brew', args, { signal: ctx.signal });
+    const r = await ctx.exec.run('brew', args, { signal: ctx.signal, kind: 'user-action' });
     if (r.exitCode !== 0) {
       throw new Error(
         `brew ${action} ${ref.name} exited ${r.exitCode}: ${r.stderr.trim() || r.stdout.trim()}`,

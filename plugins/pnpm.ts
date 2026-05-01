@@ -70,7 +70,10 @@ async function runAll(
       ctx.log.info(`[dry-run] pnpm ${action} -g ${ref.name}`);
       continue;
     }
-    const r = await ctx.exec.run('pnpm', [action, '-g', ref.name], { signal: ctx.signal });
+    const r = await ctx.exec.run('pnpm', [action, '-g', ref.name], {
+      signal: ctx.signal,
+      kind: 'user-action',
+    });
     if (r.exitCode !== 0) {
       throw new Error(
         `pnpm ${action} -g ${ref.name} exited ${r.exitCode}: ${r.stderr.trim() || r.stdout.trim()}`,

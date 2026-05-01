@@ -41,6 +41,7 @@ async function runInstall(
     }
     const r = await ctx.exec.run('softwareupdate', ['--install', ref.name, '--verbose'], {
       signal: ctx.signal,
+      kind: 'user-action',
     });
     if (r.exitCode !== 0) {
       throw new Error(

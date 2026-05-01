@@ -121,9 +121,12 @@ const xcode: Plugin = {
         continue;
       }
       if (ref.kind === 'xcode-clt') {
-        await ctx.exec.run('xcode-select', ['--install']);
+        await ctx.exec.run('xcode-select', ['--install'], { kind: 'user-action' });
       } else {
-        const r = await runMas(ctx, ['install', ref.id ?? XCODE_ID]);
+        const r = await ctx.exec.run('mas', ['install', ref.id ?? XCODE_ID], {
+          signal: ctx.signal,
+          kind: 'user-action',
+        });
         if (r.exitCode !== 0) {
           throw new Error(`mas install ${ref.id ?? XCODE_ID} exited ${r.exitCode}`);
         }
@@ -146,7 +149,10 @@ const xcode: Plugin = {
         ctx.log.info(`[dry-run] mas upgrade ${ref.id ?? XCODE_ID}`);
         continue;
       }
-      const r = await runMas(ctx, ['upgrade', ref.id ?? XCODE_ID]);
+      const r = await ctx.exec.run('mas', ['upgrade', ref.id ?? XCODE_ID], {
+        signal: ctx.signal,
+        kind: 'user-action',
+      });
       if (r.exitCode !== 0) {
         throw new Error(`mas upgrade ${ref.id ?? XCODE_ID} exited ${r.exitCode}`);
       }

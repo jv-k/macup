@@ -57,11 +57,33 @@ export interface ExecResult {
   readonly exitCode: number;
 }
 
+// Classifies an exec call by the user's perspective. The UI layer routes
+// chunks differently per kind:
+//   'user-action' → output is what the user asked for (brew install
+//                   chatter, sudo prompts, etc.). Goes in the boxed
+//                   window in default mode; streamed to stdout in
+//                   --verbose; fully traced in --debug.
+//   'query'       → internal data fetch (`brew outdated --json`, `mas
+//                   list`, `plutil`). Silent by default; only --debug
+//                   surfaces it.
+//   'check'       → health probes (onPath, version checks). Always
+//                   silent except in --debug.
+// Plugins explicitly tag user-actions; everything else defaults to
+// 'query' so adding kind is opt-in for new code paths.
+export type ExecRunKind = 'user-action' | 'query' | 'check';
+
 export interface ExecRunOptions {
   readonly input?: string;
   readonly cwd?: string;
   readonly signal?: AbortSignal;
   readonly env?: Readonly<Record<string, string>>;
+  readonly kind?: ExecRunKind;
+  // Live-streaming hooks. When set, the runner forwards each stdout/stderr
+  // chunk as it arrives (in addition to populating the final buffered
+  // ExecResult). Used by the streaming/tracing runners; default-runner
+  // buffering is unchanged when unset.
+  readonly onStdout?: (chunk: string) => void;
+  readonly onStderr?: (chunk: string) => void;
 }
 
 export interface ExecRunner {

@@ -5,13 +5,28 @@ import type { ExecResult, ExecRunOptions, ExecRunner } from '../plugins/types';
 export class ExecaExecRunner implements ExecRunner {
   async run(cmd: string, args: readonly string[], opts: ExecRunOptions = {}): Promise<ExecResult> {
     try {
-      const result = await execa(cmd, [...args], {
+      // Capture the subprocess synchronously so we can subscribe to its
+      // stdout/stderr streams *before* awaiting completion. With buffered
+      // exec we'd only see output after the whole command finishes — fatal
+      // for long brew operations under --verbose.
+      const subprocess = execa(cmd, [...args], {
         input: opts.input,
         cwd: opts.cwd,
         cancelSignal: opts.signal,
         env: opts.env,
         reject: false,
       });
+      if (opts.onStdout && subprocess.stdout) {
+        subprocess.stdout.on('data', (chunk: Buffer | string) => {
+          opts.onStdout?.(typeof chunk === 'string' ? chunk : chunk.toString('utf8'));
+        });
+      }
+      if (opts.onStderr && subprocess.stderr) {
+        subprocess.stderr.on('data', (chunk: Buffer | string) => {
+          opts.onStderr?.(typeof chunk === 'string' ? chunk : chunk.toString('utf8'));
+        });
+      }
+      const result = await subprocess;
       return {
         stdout: typeof result.stdout === 'string' ? result.stdout : String(result.stdout ?? ''),
         stderr: typeof result.stderr === 'string' ? result.stderr : String(result.stderr ?? ''),

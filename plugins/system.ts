@@ -1,4 +1,4 @@
-import { ErrPluginUnavailable } from '../src/errors';
+import { defaultCheck } from '../src/plugins/defaults';
 import type {
   ListOptions,
   MutateOptions,
@@ -69,11 +69,7 @@ const system: Plugin = {
     },
   },
 
-  async check(ctx: PluginContext): Promise<void> {
-    if (!ctx.exec.onPath('softwareupdate')) {
-      throw new ErrPluginUnavailable('system', '`softwareupdate` was not found on PATH');
-    }
-  },
+  check: defaultCheck('system', ['softwareupdate']),
 
   async list(ctx: PluginContext, _opts: ListOptions): Promise<PackageStatus[]> {
     return fetchUpdates(ctx);

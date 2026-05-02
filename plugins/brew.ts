@@ -1,4 +1,4 @@
-import { ErrPluginUnavailable } from '../src/errors';
+import { defaultCheck } from '../src/plugins/defaults';
 import type {
   ListOptions,
   MutateOptions,
@@ -145,11 +145,7 @@ const brew: Plugin = {
     },
   },
 
-  async check(ctx: PluginContext): Promise<void> {
-    if (!ctx.exec.onPath('brew')) {
-      throw new ErrPluginUnavailable('brew', '`brew` was not found on PATH');
-    }
-  },
+  check: defaultCheck('brew', ['brew']),
 
   async list(ctx: PluginContext, opts: ListOptions): Promise<PackageStatus[]> {
     const onlyOutdated = opts.onlyOutdated ?? false;

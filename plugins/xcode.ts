@@ -1,4 +1,4 @@
-import { ErrPluginUnavailable } from '../src/errors';
+import { defaultCheck } from '../src/plugins/defaults';
 import type {
   ListOptions,
   MutateOptions,
@@ -90,13 +90,7 @@ const xcode: Plugin = {
     },
   },
 
-  async check(ctx: PluginContext): Promise<void> {
-    for (const binary of ['mas', 'xcode-select', 'pkgutil']) {
-      if (!ctx.exec.onPath(binary)) {
-        throw new ErrPluginUnavailable('xcode', `\`${binary}\` was not found on PATH`);
-      }
-    }
-  },
+  check: defaultCheck('xcode', ['mas', 'xcode-select', 'pkgutil']),
 
   async list(ctx: PluginContext, opts: ListOptions): Promise<PackageStatus[]> {
     const [app, clt] = await Promise.all([fetchXcodeApp(ctx), fetchCommandLineTools(ctx)]);

@@ -1,4 +1,4 @@
-import { ErrPluginUnavailable } from '../src/errors';
+import { defaultCheck } from '../src/plugins/defaults';
 import type {
   ListOptions,
   MutateOptions,
@@ -100,11 +100,7 @@ const pnpm: Plugin = {
     },
   },
 
-  async check(ctx: PluginContext): Promise<void> {
-    if (!ctx.exec.onPath('pnpm')) {
-      throw new ErrPluginUnavailable('pnpm', '`pnpm` was not found on PATH');
-    }
-  },
+  check: defaultCheck('pnpm', ['pnpm']),
 
   async list(ctx: PluginContext, opts: ListOptions): Promise<PackageStatus[]> {
     return fetchStatus(ctx, opts.onlyOutdated ?? false);

@@ -94,6 +94,29 @@ async function handleError<T>(fn: () => Promise<T>): Promise<T | undefined> {
   }
 }
 
+// Top-level "flag-styled" commands accept their no-dash form as an
+// alias so users can type `macup version` / `macup config` / etc. The
+// canonical implementation still goes through citty's boolean args
+// (--version, --config, …); we just rewrite argv before citty parses.
+// Skipped when the same word appears anywhere after position 2 (i.e.
+// inside a plugin command like `macup brew add config`) so plugin
+// args of the same name aren't accidentally hijacked.
+const FLAG_COMMAND_ALIASES = [
+  'version',
+  'config',
+  'cleanup',
+  'restore',
+  'logo',
+  'plugins',
+  'install-completions',
+] as const;
+if (process.argv.length > 2) {
+  const first = process.argv[2];
+  if (typeof first === 'string' && (FLAG_COMMAND_ALIASES as readonly string[]).includes(first)) {
+    process.argv[2] = `--${first}`;
+  }
+}
+
 // Two verbosity flags, distinct semantics:
 //   --verbose / -V : curated user output. user-action subprocess chunks
 //                    stream live to scrollback (no box). query/check

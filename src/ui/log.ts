@@ -45,6 +45,10 @@ export function errorHeader(text: string, count?: number): string {
   return invertedLabel(text, count, pc.red);
 }
 
+export function dimmedHeader(text: string, count?: number): string {
+  return invertedLabel(text, count, pc.dim);
+}
+
 // ── Package lines ───────────────────────────────────────────────
 
 export function pkgUpToDate(name: string, version: string, pad: number): string {

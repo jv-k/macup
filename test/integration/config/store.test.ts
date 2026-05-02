@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ConfigStore } from '../../../src/config/store';
 
@@ -108,6 +108,19 @@ describe('ConfigStore — save', () => {
     expect(written).toContain('git');
   });
 
+  it('leaves no .tmp file behind after a successful atomic save', async () => {
+    // The atomic write writes to applist.yaml.tmp first, then renames over
+    // applist.yaml. After a clean save, the tmp must not still exist —
+    // otherwise we'd accumulate orphan files in the user's config dir.
+    await seed('brew:\n  formulas:\n    - git\n');
+    const s = await store();
+    s.add('brew.formulas', ['curl']);
+    await s.save('add');
+
+    const entries = await readdir(dirname(applistPath));
+    expect(entries.filter((e) => e.endsWith('.tmp'))).toEqual([]);
+  });
+
   it('returns changed=false and creates no backup when nothing mutated', async () => {
     await seed('brew:\n  formulas:\n    - git\n');
     const s = await store();
@@ -198,6 +211,16 @@ describe('ConfigStore — pins and skip', () => {
 });
 
 describe('ConfigStore — legacy layout migration', () => {
+  it('surfaces the migration backup path when post-migration validation fails', async () => {
+    // Legacy file with the wrong shape: `npm_apps` should be a list of
+    // strings, but here it's a scalar. Migration renames the key to `npm`,
+    // and validation then fails. The error message must mention the
+    // migration backup so the user can recover their original file.
+    await seed('npm_apps: not-a-list\n');
+    const s = new ConfigStore({ applistPath, backupDir });
+    await expect(s.load()).rejects.toThrow(/auto-migration ran; original saved to .*applist_migration_/);
+  });
+
   it('migrates flat keys to nested layout on load and writes a migration backup', async () => {
     const legacy = [
       'appstore_apps:',

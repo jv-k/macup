@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Document, Scalar, YAMLMap, YAMLSeq, parseDocument } from 'yaml';
 import { ErrInvalidConfig } from '../errors';
@@ -33,6 +33,16 @@ function scalarValue(node: unknown): string {
     return String((node as { value: unknown }).value);
   }
   return String(node);
+}
+
+// Crash-safe write: write to a sibling tmp file, then rename. POSIX rename
+// is atomic on the same filesystem, so a half-written tmp never replaces
+// the live config — at worst it lingers as an orphan after a hard crash.
+// Exported so tests can exercise the same path without rebinding fs.
+export async function atomicWriteFile(filePath: string, contents: string): Promise<void> {
+  const tmpPath = `${filePath}.tmp`;
+  await writeFile(tmpPath, contents, 'utf8');
+  await rename(tmpPath, filePath);
 }
 
 function timestamp(now: Date): string {
@@ -171,7 +181,13 @@ export class ConfigStore {
 
     const parsed = ApplistSchema.safeParse(this.doc.toJS() ?? {});
     if (!parsed.success) {
-      throw new ErrInvalidConfig(this.paths.applistPath, parsed.error.message);
+      // Migration ran, then validation failed → the on-disk file was just
+      // rewritten and is now invalid. Surface the backup path so the user
+      // can recover, even if they didn't know a migration was happening.
+      const suffix = result.migrationBackupPath
+        ? ` (auto-migration ran; original saved to ${result.migrationBackupPath})`
+        : '';
+      throw new ErrInvalidConfig(this.paths.applistPath, parsed.error.message + suffix);
     }
     return result;
   }
@@ -186,7 +202,7 @@ export class ConfigStore {
       backupPath = join(this.paths.backupDir, `applist_migration_${timestamp(this.now())}.yaml`);
       await copyFile(this.paths.applistPath, backupPath);
     }
-    await writeFile(this.paths.applistPath, newText, 'utf8');
+    await atomicWriteFile(this.paths.applistPath, newText);
     this.originalText = newText;
     this.fileExisted = true;
     return backupPath;
@@ -333,7 +349,7 @@ export class ConfigStore {
       backupPath = join(this.paths.backupDir, `applist_${operation}_${timestamp(this.now())}.yaml`);
       await copyFile(this.paths.applistPath, backupPath);
     }
-    await writeFile(this.paths.applistPath, newText, 'utf8');
+    await atomicWriteFile(this.paths.applistPath, newText);
     this.originalText = newText;
     this.fileExisted = true;
     return backupPath ? { changed: true, backupPath } : { changed: true };

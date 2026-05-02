@@ -11,17 +11,16 @@
 // promptTrackedSetPicker, applySyncTracked) sit together instead of
 // scattered through a 988-line file.
 
-import { isCancel, note, select, spinner, updateSettings } from '@clack/prompts';
+import { isCancel, note, select, spinner } from '@clack/prompts';
 import { type CommandDef, runCommand } from 'citty';
 import pc from 'picocolors';
 import type { CliDeps } from './cli/types';
 import type { Plugin, PluginContext } from './plugins/types';
-import { useColor } from './runtime';
 import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
 import { pageableAutocompleteMultiselect } from './ui/picker';
-import { type ActionResult, type Target, pickAction, pickTarget } from './wizard';
 import { getVersion } from './version';
+import { type ActionResult, type Target, pickAction, pickTarget } from './wizard';
 
 // Cap clack's autocompleteMultiselect window to a sensible fraction of
 // the terminal height so the user can still see the prompt header and
@@ -36,16 +35,15 @@ function pickerMaxItems(total: number): number {
 // Composes the autocomplete picker's prompt: title plus a dim count
 // summary. Keyboard hints (PgUp/PgDn, type-to-filter) live in the
 // picker's own dim help footer below the option list.
-function pickerMessage(title: string, summary: string): string {
-  if (!useColor()) return `${title}  ·  ${summary}`;
+function pickerMessage(title: string, summary: string, color: boolean): string {
+  if (!color) return `${title}  ·  ${summary}`;
   return `${title}  ${pc.dim(`· ${summary}`)}`;
 }
 
 // "About macup" panel rendered via clack note() when the user picks the
 // Help row at the target prompt. Stays a one-shot — the wizard returns
 // to pickTarget() afterward.
-function printAboutScreen(): void {
-  const color = useColor();
+function printAboutScreen(color: boolean): void {
   const dim = (t: string) => (color ? pc.dim(t) : t);
   const code = (t: string) => (color ? pc.bold(t) : t);
   const head = (t: string) => (color ? pc.bold(pc.cyan(t)) : t);
@@ -109,7 +107,7 @@ async function promptTrackedSetPicker(
   const ctx: PluginContext = {
     exec: deps.exec,
     log: deps.log,
-    signal: new AbortController().signal,
+    signal: deps.signal,
   };
   const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
   const s = spinner();
@@ -174,7 +172,7 @@ async function promptTrackedSetPicker(
   const trackedCount = trackedNames.length;
   const summary = `${total} ${total === 1 ? 'package' : 'packages'} · ${trackedCount} tracked · ${installedCount} installed`;
   const choice = await pageableAutocompleteMultiselect<string>({
-    message: pickerMessage(`Tracked packages for ${label}`, summary),
+    message: pickerMessage(`Tracked packages for ${label}`, summary, deps.color),
     options,
     initialValues: [...trackedNames],
     maxItems: pickerMaxItems(total),
@@ -223,10 +221,9 @@ async function applySyncTracked(
     );
     return;
   }
-  const color = useColor();
   const parts: string[] = [];
-  for (const a of adds) parts.push(color ? pc.green(`+${a}`) : `+${a}`);
-  for (const r of removes) parts.push(color ? pc.red(`-${r}`) : `-${r}`);
+  for (const a of adds) parts.push(deps.color ? pc.green(`+${a}`) : `+${a}`);
+  for (const r of removes) parts.push(deps.color ? pc.red(`-${r}`) : `-${r}`);
   console.log(`\n${logui.header('TRACKED')} ${parts.join(' ')}`);
 }
 
@@ -242,10 +239,6 @@ export async function runWizard(
     console.log(`\nmacup — ${deps.registry.length} plugin(s). Run with --help or a command.`);
     return;
   }
-
-  // Bigger prompt window to fit the multi-column package picker / the
-  // grouped target selector with disabled header rows.
-  updateSettings({ aliases: {} });
 
   console.log(
     logui.splashBlock({
@@ -295,7 +288,7 @@ export async function runWizard(
         return choice as Target;
       },
       selectAction: async () => null, // unused at the target stage
-      printAbout: () => printAboutScreen(),
+      printAbout: () => printAboutScreen(deps.color),
     });
     if (!target) return; // Esc at target picker → exit wizard.
 
@@ -322,7 +315,7 @@ export async function runWizard(
             const ctx: PluginContext = {
               exec: deps.exec,
               log: deps.log,
-              signal: new AbortController().signal,
+              signal: deps.signal,
             };
             const s = spinner();
             s.start(`Checking ${plugin.manifest.displayName} for outdated packages…`);
@@ -353,7 +346,7 @@ export async function runWizard(
           pickOutdated: async (_t, rows) => {
             const total = rows.length;
             const choice = await pageableAutocompleteMultiselect<string>({
-              message: pickerMessage('Which packages to update?', `${total} outdated`),
+              message: pickerMessage('Which packages to update?', `${total} outdated`, deps.color),
               options: rows.map((r) => {
                 const opt: { label: string; value: string; hint?: string } = {
                   label: r.name,
@@ -400,9 +393,8 @@ export async function runWizard(
         ? ` ${result.packages.map((p) => (p.includes(' ') ? `'${p}'` : p)).join(' ')}`
         : '';
       const label = `${result.target.pluginId} ${result.command}${subtypeFrag}${pkgFrag}`;
-      const color = useColor();
-      const badge = color ? pc.inverse(pc.bold(pc.green(' macup '))) : 'macup';
-      const styledLabel = color ? pc.bold(label) : label;
+      const badge = deps.color ? pc.inverse(pc.bold(pc.green(' macup '))) : 'macup';
+      const styledLabel = deps.color ? pc.bold(label) : label;
       console.log(`\n${badge} ${styledLabel}`);
 
       const cmd = pluginSubCommands[result.target.pluginId];
@@ -420,8 +412,8 @@ export async function runWizard(
         // command-content column; continuation lines (e.g. multi-line
         // stderr from brew's xcrun + Warning + Error blocks) sit one
         // indent deeper.
-        const dim = (s: string) => (color ? pc.dim(s) : s);
-        const arrow = color ? pc.dim('↳') : '↳';
+        const dim = (s: string) => (deps.color ? pc.dim(s) : s);
+        const arrow = deps.color ? pc.dim('↳') : '↳';
         const lines = msg.split('\n');
         const head = lines[0] ?? msg;
         console.error(

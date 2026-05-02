@@ -3,10 +3,13 @@
 // Layout:
 //   1. argv preprocessing (rewrite bare command words; strip global flags)
 //   2. bootstrap (assemble exec runner + status bar + registry + deps)
-//   3. register flag actions + per-plugin subcommands + outdated subcommand
-//   4. intercept --version / --help (citty's defaults are unstyled)
-//   5. defineCommand({ subCommands, args (merged from flag actions), run })
-//   6. runMain
+//   3. wire SIGINT → deps.abort()
+//   4. intercept --version / --help (citty's defaults are unstyled).
+//      Done before the registry availability probe so `macup --help`
+//      on a fresh machine doesn't print missing-binary warnings.
+//   5. register flag actions + per-plugin subcommands + outdated subcommand
+//   6. defineCommand({ subCommands, args (merged from flag actions), run })
+//   7. runMain
 //
 // Real work lives elsewhere:
 //   - src/cli/argv.ts          — argv preprocessing
@@ -16,6 +19,7 @@
 //   - src/commands/<name>.ts   — each FlagAction + per-plugin subcommand factory
 //   - src/wizard-runner.ts     — interactive default action
 
+import type { ArgsDef } from 'citty';
 import { defineCommand, runMain } from 'citty';
 import { extractVerbosityFlags, rewriteFlagAliases } from './cli/argv';
 import { bootstrap } from './cli/bootstrap';
@@ -45,6 +49,37 @@ rewriteFlagAliases(process.argv);
 const flags = extractVerbosityFlags(process.argv);
 const deps = bootstrap(flags);
 
+// SIGINT: trip the deps-level abort so in-flight subprocesses cancel,
+// then exit. Registered here (vs at module import) so importing any of
+// our modules in tests doesn't install a process-global handler.
+process.on('SIGINT', () => {
+  deps.abort();
+  process.exit(130);
+});
+
+// Help/version are short-circuits — they don't need the registry probe
+// or per-plugin command construction. Resolve them first so a fresh
+// machine running `macup --help` doesn't get a stderr blast about
+// missing `mas`/`brew` before the help screen prints.
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  printVersionSplash(deps);
+  process.exit(0);
+}
+if (
+  process.argv.includes('--help') ||
+  process.argv.includes('-h') ||
+  process.argv.includes('help')
+) {
+  const stripped = process.argv
+    .slice(2)
+    .filter((a) => a !== '--help' && a !== '-h' && a !== 'help');
+  if (stripped.length === 0) {
+    showCustomHelp(deps);
+    process.exit(0);
+  }
+  // Subcommand help (`macup brew --help`) flows through to citty below.
+}
+
 const flagActions: readonly FlagAction[] = [
   new LogoAction(),
   new PluginsAction(),
@@ -63,6 +98,7 @@ for (const plugin of deps.registry) {
     getStore: deps.getStore,
     bar: deps.bar,
     suppressBar: deps.suppressBar,
+    signal: deps.signal,
   });
 }
 
@@ -86,8 +122,20 @@ for (const plugin of BUILTIN_PLUGINS) {
 
 // Merge args contributions from every FlagAction — this is what citty's
 // arg parser sees on the main command. Each action's `matches()` then
-// inspects the parsed bag to decide whether it owns the run.
-const flagActionArgs = Object.assign({}, ...flagActions.map((a) => a.args));
+// inspects the parsed bag to decide whether it owns the run. Reject
+// duplicate flag names at startup rather than letting the second action
+// silently shadow the first.
+const flagActionArgs: ArgsDef = {};
+for (const action of flagActions) {
+  for (const [name, def] of Object.entries(action.args)) {
+    if (name in flagActionArgs) {
+      throw new Error(
+        `FlagAction "${action.name}" registers duplicate flag --${name} (already claimed)`,
+      );
+    }
+    flagActionArgs[name] = def;
+  }
+}
 
 const main = defineCommand({
   meta: {
@@ -126,27 +174,5 @@ const main = defineCommand({
     await runWizard(deps, pluginSubCommands);
   },
 });
-
-// Intercept --version/-v before citty's default (which just prints the version string).
-if (process.argv.includes('--version') || process.argv.includes('-v')) {
-  printVersionSplash(deps);
-  process.exit(0);
-}
-
-// Intercept --help/-h/help at the root only — let subcommand help
-// (`macup brew --help`) flow through to citty.
-if (
-  process.argv.includes('--help') ||
-  process.argv.includes('-h') ||
-  process.argv.includes('help')
-) {
-  const stripped = process.argv
-    .slice(2)
-    .filter((a) => a !== '--help' && a !== '-h' && a !== 'help');
-  if (stripped.length === 0) {
-    showCustomHelp(deps);
-    process.exit(0);
-  }
-}
 
 runMain(main);

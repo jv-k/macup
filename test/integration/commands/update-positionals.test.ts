@@ -48,7 +48,7 @@ function fakePlugin(): Plugin {
 function emptyStore(): ConfigStore {
   return {
     list: () => [],
-    selectionFor: () => ({ pinned: {}, skip: [] }),
+    selectionFor: () => ({ pinned: new Map(), skipped: new Set() }),
   } as unknown as ConfigStore;
 }
 
@@ -61,6 +61,7 @@ describe('update subcommand — positional names', () => {
       getStore: async () => emptyStore(),
       bar: new StatusBar(),
       suppressBar: true,
+      signal: new AbortController().signal,
     });
     const subCmds = cmd.subCommands as SubCommandsDef;
     await runCommand(subCmds.update as CommandDef, { rawArgs: ['alpha'] });
@@ -77,6 +78,7 @@ describe('update subcommand — positional names', () => {
       getStore: async () => emptyStore(),
       bar: new StatusBar(),
       suppressBar: true,
+      signal: new AbortController().signal,
     });
     const subCmds = cmd.subCommands as SubCommandsDef;
     await runCommand(subCmds.update as CommandDef, { rawArgs: [] });
@@ -93,6 +95,7 @@ describe('update subcommand — positional names', () => {
       getStore: async () => emptyStore(),
       bar: new StatusBar(),
       suppressBar: true,
+      signal: new AbortController().signal,
     });
     const subCmds = cmd.subCommands as SubCommandsDef;
     await runCommand(subCmds.update as CommandDef, { rawArgs: ['gamma'] });

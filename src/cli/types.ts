@@ -20,10 +20,10 @@
 // only for the flag-on-main surface.
 
 import type { ArgsDef } from 'citty';
-import type { ConfigStore } from '../config/store';
 import type { PathResolution } from '../config/paths';
+import type { ConfigStore } from '../config/store';
 import type { Plugin } from '../plugins/types';
-import type { Logger, ExecRunner } from '../plugins/types';
+import type { ExecRunner, Logger } from '../plugins/types';
 import type { StatusBar } from '../ui/status-bar';
 
 export type ParsedArgs = Record<string, unknown>;
@@ -41,6 +41,10 @@ export interface CliDeps {
   readonly getStore: () => Promise<ConfigStore>;
   readonly env: NodeJS.ProcessEnv;
   readonly home: string;
+  /** Process-wide cancellation signal. Aborted on SIGINT by cli.ts. */
+  readonly signal: AbortSignal;
+  /** Trip the cancellation signal. Used by the SIGINT handler. */
+  readonly abort: () => void;
 }
 
 export interface FlagAction {

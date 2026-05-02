@@ -8,9 +8,9 @@
 // re-deriving the predicate.
 
 import pc from 'picocolors';
-import type { CliDeps } from './types';
 import * as logui from '../ui/log';
 import { getVersion } from '../version';
+import type { CliDeps } from './types';
 
 export function printVersionSplash(deps: CliDeps): void {
   console.log(
@@ -42,14 +42,20 @@ export function showCustomHelp(deps: CliDeps): void {
 
   // Usage
   console.log(logui.header('USAGE'));
-  console.log(`  ${s.bold('macup')} ${s.dim('Runs the interactive wizard to pick a plugin and action.')}`);
+  console.log(
+    `  ${s.bold('macup')} ${s.dim('Runs the interactive wizard to pick a plugin and action.')}`,
+  );
   console.log('');
-  console.log(`  ${s.bold('macup')} ${s.dim('<plugin>')} ${s.dim('<action>')} ${s.dim('[options] [packages...]')}`);
+  console.log(
+    `  ${s.bold('macup')} ${s.dim('<plugin>')} ${s.dim('<action>')} ${s.dim('[options] [packages...]')}`,
+  );
   console.log(`  ${s.bold('macup')} ${s.dim('<command>')}`);
   console.log('');
 
   // Plugins
-  console.log(` ${logui.header('PLUGINS')} ${s.dim('Package and App managers + their available commands')}`);
+  console.log(
+    ` ${logui.header('PLUGINS')} ${s.dim('Package and App managers + their available commands')}`,
+  );
   const pad = 12;
   for (const plugin of deps.registry) {
     const m = plugin.manifest;
@@ -69,7 +75,9 @@ export function showCustomHelp(deps: CliDeps): void {
   // Top-level (cross-plugin) commands.
   console.log(`${logui.header('COMMANDS')} ${s.dim('Stand-alone commands')}`);
   const cmdPad = 21;
-  console.log(`  ${s.bold('outdated'.padEnd(cmdPad))} Show outdated packages across every plugin in one pane  ${s.dim('[--json]')}`);
+  console.log(
+    `  ${s.bold('outdated'.padEnd(cmdPad))} Show outdated packages across every plugin in one pane  ${s.dim('[--json]')}`,
+  );
   console.log(`  ${s.bold('version'.padEnd(cmdPad))} Show version with logo`);
   console.log(`  ${s.bold('help'.padEnd(cmdPad))} Show this help screen`);
   console.log(`  ${s.bold('config'.padEnd(cmdPad))} Show config path, schema, pins/skip counts`);
@@ -77,15 +85,25 @@ export function showCustomHelp(deps: CliDeps): void {
   console.log(`  ${s.bold('restore'.padEnd(cmdPad))} Restore config from a backup`);
   console.log(`  ${s.bold('logo'.padEnd(cmdPad))} Print the Apple logo`);
   console.log(`  ${s.bold('plugins'.padEnd(cmdPad))} List built-in plugins and their availability`);
-  console.log(`  ${s.bold('install-completions'.padEnd(cmdPad))} Install shell completions (auto-detects shell)`);
+  console.log(
+    `  ${s.bold('install-completions'.padEnd(cmdPad))} Install shell completions (auto-detects shell)`,
+  );
   console.log('');
 
   // Pin / Skip
-  console.log(`${logui.header('PIN / SKIP')} ${s.dim('Modifiers to control update behavior for tracked packages')}`);
-  console.log(`  ${s.bold('macup <plugin> pin')} ${s.dim('<name> <version>')}    Pin to max version`);
+  console.log(
+    `${logui.header('PIN / SKIP')} ${s.dim('Modifiers to control update behavior for tracked packages')}`,
+  );
+  console.log(
+    `  ${s.bold('macup <plugin> pin')} ${s.dim('<name> <version>')}    Pin to max version`,
+  );
   console.log(`  ${s.bold('macup <plugin> unpin')} ${s.dim('<name>')}            Remove pin`);
-  console.log(`  ${s.bold('macup <plugin> skip')} ${s.dim('<name...>')}          Skip from updates`);
-  console.log(`  ${s.bold('macup <plugin> unskip')} ${s.dim('<name...>')}        Remove from skip list`);
+  console.log(
+    `  ${s.bold('macup <plugin> skip')} ${s.dim('<name...>')}          Skip from updates`,
+  );
+  console.log(
+    `  ${s.bold('macup <plugin> unskip')} ${s.dim('<name...>')}        Remove from skip list`,
+  );
   console.log('');
 
   // Genuine global options.
@@ -97,11 +115,15 @@ export function showCustomHelp(deps: CliDeps): void {
   // Examples
   console.log(logui.dimmedHeader('EXAMPLES'));
   console.log(`  macup                              ${s.dim('Interactive wizard')}`);
-  console.log(`  macup outdated                     ${s.dim('Outdated summary across every plugin')}`);
+  console.log(
+    `  macup outdated                     ${s.dim('Outdated summary across every plugin')}`,
+  );
   console.log(`  macup brew list                    ${s.dim('Show tracked brew formulas')}`);
   console.log(`  macup brew list all                ${s.dim('Show all installed formulas')}`);
   console.log(`  macup brew list outdated           ${s.dim('Show only outdated')}`);
-  console.log(`  macup all update                   ${s.dim('Update everything (with confirmation)')}`);
+  console.log(
+    `  macup all update                   ${s.dim('Update everything (with confirmation)')}`,
+  );
   console.log(`  macup brew add git curl jq         ${s.dim('Track new packages')}`);
   console.log(`  macup brew add cask firefox        ${s.dim('Track a cask')}`);
   console.log(`  macup npm pin typescript 5.3.3     ${s.dim('Pin to max version')}`);

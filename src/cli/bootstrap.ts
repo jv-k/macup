@@ -11,7 +11,6 @@
 
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import type { CliDeps } from './types';
 import { resolveConfigPaths } from '../config/paths';
 import { ConfigStore } from '../config/store';
 import { buildExecRunner } from '../exec/build';
@@ -22,6 +21,7 @@ import * as logui from '../ui/log';
 import { StatusBar } from '../ui/status-bar';
 import { StatusBarSink } from '../ui/status-bar-sink';
 import { supportsScrollRegions } from '../ui/terminal-caps';
+import type { CliDeps } from './types';
 
 export interface BootstrapInput {
   readonly debug: boolean;
@@ -45,6 +45,7 @@ export function bootstrap(input: BootstrapInput): CliDeps {
   const bar = new StatusBar();
 
   const registry = defaultRegistry();
+  const sigintController = new AbortController();
   const baseExec = new ExecaExecRunner();
   // user-action chunks always land in the bar's box pane. In --verbose
   // they additionally tee to stdout so the user gets a grep-able copy
@@ -73,9 +74,7 @@ export function bootstrap(input: BootstrapInput): CliDeps {
     const store = new ConfigStore(paths);
     const result = await store.load();
     if (result.migrated) {
-      const suffix = result.migrationBackupPath
-        ? ` (backup: ${result.migrationBackupPath})`
-        : '';
+      const suffix = result.migrationBackupPath ? ` (backup: ${result.migrationBackupPath})` : '';
       console.log(logui.info(`migrated applist.yaml to new layout${suffix}`));
     }
     return store;
@@ -94,5 +93,7 @@ export function bootstrap(input: BootstrapInput): CliDeps {
     getStore,
     env,
     home,
+    signal: sigintController.signal,
+    abort: () => sigintController.abort(),
   };
 }

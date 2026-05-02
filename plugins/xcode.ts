@@ -24,6 +24,7 @@ function extractCltVersion(stdout: string): string | undefined {
 async function fetchXcodeApp(ctx: PluginContext): Promise<PackageStatus | undefined> {
   const listOut = await runMas(ctx, ['list']);
   let xcode = parseMasList(listOut.stdout).find((e) => e.id === XCODE_ID);
+  const foundViaMas = xcode !== undefined;
 
   // mas v6 omits apps lacking Spotlight metadata (`kMDItemAppStoreAdamID`),
   // which is common for Xcode. Fall back to the same `_MASReceipt` walk
@@ -40,15 +41,26 @@ async function fetchXcodeApp(ctx: PluginContext): Promise<PackageStatus | undefi
       outdated: false,
     };
   }
-  const outdatedOut = await runMas(ctx, ['outdated']);
-  const outdated = parseMasOutdated(outdatedOut.stdout).find((e) => e.id === XCODE_ID);
+
   const status: PackageStatus = {
     ref: { kind: 'xcode-app', name: 'Xcode', id: XCODE_ID },
     installed: true,
     installedVersion: xcode.version,
-    outdated: outdated !== undefined,
+    outdated: false,
   };
-  if (outdated) status.latestVersion = outdated.latest;
+
+  // `mas outdated` only knows about apps that are in mas's Spotlight
+  // index. If we found Xcode through the FS receipt fallback, mas's
+  // index doesn't have it — `mas outdated` would never report it as
+  // outdated either. Skip the network round-trip in that case.
+  if (foundViaMas) {
+    const outdatedOut = await runMas(ctx, ['outdated']);
+    const outdated = parseMasOutdated(outdatedOut.stdout).find((e) => e.id === XCODE_ID);
+    if (outdated) {
+      status.outdated = true;
+      status.latestVersion = outdated.latest;
+    }
+  }
   return status;
 }
 

@@ -1,14 +1,8 @@
 import { confirm, isCancel } from '@clack/prompts';
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
-import type { ConfigStore } from '../config/store';
+import type { ConfigStore, SaveResult } from '../config/store';
 import { resolveSelection } from '../plugins/selection';
-import type {
-  ExecRunner,
-  Logger,
-  PackageRef,
-  Plugin,
-  PluginContext,
-} from '../plugins/types';
+import type { ExecRunner, Logger, PackageRef, Plugin, PluginContext } from '../plugins/types';
 import * as log from '../ui/log';
 import { renderList } from './render-list';
 import { type SpinnerDeps, withSpinner, withUserActionSpinner } from './spinner';
@@ -18,21 +12,32 @@ export interface CommandDeps extends SpinnerDeps {
   readonly exec: ExecRunner;
   readonly log: Logger;
   readonly getStore: () => Promise<ConfigStore>;
+  /** Process-wide cancellation signal — aborted on SIGINT by the caller. */
+  readonly signal: AbortSignal;
 }
-
-// Shared controller so Ctrl-C cancels in-flight subprocess operations.
-const globalController = new AbortController();
-process.on('SIGINT', () => {
-  globalController.abort();
-  process.exit(130);
-});
 
 function makeCtx(deps: CommandDeps): PluginContext {
   return {
     exec: deps.exec,
     log: deps.log,
-    signal: globalController.signal,
+    signal: deps.signal,
   };
+}
+
+// Wrapper around store.save() that turns disk/permissions failures into
+// a friendly stderr line + non-zero exit code, instead of an unhandled
+// stack trace. The in-memory doc was already mutated by the caller, so
+// we surface the failure rather than continuing as if it succeeded.
+async function trySave(store: ConfigStore, operation: string): Promise<SaveResult | null> {
+  try {
+    return await store.save(operation);
+  } catch (err) {
+    console.error(
+      `error: failed to save ${operation} changes (${err instanceof Error ? err.message : String(err)})`,
+    );
+    process.exitCode = 1;
+    return null;
+  }
 }
 
 async function runHealthCheck(
@@ -156,35 +161,35 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
 
         // Default: show only tracked packages (from applist.yaml).
         // --all shows everything installed by the package manager.
+        // ConfigStore.load() handles "no file" by starting with an empty
+        // doc — anything that throws here is a real error (invalid YAML,
+        // permission denied) and gets propagated rather than silently
+        // dropping the user back into "show all" mode.
         if (!showAll && manifest.configKeys.length > 0) {
-          try {
-            const store = await deps.getStore();
-            const tracked = new Set<string>();
-            // When a subtype is specified, restrict to that subtype's
-            // config key. When unspecified, gather every tracked name
-            // across all of the plugin's config keys — otherwise plugins
-            // with multiple subtypes (e.g. brew formulas + casks) lose
-            // half their tracked set to a single configKeyFor lookup.
-            const keysToCheck =
-              subtype !== undefined && manifest.configKeyFor
-                ? [manifest.configKeyFor(subtype)]
-                : manifest.configKeys;
-            for (const key of keysToCheck) {
-              for (const name of store.list(key)) {
-                tracked.add(name);
-              }
+          const store = await deps.getStore();
+          const tracked = new Set<string>();
+          // When a subtype is specified, restrict to that subtype's
+          // config key. When unspecified, gather every tracked name
+          // across all of the plugin's config keys — otherwise plugins
+          // with multiple subtypes (e.g. brew formulas + casks) lose
+          // half their tracked set to a single configKeyFor lookup.
+          const keysToCheck =
+            subtype !== undefined && manifest.configKeyFor
+              ? [manifest.configKeyFor(subtype)]
+              : manifest.configKeys;
+          for (const key of keysToCheck) {
+            for (const name of store.list(key)) {
+              tracked.add(name);
             }
-            if (tracked.size > 0) {
-              statuses = statuses.filter((s) => tracked.has(s.ref.name));
-            } else {
-              console.log(
-                log.warning(
-                  `No tracked packages. Showing all installed. Add with: macup ${manifest.id} add <name...>`,
-                ),
-              );
-            }
-          } catch {
-            // No config file yet — show all.
+          }
+          if (tracked.size > 0) {
+            statuses = statuses.filter((s) => tracked.has(s.ref.name));
+          } else {
+            console.log(
+              log.warning(
+                `No tracked packages. Showing all installed. Add with: macup ${manifest.id} add <name...>`,
+              ),
+            );
           }
         }
 
@@ -258,13 +263,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             console.log('');
             console.log(log.header(`Installing ${manifest.displayName}`));
             console.log('');
-            await withUserActionSpinner(
-              deps,
-              `Installing ${manifest.displayName}...`,
-              async () => {
-                await plugin.install?.(makeCtx(deps), [], {});
-              },
-            );
+            await withUserActionSpinner(deps, `Installing ${manifest.displayName}...`, async () => {
+              await plugin.install?.(makeCtx(deps), [], {});
+            });
             return;
           }
           console.log('');
@@ -330,27 +331,27 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           },
         );
 
-        // Apply pin/skip filtering.
-        let filtered = statuses;
-        try {
-          const store = await deps.getStore();
-          const policy = store.selectionFor(manifest.id);
-          const { upgradable, pinnedBlocked, skipped } = resolveSelection(
-            statuses,
-            policy,
-            manifest.compareVersions,
+        // Apply pin/skip filtering. ConfigStore.load() returns an empty
+        // doc on ENOENT, so the "no config yet" case flows through with
+        // empty pin/skip sets and no filtering happens. Anything that
+        // throws here (invalid YAML, permission denied) is a real error
+        // — propagate so the user finds out their pins aren't honored
+        // rather than silently upgrading across them.
+        const store = await deps.getStore();
+        const policy = store.selectionFor(manifest.id);
+        const { upgradable, pinnedBlocked, skipped } = resolveSelection(
+          statuses,
+          policy,
+          manifest.compareVersions,
+        );
+        let filtered = upgradable;
+        if (pinnedBlocked.length > 0) {
+          console.log(
+            `Pinned (skipping): ${pinnedBlocked.map((s) => `${s.ref.name}@${s.pinnedAt}`).join(', ')}`,
           );
-          filtered = upgradable;
-          if (pinnedBlocked.length > 0) {
-            console.log(
-              `Pinned (skipping): ${pinnedBlocked.map((s) => `${s.ref.name}@${s.pinnedAt}`).join(', ')}`,
-            );
-          }
-          if (skipped.length > 0) {
-            console.log(`Skipped: ${skipped.map((s) => s.ref.name).join(', ')}`);
-          }
-        } catch {
-          // If config can't load (no file yet), skip filtering — update everything.
+        }
+        if (skipped.length > 0) {
+          console.log(`Skipped: ${skipped.map((s) => s.ref.name).join(', ')}`);
         }
 
         const explicitNames = rawArgs.filter((a) => !a.startsWith('-'));
@@ -438,7 +439,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const store = await deps.getStore();
         const key = resolveConfigKey(plugin, subtype);
         const result = store.add(key, names);
-        const save = await store.save('add');
+        const save = await trySave(store, 'add');
+        if (!save) return;
         if (result.added.length > 0) {
           console.log(log.success(`Added to ${key}: ${result.added.join(', ')}`));
           if (result.skipped.length > 0) {
@@ -484,7 +486,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const store = await deps.getStore();
         const key = resolveConfigKey(plugin, subtype);
         const result = store.remove(key, names);
-        const save = await store.save('remove');
+        const save = await trySave(store, 'remove');
+        if (!save) return;
         if (result.removed.length > 0) {
           console.log(log.success(`Removed from ${key}: ${result.removed.join(', ')}`));
           if (result.missing.length > 0) {
@@ -526,7 +529,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const [name, version] = positionals as [string, string];
         const store = await deps.getStore();
         store.pin(manifest.id, name, version);
-        const save = await store.save('pin');
+        const save = await trySave(store, 'pin');
+        if (!save) return;
         console.log(log.success(`Pinned ${name} to ${version} (${manifest.id})`));
         if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
       },
@@ -542,7 +546,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (!names) return;
         const store = await deps.getStore();
         store.unpin(manifest.id, names[0] as string);
-        const save = await store.save('unpin');
+        const save = await trySave(store, 'unpin');
+        if (!save) return;
         console.log(log.success(`Unpinned ${names[0]} (${manifest.id})`));
         if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
       },
@@ -558,7 +563,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (!names) return;
         const store = await deps.getStore();
         store.skip(manifest.id, names);
-        const save = await store.save('skip');
+        const save = await trySave(store, 'skip');
+        if (!save) return;
         console.log(log.success(`Skipped from ${manifest.id} updates: ${names.join(', ')}`));
         if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
       },
@@ -574,7 +580,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (!names) return;
         const store = await deps.getStore();
         store.unskip(manifest.id, names);
-        const save = await store.save('unskip');
+        const save = await trySave(store, 'unskip');
+        if (!save) return;
         console.log(log.success(`Unskipped (${manifest.id}): ${names.join(', ')}`));
         if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
       },

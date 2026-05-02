@@ -1,17 +1,33 @@
 import pc from 'picocolors';
+import { useColor as useColorFn } from '../runtime';
 import { renderAppleLogo } from './logo';
 
-const useColor = !process.env.NO_COLOR && process.stdout.isTTY;
-
-// Symbols matching the original zsh tool
+// Lazy boolean read on every styled-glyph emit, so this module can be
+// imported before stdout/NO_COLOR are settled (e.g. in test harnesses).
+// All references below use the local `useColor` boolean evaluated per
+// call site rather than caching at module load.
 const SYM = {
-  success: useColor ? pc.green('✔') : '✔',
-  warning: useColor ? pc.yellow('!') : '!',
-  error: useColor ? pc.red('✖') : '✖',
-  info: useColor ? pc.cyan('ℹ') : 'ℹ',
-  bullet: useColor ? pc.magenta('•') : '•',
-  arrow: useColor ? pc.dim('→') : '→',
-  question: useColor ? pc.yellow('?') : '?',
+  get success() {
+    return useColorFn() ? pc.green('✔') : '✔';
+  },
+  get warning() {
+    return useColorFn() ? pc.yellow('!') : '!';
+  },
+  get error() {
+    return useColorFn() ? pc.red('✖') : '✖';
+  },
+  get info() {
+    return useColorFn() ? pc.cyan('ℹ') : 'ℹ';
+  },
+  get bullet() {
+    return useColorFn() ? pc.magenta('•') : '•';
+  },
+  get arrow() {
+    return useColorFn() ? pc.dim('→') : '→';
+  },
+  get question() {
+    return useColorFn() ? pc.yellow('?') : '?';
+  },
 };
 
 // ── Section headers ─────────────────────────────────────────────
@@ -26,7 +42,7 @@ function invertedLabel(
 ): string {
   const countStr = count !== undefined ? ` (${count})` : '';
   const label = ` ${text.toUpperCase()}${countStr} `;
-  return useColor ? color(pc.inverse(pc.bold(label))) : label.trim();
+  return useColorFn() ? color(pc.inverse(pc.bold(label))) : label.trim();
 }
 
 export function header(text: string, count?: number): string {
@@ -53,59 +69,59 @@ export function dimmedHeader(text: string, count?: number): string {
 
 export function pkgUpToDate(name: string, version: string, pad: number): string {
   const padded = name.padEnd(pad);
-  return `  ${SYM.success} ${useColor ? pc.bold(padded) : padded} ${useColor ? pc.green(version) : version}`;
+  return `  ${SYM.success} ${useColorFn() ? pc.bold(padded) : padded} ${useColorFn() ? pc.green(version) : version}`;
 }
 
 export function pkgOutdated(name: string, current: string, latest: string, pad: number): string {
   const padded = name.padEnd(pad);
-  const cur = useColor ? pc.yellow(current) : current;
-  const lat = useColor ? pc.green(latest) : latest;
-  return `  ${SYM.warning} ${useColor ? pc.bold(padded) : padded} ${cur} ${SYM.arrow} ${lat}`;
+  const cur = useColorFn() ? pc.yellow(current) : current;
+  const lat = useColorFn() ? pc.green(latest) : latest;
+  return `  ${SYM.warning} ${useColorFn() ? pc.bold(padded) : padded} ${cur} ${SYM.arrow} ${lat}`;
 }
 
 export function pkgNotInstalled(name: string, pad: number): string {
   const padded = name.padEnd(pad);
-  return `  ${SYM.error} ${useColor ? pc.italic(pc.dim(padded)) : padded}`;
+  return `  ${SYM.error} ${useColorFn() ? pc.italic(pc.dim(padded)) : padded}`;
 }
 
 // ── Per-package progress counter ────────────────────────────────
 
 export function counter(idx: number, total: number, action: string, name: string): string {
-  const prefix = useColor ? pc.dim(`${idx}/${total}`) : `${idx}/${total}`;
-  const styled = useColor ? pc.green(name) : name;
+  const prefix = useColorFn() ? pc.dim(`${idx}/${total}`) : `${idx}/${total}`;
+  const styled = useColorFn() ? pc.green(name) : name;
   return `  ${prefix} ${action} ${styled}`;
 }
 
 // ── Verbose per-item trace (one dim line after the spinner) ─────
 
 export function trace(detail: string): string {
-  const arrow = useColor ? pc.dim('↳') : '↳';
-  const body = useColor ? pc.dim(detail) : detail;
+  const arrow = useColorFn() ? pc.dim('↳') : '↳';
+  const body = useColorFn() ? pc.dim(detail) : detail;
   return `    ${arrow} ${body}`;
 }
 
 export function traceError(detail: string): string {
-  const arrow = useColor ? pc.red('↳') : '↳';
-  const body = useColor ? pc.dim(detail) : detail;
+  const arrow = useColorFn() ? pc.red('↳') : '↳';
+  const body = useColorFn() ? pc.dim(detail) : detail;
   return `    ${arrow} ${body}`;
 }
 
 // ── Message types ───────────────────────────────────────────────
 
 export function info(msg: string): string {
-  return `  ${SYM.info} ${useColor ? pc.cyan(msg) : msg}`;
+  return `  ${SYM.info} ${useColorFn() ? pc.cyan(msg) : msg}`;
 }
 
 export function success(msg: string): string {
-  return `  ${SYM.success} ${useColor ? pc.green(msg) : msg}`;
+  return `  ${SYM.success} ${useColorFn() ? pc.green(msg) : msg}`;
 }
 
 export function warning(msg: string): string {
-  return `  ${SYM.warning} ${useColor ? pc.yellow(msg) : msg}`;
+  return `  ${SYM.warning} ${useColorFn() ? pc.yellow(msg) : msg}`;
 }
 
 export function error(msg: string): string {
-  return `  ${SYM.error} ${useColor ? pc.red(msg) : msg}`;
+  return `  ${SYM.error} ${useColorFn() ? pc.red(msg) : msg}`;
 }
 
 // ── Branded version display ─────────────────────────────────────
@@ -119,14 +135,14 @@ export function versionBlock(opts: {
   const lines: string[] = [];
   // Logo wordmark: inverse-video bold green pill, e.g. " macup v1.0.0 "
   const badgeText = ` macup v${opts.version} `;
-  const badge = useColor ? pc.inverse(pc.bold(pc.green(badgeText))) : badgeText.trim();
+  const badge = useColorFn() ? pc.inverse(pc.bold(pc.green(badgeText))) : badgeText.trim();
   lines.push('');
   lines.push(`  ${badge}`);
   lines.push('');
-  lines.push(`  ${useColor ? pc.dim(opts.description) : opts.description}`);
+  lines.push(`  ${useColorFn() ? pc.dim(opts.description) : opts.description}`);
   lines.push('');
   lines.push(`  ${SYM.bullet} Author:   ${opts.author}`);
-  lines.push(`  ${SYM.bullet} Homepage: ${useColor ? pc.underline(opts.homepage) : opts.homepage}`);
+  lines.push(`  ${SYM.bullet} Homepage: ${useColorFn() ? pc.underline(opts.homepage) : opts.homepage}`);
   lines.push('');
   return lines.join('\n');
 }
@@ -247,7 +263,7 @@ export function splashBlock(opts: {
   /** Override terminal width (mostly for tests). Defaults to stdout.columns || 80. */
   termWidth?: number;
 }): string {
-  const color = opts.color ?? useColor;
+  const color = opts.color ?? useColorFn();
   const logo = renderAppleLogo({ color, scale: 0.76 });
   const logoWidth = Math.max(0, ...logo.split('\n').map(visualWidth));
 

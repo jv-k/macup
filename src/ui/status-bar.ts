@@ -10,6 +10,7 @@
 // CI logs, and `2>/dev/null` flows all keep working.
 
 import pc from 'picocolors';
+import { useColor } from '../runtime';
 
 export interface StatusBarOptions {
   readonly color?: boolean;
@@ -67,7 +68,7 @@ export class StatusBar {
 
   constructor(opts: StatusBarOptions = {}) {
     this.out = opts.out ?? process.stdout;
-    this.color = opts.color ?? (this.out.isTTY === true && !process.env.NO_COLOR);
+    this.color = opts.color ?? useColor();
     this.framesMs = opts.framesMs ?? 80;
     this.boxBodyRows = opts.boxBodyRows ?? 8;
     this.onResize = () => {

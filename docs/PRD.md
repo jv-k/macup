@@ -1,7 +1,7 @@
 # macup — Product Requirements Document
 
 > **Status:** v1.0.0 shipped (TypeScript rewrite). Distribution (Phase 8) pending.
-> **Last updated:** 2026-05-01
+> **Last updated:** 2026-05-02
 > **Owner:** John Valai
 
 ---
@@ -106,7 +106,7 @@ macup <plugin> <command> [args]
 | `system` | list, outdated, install, update (softwareupdate wrapper) |
 | `all` | Composite — fans out across all plugins |
 
-A top-level `macup outdated` (and the `macup --outdated` shortcut) aggregates the per-plugin `outdated` results behind a spinner with progress, and supports `--json` for scripting.
+A top-level `macup outdated` aggregates the per-plugin `outdated` results behind a spinner with progress, and supports `--json` for scripting. The other top-level commands are flag-styled (`--config`, `--cleanup`, `--restore`, `--logo`, `--plugins`, `--version`, `--install-completions`); for ergonomics the no-dash form (`macup config`, `macup version`, …) is rewritten into the canonical flag at argv parse time.
 
 ### 5.2 Declarative manifest (`applist.yaml`)
 
@@ -143,7 +143,7 @@ Running `macup` with no args drops into a TTY-aware `@clack/prompts` flow:
 2. **Pick a target** — plugins are grouped by `category` (e.g. "Node.js" for npm + pnpm, "macOS" for appstore/xcode/system) using `groupMultiselect`, with disabled header rows separating groups.
 3. **Pick an action** — capability-gated submenu (only actions the plugin advertises in its `manifest.capabilities` show up). The chosen target is rendered as a sticky pill above the prompt; Add/Remove diffs are previewed inline before confirmation.
 4. **Pick packages** (for `add` / `remove` / scoped `update`) — paged autocomplete picker with PgUp/PgDn, page indicator, count summary, and a multi-column grid layout.
-5. **Execute** — subprocess output streams into an inline bordered window (see §5.6); errors are indented and dimmed under the spinner line.
+5. **Execute** — subprocess output for `user-action` calls (install/upgrade) streams into the pinned `StatusBar`'s box pane (see §5.6); `query`/`check` chatter (e.g. `--json` data fetches) stays silent unless it emits an `Error:` / `Warning:` line, which surfaces above the bar.
 
 Falls back to `--help` in non-TTY contexts.
 
@@ -313,6 +313,7 @@ export const BundleSchema = z.object({
 src/plugins/types.ts      — Plugin interface + manifest schema
 src/plugins/registry.ts   — Enumerates built-ins, filters by OS + PATH
 src/plugins/selection.ts  — Pin/skip resolver (pure function)
+src/plugins/defaults.ts   — defaultCheck() helper for the common-shape PATH probe
 
 /plugins/brew.ts          — One file per backend
 /plugins/npm.ts
@@ -325,9 +326,15 @@ src/plugins/selection.ts  — Pin/skip resolver (pure function)
 src/exec/run.ts           — ExecaExecRunner (default subprocess runner)
 src/exec/streaming.ts     — StreamingExecRunner decorator → UiSink (TTY default)
 src/exec/tracing.ts       — TracingExecRunner decorator (--debug)
+src/exec/build.ts         — Factory: picks the right runner from --debug / streaming
 src/ui/status-bar.ts      — Pinned bottom-row bar + DECSTBM box pane
 src/ui/status-bar-sink.ts — UiSink adapter: chunks → bar pane / notices
 src/ui/terminal-caps.ts   — Capability probe for scroll-region support
+src/runtime.ts            — Runtime predicates (single source of truth for color/TTY)
+
+src/commands/from-manifest.ts — Per-plugin citty subcommand factory
+src/commands/render-list.ts   — Pure renderer for `list` output blocks
+src/commands/spinner.ts       — withSpinner / withUserActionSpinner over a SpinnerDeps
 
 src/bundles/              — Bundle host (v1.1)
 ├── schema.ts             — zod schema + parser
@@ -346,11 +353,11 @@ Bundles are a **layer above plugins** — they resolve per-plugin package lists 
 - **Runtime:** Node ≥ 20 primary; Bun ≥ 1.1 for dev + `--compile`
 - **CLI dispatch:** citty
 - **Interactive prompts:** @clack/prompts
-- **Live UI:** log-update (inline bordered streaming window) + picocolors
-- **Subprocess:** execa (funnelled through `src/exec/run.ts`, decorated by tracing/windowing runners)
+- **Live UI:** raw ANSI DECSTBM scroll regions for the pinned `StatusBar` + box pane (no third-party screen library) + picocolors
+- **Subprocess:** execa (funnelled through `src/exec/run.ts`, decorated by streaming/tracing runners). `node-pty` is a `devDependency` used only by the pty integration tests in `test/integration/`.
 - **YAML:** `yaml` (CST for comment preservation)
 - **Schema:** zod
-- **Testing:** vitest (180+ tests: unit, integration, regression, conformance)
+- **Testing:** vitest (386 tests: unit, integration, regression, conformance)
 - **Lint/format:** biome
 
 ### 6.3 Testing strategy

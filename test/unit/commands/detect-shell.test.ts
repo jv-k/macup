@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectShellFromEnv } from '../../../src/cli';
+import { detectShellFromEnv } from '../../../src/commands/shell';
 
 describe('detectShellFromEnv', () => {
   it('detects zsh from a typical $SHELL path', () => {

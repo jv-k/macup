@@ -1,4 +1,6 @@
-import type { BackupStore } from '../config/backup';
+import { confirm, isCancel } from '@clack/prompts';
+import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
+import { BackupStore } from '../config/backup';
 
 export interface CleanupDeps {
   readonly backups: BackupStore;
@@ -27,4 +29,37 @@ export async function runCleanup(deps: CleanupDeps): Promise<number> {
   const count = await deps.backups.cleanup(true);
   deps.print(`Removed ${count} backup file(s).`);
   return count;
+}
+
+export async function runCleanupAction(_args: ParsedArgs, deps: CliDeps): Promise<void> {
+  const paths = deps.resolvePaths();
+  const backups = new BackupStore(paths);
+  await runCleanup({
+    backups,
+    confirm: async () => {
+      const ans = await confirm({
+        message: 'Delete ALL backup files? This cannot be undone.',
+        initialValue: false,
+      });
+      return !isCancel(ans) && ans === true;
+    },
+    print: (s) => console.log(s),
+  });
+}
+
+export class CleanupAction implements FlagAction {
+  readonly name = 'cleanup';
+  readonly description = 'Interactively delete all backup files.';
+  readonly args = {
+    cleanup: {
+      type: 'boolean' as const,
+      description: 'Interactively delete all backup files.',
+    },
+  };
+
+  matches(args: ParsedArgs): boolean {
+    return args.cleanup === true;
+  }
+
+  run = runCleanupAction;
 }

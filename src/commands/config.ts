@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { parse } from 'yaml';
+import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
 import type { PathResolution } from '../config/paths';
 import { ApplistSchema } from '../config/schema';
 
@@ -84,4 +85,29 @@ export function formatConfigReport(report: ConfigReport): string {
     );
   }
   return lines.join('\n');
+}
+
+export async function runConfig(_args: ParsedArgs, deps: CliDeps): Promise<void> {
+  const paths = deps.resolvePaths();
+  const report = await buildConfigReport(paths);
+  console.log(formatConfigReport(report));
+}
+
+export class ConfigAction implements FlagAction {
+  readonly name = 'config';
+  readonly description =
+    'Show config location, schema status, pin/skip counts, backup dir, and migration hints.';
+  readonly args = {
+    config: {
+      type: 'boolean' as const,
+      description:
+        'Show config location, schema status, pin/skip counts, backup dir, and migration hints.',
+    },
+  };
+
+  matches(args: ParsedArgs): boolean {
+    return args.config === true;
+  }
+
+  run = runConfig;
 }

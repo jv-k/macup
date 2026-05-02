@@ -1,3 +1,5 @@
+import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
+import { BUILTIN_PLUGINS, isOnPath } from '../plugins/registry';
 import type { Plugin, PluginCapabilities } from '../plugins/types';
 
 export interface PluginStatus {
@@ -127,4 +129,29 @@ export function formatPluginsReport(report: PluginsReport, opts: FormatOptions =
   }
 
   return lines.join('\n');
+}
+
+export async function runPlugins(_args: ParsedArgs, deps: CliDeps): Promise<void> {
+  const report = buildPluginsReport(BUILTIN_PLUGINS, {
+    platform: process.platform,
+    onPath: (b) => isOnPath(b),
+  });
+  console.log(formatPluginsReport(report, { color: deps.color }));
+}
+
+export class PluginsAction implements FlagAction {
+  readonly name = 'plugins';
+  readonly description = 'List built-in plugins and whether each is available on this machine.';
+  readonly args = {
+    plugins: {
+      type: 'boolean' as const,
+      description: 'List built-in plugins and whether each is available on this machine.',
+    },
+  };
+
+  matches(args: ParsedArgs): boolean {
+    return args.plugins === true;
+  }
+
+  run = runPlugins;
 }

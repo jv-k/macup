@@ -1,12 +1,14 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
 import { generateBashCompletions } from '../completions/bash';
 import { generateFishCompletions } from '../completions/fish';
 import { generateZshCompletions } from '../completions/zsh';
 import type { Plugin } from '../plugins/types';
+import { detectShellFromEnv, isShell, type Shell, SUPPORTED_SHELLS } from './shell';
 
-export type Shell = 'zsh' | 'bash' | 'fish';
+export type { Shell };
 
 export interface InstallDeps {
   home: string;
@@ -137,4 +139,57 @@ export function formatInstallReport(report: InstallReport): string {
   }
   lines.push(`  ${report.hint}`);
   return lines.join('\n');
+}
+
+export async function runInstallCompletions(
+  args: ParsedArgs,
+  deps: CliDeps,
+): Promise<void> {
+  const value = args['install-completions'];
+  if (typeof value !== 'string') return;
+  const shell = resolveShellArg(value, deps.env);
+  if (!shell) return;
+
+  const report = await installCompletions(shell, deps.registry, {
+    home: deps.home,
+    env: deps.env,
+  });
+  console.log(formatInstallReport(report));
+}
+
+function resolveShellArg(value: string, env: NodeJS.ProcessEnv): Shell | undefined {
+  if (value === '') {
+    const detected = detectShellFromEnv(env);
+    if (!detected) {
+      console.error(
+        `error: could not detect shell from $SHELL. Pass one of: ${SUPPORTED_SHELLS.join(', ')}.`,
+      );
+      process.exitCode = 1;
+      return undefined;
+    }
+    console.error(`[detected ${detected} from $SHELL]`);
+    return detected;
+  }
+  if (isShell(value)) return value;
+  console.error(`error: unknown shell "${value}". Supported: ${SUPPORTED_SHELLS.join(', ')}.`);
+  process.exitCode = 1;
+  return undefined;
+}
+
+export class InstallCompletionsAction implements FlagAction {
+  readonly name = 'install-completions';
+  readonly description = `Generate and write shell completions to the standard XDG path for ${SUPPORTED_SHELLS.join('|')} (omit value to auto-detect).`;
+  readonly args = {
+    'install-completions': {
+      type: 'string' as const,
+      required: false,
+      description: `Generate and write shell completions to the standard XDG path for ${SUPPORTED_SHELLS.join('|')} (omit value to auto-detect).`,
+    },
+  };
+
+  matches(args: ParsedArgs): boolean {
+    return typeof args['install-completions'] === 'string';
+  }
+
+  run = runInstallCompletions;
 }

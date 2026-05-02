@@ -1,4 +1,4 @@
-import { confirm, isCancel, spinner } from '@clack/prompts';
+import { confirm, isCancel } from '@clack/prompts';
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ConfigStore } from '../config/store';
 import { resolveSelection } from '../plugins/selection';
@@ -6,81 +6,15 @@ import type {
   ExecRunner,
   Logger,
   PackageRef,
-  PackageStatus,
   Plugin,
   PluginContext,
 } from '../plugins/types';
 import * as log from '../ui/log';
-import { StatusBar } from '../ui/status-bar';
-import { supportsScrollRegions } from '../ui/terminal-caps';
+import { renderList } from './render-list';
+import { type SpinnerDeps, withSpinner, withUserActionSpinner } from './spinner';
 import { pluginHasSubtypes, resolveSubtypeOrExit } from './subtype';
 
-// When --verbose is on, the TracingExecRunner streams shell output live to
-// stderr; an animated status bar over the same rows would clobber that
-// output. cli.ts calls setVerboseMode(true) at startup in that case to
-// suppress the bar across all install/update/health-check call sites.
-let verboseMode = false;
-export function setVerboseMode(v: boolean): void {
-  verboseMode = v;
-}
-
-// Module-level StatusBar shared across all spinner calls. Exported so
-// cli.ts can wire it to the StreamingExecRunner's UiSink — chunks from
-// `kind: 'user-action'` exec calls flow into bar.pushBox() during the
-// user-action spinner's lifetime.
-export const statusBar = new StatusBar();
-
-async function runWithBar<T>(
-  message: string,
-  options: { box?: boolean },
-  fn: () => Promise<T>,
-): Promise<T> {
-  if (supportsScrollRegions()) {
-    statusBar.start(message);
-    if (options.box) statusBar.openBox(message);
-    try {
-      const result = await fn();
-      if (options.box) statusBar.closeBox();
-      statusBar.stop();
-      console.log(log.success(`${message.replace(/\.{3}$/, '')} done.`));
-      return result;
-    } catch (err) {
-      if (options.box) statusBar.closeBox();
-      statusBar.stop();
-      console.log(log.error(`${message.replace(/\.{3}$/, '')} failed.`));
-      throw err;
-    }
-  }
-  // Multiplexer / dumb-term fallback: clack spinner, animates on a
-  // single line via \r. Works reliably where DECSTBM is sketchy.
-  const s = spinner();
-  s.start(message);
-  try {
-    const result = await fn();
-    s.stop(`${message.replace(/\.{3}$/, '')} done.`);
-    return result;
-  } catch (err) {
-    s.stop(`${message.replace(/\.{3}$/, '')} failed.`);
-    throw err;
-  }
-}
-
-// Default spinner: animated bar only. Used for queries (list, outdated,
-// health checks) where the underlying chatter is dev-internal noise.
-async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
-  if (verboseMode || !process.stdout.isTTY) return fn();
-  return runWithBar(message, {}, fn);
-}
-
-// User-action spinner: bar + boxed pane that surfaces the subprocess's
-// real output (downloads, sudo prompts, success messages). Used for
-// install/upgrade flows where the user wants to *see* what's happening.
-async function withUserActionSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
-  if (verboseMode || !process.stdout.isTTY) return fn();
-  return runWithBar(message, { box: true }, fn);
-}
-
-export interface CommandDeps {
+export interface CommandDeps extends SpinnerDeps {
   readonly exec: ExecRunner;
   readonly log: Logger;
   readonly getStore: () => Promise<ConfigStore>;
@@ -101,135 +35,11 @@ function makeCtx(deps: CommandDeps): PluginContext {
   };
 }
 
-function renderStatusBlock(
-  label: string,
-  statuses: PackageStatus[],
-  onlyOutdated: boolean,
-): string[] {
-  const upToDate = statuses.filter((s) => s.installed && !s.outdated);
-  const outdated = statuses.filter((s) => s.installed && s.outdated);
-  const notInstalled = statuses.filter((s) => !s.installed);
-  // Per-column name widths: padding the up-to-date column to the widest
-  // outdated name (or vice-versa) wastes horizontal space and pushes the
-  // right column further from the eye.
-  const upToDateWidth = Math.max(...upToDate.map((s) => s.ref.name.length), 0);
-  const outdatedWidth = Math.max(...outdated.map((s) => s.ref.name.length), 0);
-  const notInstalledWidth = Math.max(...notInstalled.map((s) => s.ref.name.length), 0);
-  const lines: string[] = [];
-
-  lines.push('');
-  lines.push(log.header(label, statuses.length));
-
-  const showUpToDate = !onlyOutdated && upToDate.length > 0;
-  const showOutdated = outdated.length > 0;
-
-  const upToDateBlock: string[] = [];
-  if (showUpToDate) {
-    upToDateBlock.push(`  ${log.subHeader('Up-to-date', upToDate.length)}`);
-    for (const s of upToDate) {
-      upToDateBlock.push(log.pkgUpToDate(s.ref.name, s.installedVersion ?? '', upToDateWidth));
-    }
-  }
-
-  const outdatedBlock: string[] = [];
-  if (showOutdated) {
-    outdatedBlock.push(`  ${log.outdatedHeader('Outdated', outdated.length)}`);
-    for (const s of outdated) {
-      outdatedBlock.push(
-        log.pkgOutdated(
-          s.ref.name,
-          s.installedVersion ?? '?',
-          s.latestVersion ?? '?',
-          outdatedWidth,
-        ),
-      );
-    }
-  }
-
-  if (showUpToDate && showOutdated) {
-    // Two-column when both halves have items and the terminal is wide
-    // enough; fall back to stacked otherwise so narrow windows don't wrap
-    // mid-row. The columns are top-aligned: the shorter side pads down,
-    // not centres, so the headers always sit on the same row.
-    const gap = 4;
-    const termWidth = process.stdout.columns ?? 80;
-    const leftWidth = Math.max(...upToDateBlock.map(log.visualWidth));
-    const rightWidth = Math.max(...outdatedBlock.map(log.visualWidth));
-    if (leftWidth + gap + rightWidth <= termWidth) {
-      lines.push('');
-      lines.push(
-        ...log
-          .sideBySide(upToDateBlock.join('\n'), outdatedBlock.join('\n'), { gap, vAlign: 'top' })
-          .split('\n'),
-      );
-    } else {
-      lines.push('');
-      lines.push(...upToDateBlock);
-      lines.push('');
-      lines.push(...outdatedBlock);
-    }
-  } else if (showUpToDate) {
-    lines.push('');
-    lines.push(...upToDateBlock);
-  } else if (showOutdated) {
-    lines.push('');
-    lines.push(...outdatedBlock);
-  } else if (onlyOutdated) {
-    lines.push('');
-    lines.push(log.success(`All ${label} packages are up-to-date!`));
-  }
-
-  if (!onlyOutdated && notInstalled.length > 0) {
-    lines.push('');
-    lines.push(`  ${log.errorHeader('Not installed', notInstalled.length)}`);
-    for (const s of notInstalled) {
-      lines.push(log.pkgNotInstalled(s.ref.name, notInstalledWidth));
-    }
-  }
-
-  return lines;
-}
-
-function indentBlock(lines: string[], spaces: number): string[] {
-  const pad = ' '.repeat(spaces);
-  return lines.map((l) => (l.length > 0 ? pad + l : l));
-}
-
-function kindLabel(kind: string): string {
-  return `${kind}s`.toUpperCase();
-}
-
-function renderList(pluginName: string, statuses: PackageStatus[], onlyOutdated: boolean): string {
-  if (statuses.length === 0) {
-    return [log.info(`No ${pluginName} packages found.`)].join('\n');
-  }
-
-  const distinctKinds = Array.from(new Set(statuses.map((s) => s.ref.kind)));
-  const lines: string[] = [];
-
-  if (distinctKinds.length <= 1) {
-    lines.push(...renderStatusBlock(pluginName, statuses, onlyOutdated));
-    return lines.join('\n');
-  }
-
-  // Multi-kind: top-level plugin header, then a nested block per kind.
-  // Preserves the order kinds first appeared in `statuses` so plugins
-  // can choose their display order (e.g. brew lists formulas before casks).
-  // No trailing blank: console.log's \n + the next output's leading
-  // blank line already give one row of separation.
-  lines.push('');
-  lines.push(log.header(pluginName, statuses.length));
-
-  for (const kind of distinctKinds) {
-    const group = statuses.filter((s) => s.ref.kind === kind);
-    const block = renderStatusBlock(kindLabel(kind), group, onlyOutdated);
-    lines.push(...indentBlock(block, 2));
-  }
-
-  return lines.join('\n');
-}
-
-async function runHealthCheck(pluginId: string, ctx: PluginContext): Promise<void> {
+async function runHealthCheck(
+  deps: SpinnerDeps,
+  pluginId: string,
+  ctx: PluginContext,
+): Promise<void> {
   const checks: Record<string, [string, string[]]> = {
     brew: ['brew', ['doctor']],
     npm: ['npm', ['doctor']],
@@ -238,7 +48,7 @@ async function runHealthCheck(pluginId: string, ctx: PluginContext): Promise<voi
   const entry = checks[pluginId];
   if (!entry) return;
   const [cmd, args] = entry;
-  await withSpinner(`Checking ${pluginId} health...`, async () => {
+  await withSpinner(deps, `Checking ${pluginId} health...`, async () => {
     await ctx.exec.run(cmd, args);
   });
 }
@@ -333,6 +143,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const showAll = Boolean(args.all);
 
         let statuses = await withSpinner(
+          deps,
           `Fetching ${manifest.displayName} packages...`,
           async () => {
             await plugin.check(makeCtx(deps));
@@ -447,9 +258,13 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             console.log('');
             console.log(log.header(`Installing ${manifest.displayName}`));
             console.log('');
-            await withUserActionSpinner(`Installing ${manifest.displayName}...`, async () => {
-              await plugin.install?.(makeCtx(deps), [], {});
-            });
+            await withUserActionSpinner(
+              deps,
+              `Installing ${manifest.displayName}...`,
+              async () => {
+                await plugin.install?.(makeCtx(deps), [], {});
+              },
+            );
             return;
           }
           console.log('');
@@ -461,6 +276,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             const started = Date.now();
             try {
               await withUserActionSpinner(
+                deps,
                 log.counter(i + 1, refs.length, 'Installing', ref.name),
                 async () => {
                   await plugin.install?.(makeCtx(deps), [ref], {});
@@ -476,7 +292,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
               throw err;
             }
           }
-          await runHealthCheck(manifest.id, makeCtx(deps));
+          await runHealthCheck(deps, manifest.id, makeCtx(deps));
         }
       },
     });
@@ -506,6 +322,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           subtype === 'casks' ? 'cask' : subtype === 'formulas' ? 'formula' : manifest.id;
 
         const statuses = await withSpinner(
+          deps,
           `Checking ${manifest.displayName} for outdated packages...`,
           async () => {
             await plugin.check(makeCtx(deps));
@@ -578,6 +395,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             const started = Date.now();
             try {
               await withUserActionSpinner(
+                deps,
                 log.counter(i + 1, refs.length, 'Updating', ref.name),
                 async () => {
                   await plugin.update?.(makeCtx(deps), [ref], {});
@@ -594,7 +412,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             }
           }
         }
-        await runHealthCheck(manifest.id, makeCtx(deps));
+        await runHealthCheck(deps, manifest.id, makeCtx(deps));
         console.log(log.success(`Updated ${refs.length} package(s).`));
       },
     });

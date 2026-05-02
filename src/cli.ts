@@ -19,7 +19,7 @@ import { defineCommand, runCommand, runMain } from 'citty';
 import pc from 'picocolors';
 import { runCleanup } from './commands/cleanup';
 import { buildConfigReport, formatConfigReport } from './commands/config';
-import { commandsFromManifest, setVerboseMode, statusBar } from './commands/from-manifest';
+import { commandsFromManifest } from './commands/from-manifest';
 import { formatInstallReport, installCompletions } from './commands/install-completions';
 import {
   buildOutdatedReport,
@@ -35,22 +35,18 @@ import { BackupStore } from './config/backup';
 import { resolveConfigPaths } from './config/paths';
 import { ConfigStore } from './config/store';
 import { MacupError } from './errors';
+import { buildExecRunner } from './exec/build';
 import { ExecaExecRunner } from './exec/run';
-import { StreamingExecRunner } from './exec/streaming';
-import { TracingExecRunner } from './exec/tracing';
 import { BUILTIN_PLUGINS, defaultRegistry, isOnPath } from './plugins/registry';
 import type { Plugin, PluginContext } from './plugins/types';
+import { useColor as shouldUseColor } from './runtime';
 import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
+import { StatusBar } from './ui/status-bar';
 import { StatusBarSink } from './ui/status-bar-sink';
 import { supportsScrollRegions } from './ui/terminal-caps';
 import { getVersion } from './version';
 import { type ActionResult, type Target, pickAction, pickTarget } from './wizard';
-
-function shouldUseColor(): boolean {
-  if (process.env.NO_COLOR) return false;
-  return process.stdout.isTTY === true;
-}
 
 type Shell = 'zsh' | 'bash' | 'fish';
 const SUPPORTED_SHELLS: readonly Shell[] = ['zsh', 'bash', 'fish'];
@@ -141,23 +137,25 @@ if (debug || verbose) {
 // ExecaExecRunner + clack inline spinner.
 const canPin = process.stdout.isTTY === true && supportsScrollRegions();
 const useStreaming = !debug && canPin;
-// setVerboseMode only suppresses the clack/bar spinners when --debug is
-// on (TracingExecRunner owns the screen then). --verbose keeps the bar
-// + bar's box pane; the bar's sink in verbose mode also tees to stdout.
-setVerboseMode(debug);
+// In --debug, TracingExecRunner streams every shell line to stderr, so
+// the bar's spinner / box would clobber it. Suppress the bar everywhere
+// (commands, exec sink) in that mode.
+const bar = new StatusBar();
 
 const registry = defaultRegistry();
 const baseExec = new ExecaExecRunner();
-let exec: ExecaExecRunner | TracingExecRunner | StreamingExecRunner = baseExec;
-if (debug) {
-  exec = new TracingExecRunner(baseExec, { color: shouldUseColor() });
-} else if (useStreaming) {
-  // user-action chunks always land in the bar's box pane. In --verbose
-  // they additionally tee to stdout so the user gets a grep-able copy
-  // in their scrollback above the box.
-  const sink = new StatusBarSink(statusBar, { teeUserActionToStdout: verbose });
-  exec = new StreamingExecRunner(baseExec, sink);
-}
+// user-action chunks always land in the bar's box pane. In --verbose
+// they additionally tee to stdout so the user gets a grep-able copy
+// in their scrollback above the box.
+const streamingSink = useStreaming
+  ? new StatusBarSink(bar, { teeUserActionToStdout: verbose })
+  : undefined;
+const exec = buildExecRunner({
+  baseExec,
+  debug,
+  streamingSink,
+  color: shouldUseColor(),
+});
 const log = {
   info: (m: string) => console.log(m),
   warn: (m: string) => console.warn(m),
@@ -243,6 +241,8 @@ for (const plugin of registry) {
     exec,
     log,
     getStore,
+    bar,
+    suppressBar: debug,
   });
 }
 

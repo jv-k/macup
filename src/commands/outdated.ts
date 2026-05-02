@@ -1,3 +1,6 @@
+import { spinner } from '@clack/prompts';
+import { defineCommand } from 'citty';
+import type { CliDeps } from '../cli/types';
 import type { PackageStatus, Plugin, PluginContext } from '../plugins/types';
 
 export interface OutdatedPluginSummary {
@@ -161,4 +164,60 @@ export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions
   }
 
   return lines.join('\n');
+}
+
+// Citty CommandDef factory for the cross-plugin `macup outdated` subcommand.
+// Lives here (not in cli.ts) so the dispatch + spinner orchestration sits
+// alongside the report builder/formatter it drives.
+export function buildOutdatedCommand(deps: CliDeps) {
+  return defineCommand({
+    meta: {
+      name: 'outdated',
+      description: 'Show outdated packages across every registered plugin in one pane.',
+    },
+    args: {
+      json: {
+        type: 'boolean',
+        description: 'Emit JSON instead of formatted text.',
+      },
+    },
+    async run({ args }) {
+      // JSON callers want a pristine payload — skip both the pill header
+      // and the spinner so nothing leaks onto stdout before the JSON.
+      if (args.json) {
+        const report = await buildOutdatedReport({
+          plugins: deps.registry,
+          makeCtx: () => ({
+            exec: deps.exec,
+            log: deps.log,
+            signal: new AbortController().signal,
+          }),
+        });
+        console.log(JSON.stringify(report, null, 2));
+        return;
+      }
+
+      // Print the pill upfront so it stays visible above the spinner
+      // throughout aggregation (mirrors the wizard's sticky-category
+      // pattern).
+      process.stdout.write(formatOutdatedHeader({ color: deps.color }));
+
+      const useSpinner = process.stdout.isTTY === true;
+      const s = useSpinner ? spinner() : null;
+      s?.start('Checking plugins…');
+      const report = await buildOutdatedReport({
+        plugins: deps.registry,
+        makeCtx: () => ({
+          exec: deps.exec,
+          log: deps.log,
+          signal: new AbortController().signal,
+        }),
+        onProgress: (e) => {
+          s?.message(`Checking plugins… (${e.completed}/${e.total}) ${e.displayName}`);
+        },
+      });
+      s?.stop(`Checked ${report.plugins.length} plugin(s).`);
+      console.log(formatOutdatedReport(report, { color: deps.color }));
+    },
+  });
 }

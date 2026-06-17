@@ -1,7 +1,7 @@
 # Plugins
 
 Each file in this directory is one package-manager plugin. The plugin
-*host* lives in [`src/plugins/`](../src/plugins/) — this directory holds
+*host* lives in [`src/plugins/`](../src/plugins/). This directory holds
 only implementations. Adding a new plugin is typically:
 
 1. Create `plugins/<id>.ts` exporting a `Plugin` as default.
@@ -10,7 +10,7 @@ only implementations. Adding a new plugin is typically:
 3. Write integration tests under `test/integration/<id>/` that exercise
    `list` / `install` / `update` against recorded fixtures.
 
-That's it — no edits to dispatch, help, or completion code. The
+That's it: no edits to dispatch, help, or completion code. The
 registry drives everything.
 
 ## The contract
@@ -26,7 +26,7 @@ const brew: Plugin = {
     id: 'brew',
     displayName: 'Homebrew',
     subtypes: ['formulas', 'casks'],
-    supportedOS: ['darwin', 'linux'],
+    supportedOS: ['darwin'],
     requires: ['brew'],
     configKeys: ['brew.formulas', 'brew.casks'],
     capabilities: {
@@ -66,7 +66,7 @@ export default brew;
 | `subtypes` | Optional. Defines `macup <id> <subtype> <command>` shape (e.g. `brew formulas list`). |
 | `supportedOS` | Array of `NodeJS.Platform`. Registry filters plugins whose host platform isn't listed. |
 | `requires` | PATH binaries that must resolve. Registry filters plugins whose binaries are missing. |
-| `configKeys` | Dotted-path YAML keys in `applist.yaml` that this plugin reads/writes (e.g. `['brew.formulas', 'brew.casks']` or `['npm']`). Two-segment keys resolve to a list nested under a plugin block; one-segment keys to a top-level list. Informational — `add`/`remove` are config mutations handled by the store, not the plugin. |
+| `configKeys` | Dotted-path YAML keys in `applist.yaml` that this plugin reads/writes (e.g. `['brew.formulas', 'brew.casks']` or `['npm']`). Two-segment keys resolve to a list nested under a plugin block; one-segment keys to a top-level list. Informational only: `add`/`remove` are config mutations handled by the store, not the plugin. |
 | `capabilities` | Declares which operations the plugin implements. Must match the methods actually defined. |
 | `compareVersions` | Optional. Override the default semver comparator for non-semver versioning schemes (brew casks, mas, etc.). |
 
@@ -75,7 +75,7 @@ export default brew;
 `supportedOS: ['darwin']` is the default for all 1.0 built-ins. The
 contract supports any `NodeJS.Platform`, so an `apt` or `pacman` plugin
 (`supportedOS: ['linux']`) or a `winget` plugin (`supportedOS: ['win32']`)
-is a valid shape — those just aren't shipped in core. The registry
+is a valid shape, those just aren't shipped in core. The registry
 silently skips any plugin whose `supportedOS` doesn't include the
 running host.
 
@@ -84,7 +84,7 @@ running host.
 Plugins should throw `ErrPluginUnavailable` (from `src/errors.ts`) from
 `check()` when their required state isn't met (binary missing, not
 authenticated, etc.). The composite `all` plugin catches this and
-continues with the remaining plugins — one missing backend doesn't
+continues with the remaining plugins, so one missing backend doesn't
 abort a bulk operation.
 
 Any other errors propagate and abort the current command with exit 1.
@@ -95,7 +95,7 @@ Pin enforcement uses semver by default. For non-semver versioning
 schemes (e.g. brew's calendar-style pseudo-versions, or mas's
 App-Store-reported versions), the plugin should set `compareVersions`
 on its manifest. If comparison is not feasible at all, fall back to
-string equality and log a warning — `src/plugins/selection.ts`
+string equality and log a warning. `src/plugins/selection.ts`
 treats uncomparable pairs as "allow upgrade."
 
 `add` / `remove` / `pin` / `unpin` / `skip` / `unskip` are

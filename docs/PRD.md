@@ -1,4 +1,4 @@
-# macup — Product Requirements Document
+# macup: Product Requirements Document
 
 > **Status:** v1.0.0 shipped (TypeScript rewrite). Distribution (Phase 8) pending.
 > **Last updated:** 2026-05-02
@@ -12,7 +12,7 @@
 
 ### 1.1 Elevator pitch
 
-> "One command to see every outdated package across every package manager, and one command to update them — with pins, skip lists, timestamped backups, and a YAML manifest you can check into dotfiles."
+> "One command to see every outdated package across every package manager, and one command to update them, with pins, skip lists, timestamped backups, and a YAML manifest you can check into dotfiles."
 
 ### 1.2 Positioning
 
@@ -25,7 +25,7 @@
 | Plugin architecture | ✅ | ❌ | ❌ | ❌ |
 | macOS-first UX | ✅ | Varies | ❌ | ✅ |
 
-Topgrade is the closest competitor but is Linux-leaning, has no config-as-code, and no pin/skip semantics. macup treats package management as a stateful, auditable workflow — not just "run everything."
+Topgrade is the closest competitor but is Linux-leaning, has no config-as-code, and no pin/skip semantics. macup treats package management as a stateful, auditable workflow, not only "run everything."
 
 ---
 
@@ -33,16 +33,16 @@ Topgrade is the closest competitor but is Linux-leaning, has no config-as-code, 
 
 A typical macOS developer installs packages from 5-7 different sources (brew formulas, brew casks, npm globals, Mac App Store, Xcode CLT, system updates, pnpm/pip/cargo). Each has its own CLI, its own notion of "outdated," its own upgrade semantics, and no shared state. This creates four concrete problems:
 
-1. **Visibility** — No single command answers "what's outdated across my whole machine?"
-2. **Reproducibility** — Setting up a new Mac means remembering every package, manually. Dotfiles cover shell config but not installed software.
-3. **Safety** — Package manager upgrades can break work. There's no lightweight undo — just reinstall the old version if you remember what it was.
-4. **Selectivity** — You want to upgrade most things but pin one package to a known-good version. Each manager has different mechanisms (`brew pin`, `npm --no-save`, etc.) — or none at all.
+1. **Visibility**: No single command answers "what's outdated across my whole machine?"
+2. **Reproducibility**: Setting up a new Mac means remembering every package, manually. Dotfiles cover shell config but not installed software.
+3. **Safety**: Package manager upgrades can break work. There's no lightweight undo, just reinstall the old version if you remember what it was.
+4. **Selectivity**: You want to upgrade most things but pin one package to a known-good version. Each manager has different mechanisms (`brew pin`, `npm --no-save`, etc.), or none at all.
 
 ---
 
 ## 3. Target users
 
-### 3.1 Primary persona — "The tool-forward developer"
+### 3.1 Primary persona: "The tool-forward developer"
 
 Software engineers on macOS who:
 - Use 3+ package managers daily (brew + npm at minimum)
@@ -50,7 +50,7 @@ Software engineers on macOS who:
 - Value reproducibility (devcontainers, CI parity, new-laptop setup)
 - Are comfortable in the terminal; prefer CLI over GUI for dev tooling
 
-### 3.2 Secondary persona — "The cautious upgrader"
+### 3.2 Secondary persona: "The cautious upgrader"
 
 Developers who avoid `brew upgrade` because it once broke their setup. They want:
 - To preview what *would* change before committing (`--dry-run`)
@@ -88,7 +88,7 @@ Developers who avoid `brew upgrade` because it once broke their setup. They want
 
 ---
 
-## 5. Core features (v1.0 — shipped)
+## 5. Core features (v1.0, shipped)
 
 ### 5.1 Unified resource commands
 
@@ -104,7 +104,7 @@ macup <plugin> <command> [args]
 | `appstore` | list, outdated, install, update, add, remove |
 | `xcode` | list, outdated, install, update |
 | `system` | list, outdated, install, update (softwareupdate wrapper) |
-| `all` | Composite — fans out across all plugins |
+| `all` | Composite, fans out across all plugins |
 
 A top-level `macup outdated` aggregates the per-plugin `outdated` results behind a spinner with progress, and supports `--json` for scripting. The other top-level commands are flag-styled (`--config`, `--cleanup`, `--restore`, `--logo`, `--plugins`, `--version`, `--install-completions`); for ergonomics the no-dash form (`macup config`, `macup version`, …) is rewritten into the canonical flag at argv parse time.
 
@@ -129,49 +129,49 @@ skip:
 
 ### 5.3 Safety mechanisms
 
-- **Timestamped backups** — automatic before any add/remove/install
-- **Smart backup optimization** — only keeps backups when changes occur
-- **`--restore`** — interactive restore from any backup
-- **`--cleanup`** — interactive backup deletion
-- **Confirmations** — required before bulk operations
+- **Timestamped backups**: automatic before any add/remove/install
+- **Smart backup optimization**: only keeps backups when changes occur
+- **`--restore`**: interactive restore from any backup
+- **`--cleanup`**: interactive backup deletion
+- **Confirmations**: required before bulk operations
 
 ### 5.4 Interactive wizard
 
 Running `macup` with no args drops into a TTY-aware `@clack/prompts` flow:
 
-1. **Help / About** — first prompt offers an "About macup" entry rendered via clack `note()`; selecting any other entry falls through to the target picker.
-2. **Pick a target** — plugins are grouped by `category` (e.g. "Node.js" for npm + pnpm, "macOS" for appstore/xcode/system) using `groupMultiselect`, with disabled header rows separating groups.
-3. **Pick an action** — capability-gated submenu (only actions the plugin advertises in its `manifest.capabilities` show up). The chosen target is rendered as a sticky pill above the prompt; Add/Remove diffs are previewed inline before confirmation.
-4. **Pick packages** (for `add` / `remove` / scoped `update`) — paged autocomplete picker with PgUp/PgDn, page indicator, count summary, and a multi-column grid layout.
-5. **Execute** — subprocess output for `user-action` calls (install/upgrade) streams into the pinned `StatusBar`'s box pane (see §5.6); `query`/`check` chatter (e.g. `--json` data fetches) stays silent unless it emits an `Error:` / `Warning:` line, which surfaces above the bar.
+1. **Help / About**: first prompt offers an "About macup" entry rendered via clack `note()`; selecting any other entry falls through to the target picker.
+2. **Pick a target**: plugins are grouped by `category` (e.g. "Node.js" for npm + pnpm, "macOS" for appstore/xcode/system) using `groupMultiselect`, with disabled header rows separating groups.
+3. **Pick an action**: capability-gated submenu (only actions the plugin advertises in its `manifest.capabilities` show up). The chosen target is rendered as a sticky pill above the prompt; Add/Remove diffs are previewed inline before confirmation.
+4. **Pick packages** (for `add` / `remove` / scoped `update`): paged autocomplete picker with PgUp/PgDn, page indicator, count summary, and a multi-column grid layout.
+5. **Execute**: subprocess output for `user-action` calls (install/upgrade) streams into the pinned `StatusBar`'s box pane (see section 5.6); `query`/`check` chatter (e.g. `--json` data fetches) stays silent unless it emits an `Error:` / `Warning:` line, which surfaces above the bar.
 
 Falls back to `--help` in non-TTY contexts.
 
 ### 5.5 Selective updates
 
-- **Pins** — `macup npm pin typescript 5.3.3` prevents upgrade past that version
-- **Skip** — `macup npm skip legacy-pkg` excludes from updates
-- **Plugin-specific comparators** — semver for npm, string-exact for brew/mas
+- **Pins**: `macup npm pin typescript 5.3.3` prevents upgrade past that version
+- **Skip**: `macup npm skip legacy-pkg` excludes from updates
+- **Plugin-specific comparators**: semver for npm, string-exact for brew/mas
 
 ### 5.6 Developer experience
 
-- **Shell completions** — zsh, bash, fish (manifest-driven, auto-extend per plugin)
-- **Context-aware help** — generated from plugin manifests, no dead arrays
-- **`--json` output** — structured output for `list` and `outdated` commands
-- **`--version`, `--config`, `--plugins`** — standard introspection (`--plugins` shows per-plugin availability with reasons when a binary is missing or the OS is unsupported)
-- **`--verbose` / `-V`** — curated user output: subprocess chunks from `kind: 'user-action'` calls (install/upgrade flows) stream live to scrollback in addition to the boxed pane; query/check chatter stays hidden. The pinned status bar remains active.
-- **`--debug` / `-D`** — raw full trace via `TracingExecRunner`: every shell call (kind included) annotated with `$ cmd args`, line-buffered live stdout/stderr, and a `↳ exit=N · Nms` summary on completion. Output goes to stderr so JSON-piped flows stay clean. Suppresses the bar.
-- **Pinned status bar + box pane** (TTY default on emulators that support DECSTBM scroll regions; opt out with `MACUP_STATUS_BAR=off`) — the last terminal row is reserved for a pinned status line; install/upgrade flows additionally open an N-row bordered box pane just above it where subprocess output streams live. Adapts to SIGWINCH. Falls back to the clack inline spinner on dumb terms or under `--debug`.
+- **Shell completions**: zsh, bash, fish (manifest-driven, auto-extend per plugin)
+- **Context-aware help**: generated from plugin manifests, no dead arrays
+- **`--json` output**: structured output for `list` and `outdated` commands
+- **`--version`, `--config`, `--plugins`**: standard introspection (`--plugins` shows per-plugin availability with reasons when a binary is missing or the OS is unsupported)
+- **`--verbose` / `-V`**: curated user output. Subprocess chunks from `kind: 'user-action'` calls (install/upgrade flows) stream live to scrollback in addition to the boxed pane; query/check chatter stays hidden. The pinned status bar remains active.
+- **`--debug` / `-D`**: raw full trace via `TracingExecRunner`. Every shell call (kind included) annotated with `$ cmd args`, line-buffered live stdout/stderr, and a `↳ exit=N · Nms` summary on completion. Output goes to stderr so JSON-piped flows stay clean. Suppresses the bar.
+- **Pinned status bar + box pane** (TTY default on emulators that support DECSTBM scroll regions; opt out with `MACUP_STATUS_BAR=off`): the last terminal row is reserved for a pinned status line; install/upgrade flows additionally open an N-row bordered box pane just above it where subprocess output streams live. Adapts to SIGWINCH. Falls back to the clack inline spinner on dumb terms or under `--debug`.
 
 ### 5.7 Distribution
 
-- **npm package** (`macup`) — `npx macup`, `pnpm add -g macup`
-- **Single binary** (via `bun build --compile`) — `darwin-arm64`, `darwin-x64`
-- **Homebrew tap** (planned Phase 8) — `brew install jv-k/tap/macup`
+- **npm package** (`macup`): `npx macup`, `pnpm add -g macup`
+- **Single binary** (via `bun build --compile`): `darwin-arm64`, `darwin-x64`
+- **Homebrew tap** (planned Phase 8): `brew install jv-k/tap/macup`
 
 ---
 
-## 5.8 Bundles (planned — v1.1)
+## 5.8 Bundles (planned, v1.1)
 
 ### 5.8.1 Concept
 
@@ -204,11 +204,11 @@ pins:
 
 ### 5.8.2 Motivating use cases
 
-1. **New-machine bootstrap** — `macup bundle install personal` installs a full developer setup from a single command
-2. **Role-based setups** — `frontend-dev`, `backend-dev`, `devops`, `designer` bundles
-3. **Project onboarding** — teams check a `team-baseline.yaml` into a repo; new hires run `macup bundle install ./team-baseline.yaml`
-4. **Ephemeral environments** — `macup bundle install ci-tools` before a pipeline run
-5. **Sharing** — publish bundles to GitHub; `macup bundle fetch jv-k/bundles/frontend-dev` pulls and installs
+1. **New-machine bootstrap**: `macup bundle install personal` installs a full developer setup from a single command
+2. **Role-based setups**: `frontend-dev`, `backend-dev`, `devops`, `designer` bundles
+3. **Project onboarding**: teams check a `team-baseline.yaml` into a repo; new hires run `macup bundle install ./team-baseline.yaml`
+4. **Ephemeral environments**: `macup bundle install ci-tools` before a pipeline run
+5. **Sharing**: publish bundles to GitHub; `macup bundle fetch jv-k/bundles/frontend-dev` pulls and installs
 
 ### 5.8.3 Commands
 
@@ -221,7 +221,7 @@ pins:
 | `macup bundle install <name> --refresh` | Bypass the remote cache and re-fetch (URL/GitHub sources only) |
 | `macup bundle install <path-or-url>` | Install from a file path or URL (not from local registry) |
 | `macup bundle create <name>` | Generate a bundle from currently tracked packages (interactive filter) |
-| `macup bundle add <name> <plugin> <pkg>` | Add a package to an existing bundle (file-based bundles only — see §5.8.6) |
+| `macup bundle add <name> <plugin> <pkg>` | Add a package to an existing bundle (file-based bundles only, see section 5.8.6) |
 | `macup bundle remove <name> <plugin> <pkg>` | Remove a package from a bundle (file-based bundles only) |
 | `macup bundle fetch <gh-spec>` | Download a bundle from GitHub (e.g., `user/repo/bundle-name`). Supports `--refresh`. |
 | `macup bundle export <name>` | Print bundle YAML to stdout (for piping/sharing) |
@@ -232,7 +232,7 @@ pins:
 
 - **Local bundles**: `$XDG_CONFIG_HOME/macup/bundles/<name>.yaml` (one file per bundle; shareable by copy)
 - **Inline bundles**: Also allowed inside `applist.yaml` under a `bundles:` map, for users who prefer a single-file config
-- **Remote bundles**: Fetched via `macup bundle fetch` — cached locally under `$XDG_CACHE_HOME/macup/bundles/<origin>/<name>.yaml`
+- **Remote bundles**: Fetched via `macup bundle fetch`, cached locally under `$XDG_CACHE_HOME/macup/bundles/<origin>/<name>.yaml`
 - **Resolution order** when `macup bundle install <name>` is called:
   1. Literal path (if `<name>` ends in `.yaml`, `.yml`, or looks like a path)
   2. URL (if starts with `http://` or `https://`)
@@ -251,7 +251,7 @@ brew:
   formulas: [node]                 # adds to base.brew.formulas
 ```
 
-- `extends` is a list — multiple inheritance with last-wins on conflict
+- `extends` is a list, allowing multiple inheritance with last-wins on conflict
 - Circular `extends` is detected at load time and rejected
 - A `macup bundle show frontend-dev --resolved` command prints the flattened result
 
@@ -263,7 +263,7 @@ brew:
 - **Partial failures**: One plugin failing does not abort the rest. The install result classifies each package as `installed`, `skipped`, or `failed`; the CLI exits non-zero if any failed, but everything installable did install.
 - **Inline bundles are read-only via CLI**: Bundles defined inside `applist.yaml` under `bundles:` can be installed and shown, but `bundle add` / `bundle remove` operate on file-based bundles only in v1.1. To edit an inline bundle, edit `applist.yaml` directly.
 - **Wizard**: The TTY wizard gains a top-level "install a bundle" option listing local + cached remote bundles.
-- **Plugin contract**: No changes required. Bundles are a layer above plugins — they resolve to plugin-specific install calls.
+- **Plugin contract**: No changes required. Bundles are a layer above plugins; they resolve to plugin-specific install calls.
 
 ### 5.8.7 Schema
 
@@ -292,16 +292,16 @@ export const BundleSchema = z.object({
 
 ### 5.8.8 Non-goals for v1.1
 
-- **Versioning of bundles themselves** — bundles don't have semver; users rely on git for bundle repos
-- **Signing / verification** — remote bundles are trust-on-first-use; signing is a v1.2+ consideration
-- **Package manager lockfiles** — bundles specify *what* to install, not exact resolved trees. That's the job of each plugin's pin mechanism.
-- **Dependency resolution across plugins** — e.g., "install node via brew before running npm"; the existing plugin ordering in `all.ts` handles this implicitly
+- **Versioning of bundles themselves**: bundles don't have semver; users rely on git for bundle repos
+- **Signing / verification**: remote bundles are trust-on-first-use; signing is a v1.2+ consideration
+- **Package manager lockfiles**: bundles specify *what* to install, not exact resolved trees. That's the job of each plugin's pin mechanism.
+- **Dependency resolution across plugins**: e.g., "install node via brew before running npm"; the existing plugin ordering in `all.ts` handles this implicitly
 
 ### 5.8.9 Open questions
 
 - **Auto-discovery of community bundles**: Should `macup bundle search` query a central index (e.g., a GitHub topic `macup-bundle`)? Deferred.
-- **Inline shell scripts**: Some bundles (e.g., Homebrew Bundle's `Brewfile`) allow pre/post shell hooks. We'd reject this for v1.1 — security risk, out of scope — but it's a future question.
-- **Bundle templating** — e.g., `node_version: "{{env.NODE_VERSION}}"`. YAGNI for v1.1.
+- **Inline shell scripts**: Some bundles (e.g., Homebrew Bundle's `Brewfile`) allow pre/post shell hooks. We'd reject this for v1.1 (security risk, out of scope), but it's a future question.
+- **Bundle templating**: e.g., `node_version: "{{env.NODE_VERSION}}"`. YAGNI for v1.1.
 
 ---
 
@@ -345,7 +345,7 @@ src/bundles/              — Bundle host (v1.1)
 
 Adding a new package manager = **one new file** in `/plugins/` + **one line** in `registry.ts`. No edits to dispatch, help, or completions.
 
-Bundles are a **layer above plugins** — they resolve per-plugin package lists and dispatch to existing `plugin.install()` methods. No changes to the plugin contract.
+Bundles are a **layer above plugins**: they resolve per-plugin package lists and dispatch to existing `plugin.install()` methods. No changes to the plugin contract.
 
 ### 6.2 Stack
 
@@ -362,11 +362,11 @@ Bundles are a **layer above plugins** — they resolve per-plugin package lists 
 
 ### 6.3 Testing strategy
 
-- **Unit** — zod schemas, store mutation, selection classifier
-- **Integration** — each plugin against fixture recordings (no live subprocess)
-- **Regression** — one test per historical zsh bug
-- **Conformance** — parameterised test asserting every plugin obeys the interface contract
-- **YAML round-trip** — real tmp dirs, byte-equality on unchanged lines, fuzz on random mutation sequences
+- **Unit**: zod schemas, store mutation, selection classifier
+- **Integration**: each plugin against fixture recordings (no live subprocess)
+- **Regression**: one test per historical zsh bug
+- **Conformance**: parameterised test asserting every plugin obeys the interface contract
+- **YAML round-trip**: real tmp dirs, byte-equality on unchanged lines, fuzz on random mutation sequences
 
 ---
 
@@ -401,34 +401,34 @@ Bundles are a **layer above plugins** — they resolve per-plugin package lists 
 - Pins + skip lists, backup/restore, XDG paths, wizard, completions
 - CI pipeline active; release pipeline scaffolded
 
-### 8.2 Near-term (v1.0.x — polish)
+### 8.2 Near-term (v1.0.x, polish)
 
 Tracked in [GitHub issues](https://github.com/jv-k/macos-updatetool/issues):
 
-- **#4** Dry run mode — expose `--dry-run` flag (plugin support exists)
+- **#4** Dry run mode: expose `--dry-run` flag (plugin support exists)
 - **#5** Tracked vs installed distinction in UI
 - **#6** Rollback / undo command
 - **#7** Config schema version field
-- **#22** Activate release pipeline (Phase 8 — create tap, set secrets, cut v1.0.1)
+- **#22** Activate release pipeline (Phase 8: create tap, set secrets, cut v1.0.1)
 
-### 8.3 Mid-term (v1.1 — scriptability + bundles)
+### 8.3 Mid-term (v1.1, scriptability + bundles)
 
-- **Bundles** — the headline v1.1 feature (see §5.8)
-- **Streaming progress** — shipped: `StreamingExecRunner` routes user-action subprocess chunks into a pinned `StatusBar`'s box pane on TTY-capable emulators; `--verbose` tees them to scrollback; `--debug` swaps in `TracingExecRunner` for full annotated traces.
+- **Bundles**: the headline v1.1 feature (see section 5.8)
+- **Streaming progress**: shipped. `StreamingExecRunner` routes user-action subprocess chunks into a pinned `StatusBar`'s box pane on TTY-capable emulators; `--verbose` tees them to scrollback; `--debug` swaps in `TracingExecRunner` for full annotated traces.
 - **#8** `--json` for all commands (`outdated` already shipped; remaining gaps tracked under this issue)
 - **#9** `macup check` for shell prompts / cron
 - **#11** `macup info` system info dashboard
 - **#12** Changelog / diff view before updates
-- **#16** File logging (`--log`, `MACUP_LOG`) — distinct from `--verbose`; persists traces to disk for post-hoc inspection
+- **#16** File logging (`--log`, `MACUP_LOG`): distinct from `--verbose`; persists traces to disk for post-hoc inspection
 
-### 8.4 Long-term (v1.2+ — ecosystem)
+### 8.4 Long-term (v1.2+, ecosystem)
 
 - **#10** Python/pip plugin
 - **#19, #20, #21** cargo, go plugins
-- **#14** `macup init` — generate applist from current system
-- **#18** `macup schedule` — launchd integration
+- **#14** `macup init`: generate applist from current system
+- **#18** `macup schedule`: launchd integration
 - **#24** Shell integration (`eval "$(macup init zsh)"`)
-- **MCP server** — expose macup as an AI-accessible tool server
+- **MCP server**: expose macup as an AI-accessible tool server
 
 ### 8.5 Speculative (post-1.2)
 
@@ -457,17 +457,17 @@ Tracked in [GitHub issues](https://github.com/jv-k/macos-updatetool/issues):
 
 ### 10.1 Naming
 
-- **macup** (chosen) — short, memorable, macOS-specific
+- **macup** (chosen): short, memorable, macOS-specific
 - Rejected: `mac-updater` (too generic), `macos-updatetool` (legacy; too long)
 - Legacy `macos-updatetool` npm package deprecated with redirect message at 1.0
 
 ### 10.2 Design principles
 
-1. **Plugins own their semantics** — macup is a host, not a package manager
-2. **Declarative over imperative** — YAML manifest is source of truth
-3. **Safe by default** — backups, confirmations, dry-run
-4. **TTY-aware** — wizard when interactive, `--help` when piped
-5. **No magic** — every subprocess is transparent (`--log` shows exactly what ran)
+1. **Plugins own their semantics**: macup is a host, not a package manager
+2. **Declarative over imperative**: YAML manifest is source of truth
+3. **Safe by default**: backups, confirmations, dry-run
+4. **TTY-aware**: wizard when interactive, `--help` when piped
+5. **No magic**: every subprocess is transparent (`--log` shows exactly what ran)
 
 ### 10.3 References
 

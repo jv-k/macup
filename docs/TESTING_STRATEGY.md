@@ -39,7 +39,7 @@ test/
 ## 2. Goals
 
 1. **Hermetic by default.** Tests must not call real `brew`/`mas`/`npm`, hit the network, touch `$HOME`, or depend on the developer's machine state.
-2. **Meaningful assertions.** Check exit codes, stdout/stderr content, file side effects, and argv passed to subprocesses — not just "exit code 0".
+2. **Meaningful assertions.** Check exit codes, stdout/stderr content, file side effects, and argv passed to subprocesses, not only "exit code 0".
 3. **Layered coverage.** Unit for logic, integration for composed flows, e2e for user-visible CLI behavior, regression for historical bugs.
 4. **Fast feedback.** Unit < 1 s per file; full `vitest run` under 30 s locally.
 5. **Deterministic.** No reliance on clock, locale, TTY, color, or network. CI results reproduce locally.
@@ -48,7 +48,7 @@ test/
 
 ## 3. Test layers
 
-### 3.1 Unit tests — `test/unit/`
+### 3.1 Unit tests: `test/unit/`
 
 Target pure modules. No spawning, no filesystem writes outside a temp dir, no real subprocesses.
 
@@ -59,7 +59,7 @@ Target pure modules. No spawning, no filesystem writes outside a temp dir, no re
 - Per-manager command builders (args passed to `brew upgrade`, `npm update -g`, etc.)
 - Log formatters, wrap-text, splash/logo
 - Version resolution, plugin discovery
-- Error formatting (`src/errors.ts`) — exit codes, user-facing messages
+- Error formatting (`src/errors.ts`): exit codes, user-facing messages
 
 **Pattern:** import the function, mock its collaborators via `vi.mock(...)`, assert on return values and mock call args.
 
@@ -79,7 +79,7 @@ describe('planUpdates', () => {
 });
 ```
 
-### 3.2 Integration tests — `test/integration/`
+### 3.2 Integration tests: `test/integration/`
 
 Compose real modules together but keep the process boundary hermetic: stub the `execa` wrappers, the `fs` adapter, and any TTY detection.
 
@@ -90,7 +90,7 @@ Compose real modules together but keep the process boundary hermetic: stub the `
 - Dry-run mode: nothing is executed, but commands are logged
 - Plugin loading: enabled vs. disabled plugins produce the expected command set
 
-### 3.3 End-to-end tests — `test/e2e/`
+### 3.3 End-to-end tests: `test/e2e/`
 
 Spawn the built CLI (`dist/cli.mjs`) as a real child process inside a temp `$HOME`/`$XDG_CONFIG_HOME` with a `PATH` that resolves to stub binaries for `brew`, `mas`, `npm`, `softwareupdate`.
 
@@ -128,20 +128,20 @@ async function setupSandbox() {
 |---|----------|------------------|
 | 1 | First run: no config present | Tool offers to create default `applist.yaml`; file exists and parses; exit 0 |
 | 2 | `macup update` with valid applist | Correct subcommands invoked on each manager in expected order; summary printed; exit 0 |
-| 3 | Partial failure: brew fails on one formula | Other managers still run; summary reflects the failure; exit code matches policy (see §10) |
+| 3 | Partial failure: brew fails on one formula | Other managers still run; summary reflects the failure; exit code matches policy (see section 10) |
 | 4 | Non-interactive mode (`CI=true` or `--yes`) | No prompts emitted; defaults applied; deterministic exit code |
 | 5 | Dry-run | No mutating commands invoked; intended actions are logged |
 | 6 | Idempotent init | Running `init` twice does not modify an existing applist |
 | 7 | Unknown command or flag | Usage printed to stderr; non-zero exit |
 
-### 3.4 Regression tests — `test/regression/`
+### 3.4 Regression tests: `test/regression/`
 
 One file per historical bug, named to describe the symptom (see existing examples like [add-remove-sees-packages.test.ts](test/regression/add-remove-sees-packages.test.ts)). Each test references the issue/PR that introduced it. Never delete a regression test without a PR explaining why.
 
 ### 3.5 Config and completions
 
 - **Config:** validate that malformed applists (missing `apps`, `apps: null`, duplicate entries, wrong types) produce clear errors and non-zero exit. Idempotent `init` (mtime unchanged on second run).
-- **Completions:** golden-file tests — generated bash/zsh/fish output is compared against committed snapshots. Any CLI surface change (add/remove command or flag) fails CI unless the golden is regenerated deliberately.
+- **Completions:** golden-file tests, where generated bash/zsh/fish output is compared against committed snapshots. Any CLI surface change (add/remove command or flag) fails CI unless the golden is regenerated deliberately.
 
 ---
 
@@ -149,7 +149,7 @@ One file per historical bug, named to describe the symptom (see existing example
 
 ### Subprocess layer
 
-All external calls go through a thin wrapper in `src/exec/` (e.g., `brew.ts`, `mas.ts`, `npm.ts`). Tests mock these wrappers, not `execa` directly — this keeps mocks close to the intent being tested.
+All external calls go through a thin wrapper in `src/exec/` (e.g., `brew.ts`, `mas.ts`, `npm.ts`). Tests mock these wrappers, not `execa` directly, which keeps mocks close to the intent being tested.
 
 ```ts
 vi.mock('../../src/exec/brew', () => ({
@@ -168,7 +168,7 @@ For e2e tests that need to observe real argv, use **PATH stubs**: write a tiny s
 
 ### TTY / interactivity
 
-- In tests, stdin/stdout are not TTYs — exercise non-interactive paths by default.
+- In tests, stdin/stdout are not TTYs, so exercise non-interactive paths by default.
 - For interactive paths, inject the prompt driver (`@clack/prompts`) behind an interface so tests can provide scripted answers without simulating a PTY.
 
 ### Network
@@ -177,7 +177,7 @@ For e2e tests that need to observe real argv, use **PATH stubs**: write a tiny s
 
 ---
 
-## 5. Assertions — go deeper than exit code
+## 5. Assertions: go deeper than exit code
 
 Weak tests assert only `exitCode === 0`. Strong tests assert the observable effect:
 
@@ -195,15 +195,15 @@ Existing workflow: [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 **Required stages on every PR:**
 
-1. **Lint** — `npm run lint` (biome)
-2. **Typecheck** — `npm run typecheck`
-3. **Test** — `npm test` (runs unit + integration + regression + e2e)
-4. **Build** — `npm run build` to catch bundler regressions
-5. **Coverage** — `vitest run --coverage` via v8 provider; upload to Codecov or as artifact
+1. **Lint:** `npm run lint` (biome)
+2. **Typecheck:** `npm run typecheck`
+3. **Test:** `npm test` (runs unit + integration + regression + e2e)
+4. **Build:** `npm run build` to catch bundler regressions
+5. **Coverage:** `vitest run --coverage` via v8 provider; upload to Codecov or as artifact
 
 **Runner:** `macos-latest`. Optionally matrix across `macos-13` / `macos-14` if behaviour diverges.
 
-**Nightly (optional):** smoke test that shells out to real `brew --dry-run` to catch upstream changes. Must not run on PRs — nightly only.
+**Nightly (optional):** smoke test that shells out to real `brew --dry-run` to catch upstream changes. Must not run on PRs, nightly only.
 
 **Quality gates on `main`:**
 - All required stages green
@@ -221,7 +221,7 @@ Existing workflow: [.github/workflows/ci.yml](.github/workflows/ci.yml).
 - Never `sleep` in tests; if something is async, await the promise
 
 **Isolation:**
-- Fresh `mkdtemp()` per test — never share `/tmp` paths
+- Fresh `mkdtemp()` per test, never share `/tmp` paths
 - Reset module mocks between tests (`vi.resetModules()` where needed)
 - Stub every external command used on the code path; assert the stub was called so a miswired `PATH` fails loudly
 

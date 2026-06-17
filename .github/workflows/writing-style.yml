@@ -1,0 +1,28 @@
+name: Writing style
+
+# De-slop gate. Runs deslopper (github.com/jv-k/deslopper) over the Markdown changed in the
+# pull request and fails the build on an error-tier tell (em dashes, the section sign).
+# Warn-tier findings (the word lists, bold bullet leads) annotate the PR but do not block.
+# Only changed files are linted so the legacy prose backlog does not fail the check. Run
+# `pnpm deslop:lint <paths>` locally to reproduce.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: De-slop lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v8.2.0
+      - name: Run deslopper on changed Markdown
+        run: |
+          files=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- '*.md' '*.markdown')
+          [ -z "$files" ] && exit 0
+          uvx --from git+https://github.com/jv-k/deslopper@ef16c9dc43f0e888dc15354522ee08fe795c917a deslopper lint --format github $files

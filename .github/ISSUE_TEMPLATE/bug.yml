@@ -1,0 +1,60 @@
+name: Bug report
+description: A crash, a wrong result, or a hang when macup updates packages.
+labels: [bug]
+body:
+  - type: input
+    id: command
+    attributes:
+      label: Command you ran
+      description: The exact macup command.
+      placeholder: "macup update --brew"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened
+      description: Paste the output or error. Redact anything private.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: How to get from a clean state to the bug.
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: macup version
+      description: Output of `macup --version`.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: Apple menu > About This Mac, or `sw_vers -productVersion`.
+    validations:
+      required: true
+  - type: dropdown
+    id: package-manager
+    attributes:
+      label: Package manager
+      description: Which manager was involved.
+      options:
+        - Homebrew
+        - npm
+        - App Store
+        - Xcode
+        - system updates
+        - other or unsure
+    validations:
+      required: true

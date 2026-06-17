@@ -11,7 +11,8 @@
     ".": "./dist/cli.mjs",
     "./meta": {
       "types": "./dist/meta.d.ts",
-      "import": "./dist/meta.mjs"
+      "import": "./dist/meta.mjs",
+      "default": "./dist/meta.mjs"
     }
   },
   "files": ["dist", "README.md", "LICENSE.md"],

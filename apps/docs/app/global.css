@@ -2,6 +2,37 @@
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
 
+/*
+ * macup theme — echo the CLI identity.
+ *   - Carbon base #191816 (warm near-black) ~= hsl(40, 7%, 9%)
+ *   - Monokai Pro magenta #FF6188 ~= hsl(345, 100%, 69%) as the primary accent
+ *   - JetBrains Mono for code (the --font-mono var is set in app/layout.tsx)
+ */
+:root {
+  --color-fd-primary: hsl(345, 100%, 69%);
+  --color-fd-ring: hsl(345, 100%, 69%);
+}
+
+.dark {
+  --color-fd-background: hsl(40, 7%, 9%);
+  --color-fd-card: hsl(40, 7%, 11%);
+  --color-fd-popover: hsl(40, 7%, 11%);
+  --color-fd-secondary: hsl(40, 6%, 14%);
+  --color-fd-muted: hsl(40, 6%, 14%);
+  --color-fd-border: hsla(40, 8%, 50%, 20%);
+  --color-fd-primary: hsl(345, 100%, 69%);
+  --color-fd-primary-foreground: hsl(40, 10%, 8%);
+  --color-fd-ring: hsl(345, 100%, 69%);
+  --color-fd-accent: hsla(40, 8%, 40%, 30%);
+  --color-fd-accent-foreground: hsl(40, 6%, 92%);
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
 html {
   scrollbar-gutter: stable;
 }

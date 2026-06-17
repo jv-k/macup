@@ -1,4 +1,6 @@
 import { exec as execCb } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -9,10 +11,21 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '../..');
 const CLI = join(ROOT, 'dist/cli.mjs');
 
+// Isolation (T-1): point MACUP_CONFIG at a throwaway path so spawning the real
+// CLI can never read or migrate the developer's real ~/.config/macup config.
+const ENV = {
+  ...process.env,
+  MACUP_CONFIG: join(mkdtempSync(join(tmpdir(), 'macup-rt-')), 'applist.yaml'),
+};
+
 describe('--subtype CLI flag', () => {
   it('`macup brew list --subtype=bogus` exits 1 with a clear error', async () => {
     try {
-      await exec(`node "${CLI}" brew list --subtype=bogus`, { timeout: 10_000, cwd: ROOT });
+      await exec(`node "${CLI}" brew list --subtype=bogus`, {
+        timeout: 10_000,
+        cwd: ROOT,
+        env: ENV,
+      });
       expect.fail('expected non-zero exit code');
     } catch (err) {
       const e = err as { code?: number; stderr?: string };
@@ -30,6 +43,7 @@ describe('--subtype CLI flag', () => {
       const { stderr } = await exec(`node "${CLI}" brew list --subtype=formulas`, {
         timeout: 15_000,
         cwd: ROOT,
+        env: ENV,
       });
       expect(stderr).not.toContain('unknown subtype');
     } catch (err) {

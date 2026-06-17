@@ -8,7 +8,11 @@
   },
   "main": "./dist/cli.mjs",
   "exports": {
-    ".": "./dist/cli.mjs"
+    ".": "./dist/cli.mjs",
+    "./meta": {
+      "types": "./dist/meta.d.ts",
+      "import": "./dist/meta.mjs"
+    }
   },
   "files": ["dist", "README.md", "LICENSE.md"],
   "engines": {

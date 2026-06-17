@@ -75,20 +75,24 @@ jobs:
 
   docs-visual:
     name: Docs visual snapshots
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     needs: [lint, test]
+    # Run inside the pinned Playwright image so font rasterization matches the
+    # committed `-linux` baselines (generated in this same image). This removes
+    # cross-machine AA drift, which a bare macOS runner cannot guarantee since
+    # its font stack rolls with the image. Regenerate baselines by running the
+    # docs `test:visual --update-snapshots` in this image (see apps/docs).
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.0-noble
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter docs exec playwright install --with-deps chromium
-      # Baselines are committed from a developer macOS. If this job diffs on font AA, regenerate on this runner: re-run with --update-snapshots (or download the failed run's "actual" PNGs) and commit them.
+      - run: corepack enable && corepack prepare pnpm@10.33.1 --activate
+      # --ignore-scripts skips the darwin-only node-pty native build (unneeded
+      # for docs screenshots and absent build tools in the image would fail it);
+      # fumadocs-mdx is the one postinstall the docs build actually needs.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter docs exec fumadocs-mdx
+      - run: pnpm --filter macup build
       - run: pnpm --filter docs test:visual
       - uses: actions/upload-artifact@v4
         if: failure()

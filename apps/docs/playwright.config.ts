@@ -11,9 +11,9 @@ export default defineConfig({
   reporter: process.env.CI ? [['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://localhost:${PORT}`,
+    ...devices['Desktop Chrome'],
     viewport: { width: 1280, height: 800 },
     deviceScaleFactor: 1,
-    ...devices['Desktop Chrome'],
   },
   expect: {
     toHaveScreenshot: {

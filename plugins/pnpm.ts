@@ -87,7 +87,7 @@ const pnpm: Plugin = {
     id: 'pnpm',
     displayName: 'pnpm (global)',
     category: 'Node.js',
-    supportedOS: ['darwin', 'linux'],
+    supportedOS: ['darwin'],
     requires: ['pnpm'],
     configKeys: ['pnpm'],
     capabilities: {

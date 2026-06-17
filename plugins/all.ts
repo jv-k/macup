@@ -20,7 +20,7 @@ export function createAllPlugin(constituents: readonly Plugin[]): Plugin {
     manifest: {
       id: 'all',
       displayName: 'All package managers',
-      supportedOS: ['darwin', 'linux', 'win32'],
+      supportedOS: ['darwin'],
       requires: [],
       configKeys: [],
       capabilities: {

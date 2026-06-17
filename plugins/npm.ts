@@ -85,7 +85,7 @@ const npm: Plugin = {
     id: 'npm',
     displayName: 'npm (global)',
     category: 'Node.js',
-    supportedOS: ['darwin', 'linux'],
+    supportedOS: ['darwin'],
     requires: ['npm'],
     configKeys: ['npm'],
     capabilities: {

@@ -128,7 +128,7 @@ const brew: Plugin = {
     id: 'brew',
     displayName: 'Homebrew',
     subtypes: ['formulas', 'casks'],
-    supportedOS: ['darwin', 'linux'],
+    supportedOS: ['darwin'],
     requires: ['brew'],
     configKeys: ['brew.formulas', 'brew.casks'],
     capabilities: {

@@ -46,6 +46,12 @@ describe('plugin conformance — every builtin obeys the contract', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it('every builtin is darwin-only (no linux/win32 claims)', () => {
+    for (const p of BUILTIN_PLUGINS) {
+      expect(p.manifest.supportedOS).toEqual(['darwin']);
+    }
+  });
+
   for (const plugin of BUILTIN_PLUGINS) {
     const { manifest } = plugin;
     describe(`plugin: ${manifest.id}`, () => {

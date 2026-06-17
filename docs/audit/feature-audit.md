@@ -197,6 +197,11 @@ machine) never sees it, which is why it slipped through.
 | A-2 | ⚠️ low | observability | Package-manager **query** failures (e.g. pnpm "global bin not in PATH") are flattened to "no packages found"; only `--debug` reveals them | Surface query errors as a warning above the bar in default mode | fix pass |
 | G-1 | ⚠️ low | completions | Generated completions omit per-subcommand flags (`--dry-run`, `--cask`, `--only-outdated`, …) | Extend the completion generators to emit subcommand flags from arg defs | Phase 4 |
 
+**Resolution:** All 7 findings were fixed in the follow-up fix-pass, each TDD with tests —
+T-1 `43a88fe`, C-1 `adfd41c`, C-2 `fc7bd84`, D-1 `80e4dfb` (tracked-by-default + `--all`),
+A-1 `da08f2c`, A-2 `d78fa2d`, G-1 `24daf08`. Full suite 407 green; the T-1 fix is re-proven by
+the real config's mtime staying unchanged across repeated `pnpm test` runs.
+
 **Verified-good (no action):** version/help/plugins/config/logo; all completions generation +
 install; verbosity (`--verbose`/`--debug`/`MACUP_STATUS_BAR=off`); list/outdated/JSON across all
 7 plugins; subtype resolution + mutual-exclusion; add/remove/pin/unpin/skip/unskip; `--dry-run`

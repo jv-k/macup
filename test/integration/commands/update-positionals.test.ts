@@ -52,6 +52,13 @@ function emptyStore(): ConfigStore {
   } as unknown as ConfigStore;
 }
 
+function storeTracking(names: string[]): ConfigStore {
+  return {
+    list: () => names,
+    selectionFor: () => ({ pinned: new Map(), skipped: new Set() }),
+  } as unknown as ConfigStore;
+}
+
 describe('update subcommand — positional names', () => {
   it('updates only named packages when names are passed', async () => {
     const plugin = fakePlugin();
@@ -70,21 +77,38 @@ describe('update subcommand — positional names', () => {
     expect(refs.map((r: { name: string }) => r.name)).toEqual(['alpha']);
   });
 
-  it('updates everything outdated when no names are passed (existing behaviour)', async () => {
+  it('updates ALL outdated with --all, regardless of tracked set (D-1)', async () => {
     const plugin = fakePlugin();
     const cmd = commandsFromManifest(plugin, {
       exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake'] }),
       log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-      getStore: async () => emptyStore(),
+      getStore: async () => storeTracking(['alpha']),
+      bar: new StatusBar(),
+      suppressBar: true,
+      signal: new AbortController().signal,
+    });
+    const subCmds = cmd.subCommands as SubCommandsDef;
+    await runCommand(subCmds.update as CommandDef, { rawArgs: ['--all'] });
+    expect(plugin.update).toHaveBeenCalledTimes(2);
+    const names = (plugin.update as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1][0].name);
+    expect(names.sort()).toEqual(['alpha', 'beta']);
+  });
+
+  it('defaults to tracked packages only when no names and no --all (D-1)', async () => {
+    const plugin = fakePlugin();
+    const cmd = commandsFromManifest(plugin, {
+      exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake'] }),
+      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      getStore: async () => storeTracking(['alpha']), // beta is outdated but NOT tracked
       bar: new StatusBar(),
       suppressBar: true,
       signal: new AbortController().signal,
     });
     const subCmds = cmd.subCommands as SubCommandsDef;
     await runCommand(subCmds.update as CommandDef, { rawArgs: [] });
-    expect(plugin.update).toHaveBeenCalledTimes(2);
+    expect(plugin.update).toHaveBeenCalledTimes(1);
     const names = (plugin.update as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1][0].name);
-    expect(names.sort()).toEqual(['alpha', 'beta']);
+    expect(names).toEqual(['alpha']);
   });
 
   it('treats an unknown name as a no-op (filters to []), exits success', async () => {

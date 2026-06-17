@@ -319,6 +319,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           type: 'boolean',
           description: 'Print what would run without upgrading anything.',
         },
+        all: {
+          type: 'boolean',
+          description: 'Upgrade every outdated package, not just tracked ones.',
+        },
         packages: {
           type: 'positional',
           required: false,
@@ -368,6 +372,20 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (explicitNames.length > 0) {
           const wanted = new Set(explicitNames);
           filtered = filtered.filter((s) => wanted.has(s.ref.name));
+        } else if (!args.all && manifest.configKeys.length > 0) {
+          // Default: scope updates to the tracked applist — consistent with
+          // `install` and `list` (D-1). `--all` upgrades everything outdated.
+          // The composite `all` plugin (no configKeys) is unaffected and stays
+          // system-wide, since it IS the "update everything" command.
+          const tracked = new Set<string>();
+          const keysToCheck =
+            subtype !== undefined && manifest.configKeyFor
+              ? [manifest.configKeyFor(subtype)]
+              : manifest.configKeys;
+          for (const key of keysToCheck) {
+            for (const name of store.list(key)) tracked.add(name);
+          }
+          filtered = filtered.filter((s) => tracked.has(s.ref.name));
         }
 
         const refs: PackageRef[] = filtered.map((s) => ({ kind, name: s.ref.name }));

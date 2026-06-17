@@ -212,6 +212,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           alias: 'v',
           description: 'After each package, print a one-line trace (kind, duration, or error).',
         },
+        'dry-run': {
+          type: 'boolean',
+          description: 'Print what would run without installing anything.',
+        },
         packages: {
           type: 'positional',
           required: false,
@@ -264,7 +268,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             console.log(log.header(`Installing ${manifest.displayName}`));
             console.log('');
             await withUserActionSpinner(deps, `Installing ${manifest.displayName}...`, async () => {
-              await plugin.install?.(makeCtx(deps), [], {});
+              await plugin.install?.(makeCtx(deps), [], { dryRun: Boolean(args['dry-run']) });
             });
             return;
           }
@@ -280,7 +284,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
                 deps,
                 log.counter(i + 1, refs.length, 'Installing', ref.name),
                 async () => {
-                  await plugin.install?.(makeCtx(deps), [ref], {});
+                  await plugin.install?.(makeCtx(deps), [ref], {
+                    dryRun: Boolean(args['dry-run']),
+                  });
                 },
               );
               if (verbose) {
@@ -308,6 +314,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           type: 'boolean',
           alias: 'v',
           description: 'After each package, print a one-line trace (kind, duration, or error).',
+        },
+        'dry-run': {
+          type: 'boolean',
+          description: 'Print what would run without upgrading anything.',
         },
         packages: {
           type: 'positional',
@@ -399,7 +409,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
                 deps,
                 log.counter(i + 1, refs.length, 'Updating', ref.name),
                 async () => {
-                  await plugin.update?.(makeCtx(deps), [ref], {});
+                  await plugin.update?.(makeCtx(deps), [ref], { dryRun: Boolean(args['dry-run']) });
                 },
               );
               if (verbose) {

@@ -9,7 +9,7 @@ the code.
 The rule for recording decisions is ADR 0001. A decision earns an ADR when it constrains future
 work, is hard to reverse, or is the kind of thing a new contributor would otherwise have to ask
 "why is it like this?". ADRs 0003 through 0008 backfill decisions that were already implicit in
-docs/PRD.md and the code. Where the original rationale was never written down, the ADR says so and
+docs/PRD.md and the code; 0009 records the Phase 2 monorepo conversion. Where the original rationale was never written down, the ADR says so and
 marks the point open rather than inventing a reason.
 
 ## How to add one
@@ -35,3 +35,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0006](0006-citty-cli-framework.md) | citty as the CLI framework | accepted |
 | [0007](0007-bun-compile-single-binary.md) | bun build --compile for single-binary distribution | accepted |
 | [0008](0008-darwin-only-scope.md) | darwin-only scope | accepted |
+| [0009](0009-monorepo-structure.md) | pnpm + Turborepo monorepo, CLI under apps/cli | accepted |

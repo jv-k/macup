@@ -106,6 +106,8 @@ macup <plugin> <command> [args]
 | `system` | list, outdated, install, update (softwareupdate wrapper) |
 | `all` | Composite, fans out across all plugins |
 
+`<plugin> update` upgrades only tracked, outdated packages by default (consistent with `install`/`list`); `--all` upgrades every outdated package; explicit names override. The composite `all update` stays system-wide.
+
 A top-level `macup outdated` aggregates the per-plugin `outdated` results behind a spinner with progress, and supports `--json` for scripting. The other top-level commands are flag-styled (`--config`, `--cleanup`, `--restore`, `--logo`, `--plugins`, `--version`, `--install-completions`); for ergonomics the no-dash form (`macup config`, `macup version`, …) is rewritten into the canonical flag at argv parse time.
 
 ### 5.2 Declarative manifest (`applist.yaml`)
@@ -140,7 +142,7 @@ skip:
 Running `macup` with no args drops into a TTY-aware `@clack/prompts` flow:
 
 1. **Help / About**: first prompt offers an "About macup" entry rendered via clack `note()`; selecting any other entry falls through to the target picker.
-2. **Pick a target**: plugins are grouped by `category` (e.g. "Node.js" for npm + pnpm, "macOS" for appstore/xcode/system) using `groupMultiselect`, with disabled header rows separating groups.
+2. **Pick a target**: plugins are grouped by `category` (e.g. "Node.js" for npm + pnpm, "macOS" for appstore/xcode/system) using a single-pick `select` whose category headers and inter-group spacers are disabled rows the cursor skips.
 3. **Pick an action**: capability-gated submenu (only actions the plugin advertises in its `manifest.capabilities` show up). The chosen target is rendered as a sticky pill above the prompt; Add/Remove diffs are previewed inline before confirmation.
 4. **Pick packages** (for `add` / `remove` / scoped `update`): paged autocomplete picker with PgUp/PgDn, page indicator, count summary, and a multi-column grid layout.
 5. **Execute**: subprocess output for `user-action` calls (install/upgrade) streams into the pinned `StatusBar`'s box pane (see section 5.6); `query`/`check` chatter (e.g. `--json` data fetches) stays silent unless it emits an `Error:` / `Warning:` line, which surfaces above the bar.
@@ -309,41 +311,43 @@ export const BundleSchema = z.object({
 
 ### 6.1 Plugin model
 
+The repo is a pnpm + Turborepo monorepo; the CLI lives in `apps/cli/` and still publishes as `macup`.
+
 ```
-src/plugins/types.ts      — Plugin interface + manifest schema
-src/plugins/registry.ts   — Enumerates built-ins, filters by OS + PATH
-src/plugins/selection.ts  — Pin/skip resolver (pure function)
-src/plugins/defaults.ts   — defaultCheck() helper for the common-shape PATH probe
+apps/cli/src/plugins/types.ts      — Plugin interface + manifest schema
+apps/cli/src/plugins/registry.ts   — Enumerates built-ins, filters by OS + PATH
+apps/cli/src/plugins/selection.ts  — Pin/skip resolver (pure function)
+apps/cli/src/plugins/defaults.ts   — defaultCheck() helper for the common-shape PATH probe
 
-/plugins/brew.ts          — One file per backend
-/plugins/npm.ts
-/plugins/pnpm.ts
-/plugins/appstore.ts
-/plugins/xcode.ts
-/plugins/system.ts
-/plugins/all.ts           — Composite with per-plugin error isolation
+apps/cli/plugins/brew.ts           — One file per backend
+apps/cli/plugins/npm.ts
+apps/cli/plugins/pnpm.ts
+apps/cli/plugins/appstore.ts
+apps/cli/plugins/xcode.ts
+apps/cli/plugins/system.ts
+apps/cli/plugins/all.ts            — Composite with per-plugin error isolation
 
-src/exec/run.ts           — ExecaExecRunner (default subprocess runner)
-src/exec/streaming.ts     — StreamingExecRunner decorator → UiSink (TTY default)
-src/exec/tracing.ts       — TracingExecRunner decorator (--debug)
-src/exec/build.ts         — Factory: picks the right runner from --debug / streaming
-src/ui/status-bar.ts      — Pinned bottom-row bar + DECSTBM box pane
-src/ui/status-bar-sink.ts — UiSink adapter: chunks → bar pane / notices
-src/ui/terminal-caps.ts   — Capability probe for scroll-region support
-src/runtime.ts            — Runtime predicates (single source of truth for color/TTY)
+apps/cli/src/exec/run.ts           — ExecaExecRunner (default subprocess runner)
+apps/cli/src/exec/streaming.ts     — StreamingExecRunner decorator → UiSink (TTY default)
+apps/cli/src/exec/tracing.ts       — TracingExecRunner decorator (--debug)
+apps/cli/src/exec/build.ts         — Factory: picks the right runner from --debug / streaming
+apps/cli/src/ui/status-bar.ts      — Pinned bottom-row bar + DECSTBM box pane
+apps/cli/src/ui/status-bar-sink.ts — UiSink adapter: chunks → bar pane / notices
+apps/cli/src/ui/terminal-caps.ts   — Capability probe for scroll-region support
+apps/cli/src/runtime.ts            — Runtime predicates (single source of truth for color/TTY)
 
-src/commands/from-manifest.ts — Per-plugin citty subcommand factory
-src/commands/render-list.ts   — Pure renderer for `list` output blocks
-src/commands/spinner.ts       — withSpinner / withUserActionSpinner over a SpinnerDeps
+apps/cli/src/commands/from-manifest.ts — Per-plugin citty subcommand factory
+apps/cli/src/commands/render-list.ts   — Pure renderer for `list` output blocks
+apps/cli/src/commands/spinner.ts       — withSpinner / withUserActionSpinner over a SpinnerDeps
 
-src/bundles/              — Bundle host (v1.1)
+apps/cli/src/bundles/              — Bundle host (v1.1)
 ├── schema.ts             — zod schema + parser
 ├── loader.ts             — file/URL/GitHub resolution + extends flattening
 ├── installer.ts          — dispatches bundle contents to plugins
 └── cache.ts              — $XDG_CACHE_HOME/macup/bundles/
 ```
 
-Adding a new package manager = **one new file** in `/plugins/` + **one line** in `registry.ts`. No edits to dispatch, help, or completions.
+Adding a new package manager = **one new file** in `apps/cli/plugins/` + **one line** in `registry.ts`. No edits to dispatch, help, or completions.
 
 Bundles are a **layer above plugins**: they resolve per-plugin package lists and dispatch to existing `plugin.install()` methods. No changes to the plugin contract.
 
@@ -357,7 +361,7 @@ Bundles are a **layer above plugins**: they resolve per-plugin package lists and
 - **Subprocess:** execa (funnelled through `src/exec/run.ts`, decorated by streaming/tracing runners). `node-pty` is a `devDependency` used only by the pty integration tests in `test/integration/`.
 - **YAML:** `yaml` (CST for comment preservation)
 - **Schema:** zod
-- **Testing:** vitest (386 tests: unit, integration, regression, conformance)
+- **Testing:** vitest (407 tests: unit, integration, regression, conformance)
 - **Lint/format:** biome
 
 ### 6.3 Testing strategy
@@ -405,7 +409,7 @@ Bundles are a **layer above plugins**: they resolve per-plugin package lists and
 
 Tracked in [GitHub issues](https://github.com/jv-k/macos-updatetool/issues):
 
-- **#4** Dry run mode: expose `--dry-run` flag (plugin support exists)
+- **#4** Dry run mode: `--dry-run` on `install`/`update` shipped: it prints `[dry-run] <cmd>` and runs nothing.
 - **#5** Tracked vs installed distinction in UI
 - **#6** Rollback / undo command
 - **#7** Config schema version field
@@ -446,7 +450,7 @@ Tracked in [GitHub issues](https://github.com/jv-k/macos-updatetool/issues):
 | R2 | YAML between-item comment drift on splice | Use `Document` + `keepSourceTokens`; fuzz test gates changes |
 | R3 | Non-semver versions (brew pseudo-versions, mas) | Plugins override `compareVersions`; best-effort with warning |
 | R4 | mas maintenance status | Typed `ErrPluginUnavailable`; composite skips gracefully |
-| R5 | Linux/Windows plugin contributions without CI | Conformance suite stubs `process.platform`; real validation only when contributed |
+| R5 | Linux/Windows plugin contributions without CI | Builtins are darwin-only by design; the conformance suite asserts `supportedOS === ['darwin']`. Cross-platform stays a non-goal until a plugin is contributed with its own CI. |
 | R6 | Third-party plugin surface stability | Deferred to post-1.2; interface designed forward-compatible |
 | R7 | Remote bundle trust (arbitrary YAML from GitHub) | TOFU caching + `--dry-run` by default on first fetch; show resolved package list before any install. No shell hooks in v1.1. |
 | R8 | Bundle `extends` graph complexity | Detect cycles at load; cap depth (e.g., max 5 levels); surface flattened view via `bundle show --resolved` |
@@ -471,7 +475,5 @@ Tracked in [GitHub issues](https://github.com/jv-k/macos-updatetool/issues):
 
 ### 10.3 References
 
-- Implementation plan: [`.claude/plans/scalable-juggling-nest.md`](../.claude/plans/scalable-juggling-nest.md)
 - CLI syntax reference: run `macup --help` (self-documenting)
 - Plugin author contract: `plugins/README.md`
-- Rewrite worktree: `.worktrees/rewrite-phase-1-scaffolding/`

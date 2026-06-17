@@ -34,7 +34,7 @@ YAML plus Zod for config), which is the per-project record the stack-as-ADR rule
 
 - The cross-cutting playbook conventions apply and the UI-bound stack conventions do not, and that
   is on the record rather than implied by silence.
-- macup's stack choices are justified one ADR at a time (0005 through 0008) instead of inherited
+- macup's stack choices are justified one ADR at a time (0005 through 0009) instead of inherited
   from a menu entry.
 - If a second darwin CLI shows up, the shared choices here are the raw material for a future CLI
   stack entry on the playbook menu.

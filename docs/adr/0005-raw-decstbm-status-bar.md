@@ -10,15 +10,15 @@ output. The PRD describes a pinned bottom-row status bar with a bordered box pan
 where subprocess output streams live, that adapts to SIGWINCH and falls back to a clack inline
 spinner on dumb terminals or under --debug (docs/PRD.md section 5.6). The live UI is built from raw
 ANSI DECSTBM scroll regions, with no third-party screen library, plus picocolors for colour
-(docs/PRD.md section 6.2, "Live UI"). The supporting code is src/ui/status-bar.ts (the pinned bar
-and box pane), src/ui/terminal-caps.ts (a capability probe for scroll-region support), and
-src/ui/status-bar-sink.ts (the adapter from subprocess chunks to the pane) (docs/PRD.md section
+(docs/PRD.md section 6.2, "Live UI"). The supporting code is apps/cli/src/ui/status-bar.ts (the pinned bar
+and box pane), apps/cli/src/ui/terminal-caps.ts (a capability probe for scroll-region support), and
+apps/cli/src/ui/status-bar-sink.ts (the adapter from subprocess chunks to the pane) (docs/PRD.md section
 6.1).
 
 ## Decision
 
 Render the pinned status bar and box pane with raw ANSI DECSTBM scroll-region escapes rather than
-adopting a full-screen TUI library. Probe terminal capability first (src/ui/terminal-caps.ts) and
+adopting a full-screen TUI library. Probe terminal capability first (apps/cli/src/ui/terminal-caps.ts) and
 fall back to the clack inline spinner where scroll regions are unsupported or under --debug
 (docs/PRD.md section 5.6). The bar can also be turned off with MACUP_STATUS_BAR=off.
 
@@ -37,9 +37,9 @@ fall back to the clack inline spinner where scroll regions are unsupported or un
 ## Consequences
 
 - No dependency on a screen library, and the renderer does exactly what is needed: reserve the last
-  row, open a box pane, stream into it (src/ui/status-bar.ts).
+  row, open a box pane, stream into it (apps/cli/src/ui/status-bar.ts).
 - The cost is carrying terminal-capability handling and escape-sequence correctness in-house:
-  capability probing (src/ui/terminal-caps.ts), SIGWINCH handling, and the dumb-terminal and
+  capability probing (apps/cli/src/ui/terminal-caps.ts), SIGWINCH handling, and the dumb-terminal and
   --debug fallbacks (docs/PRD.md section 5.6).
 - Behaviour varies by emulator. The capability probe and the MACUP_STATUS_BAR=off escape hatch are
   there to keep that variance bounded.

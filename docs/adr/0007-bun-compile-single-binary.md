@@ -8,15 +8,16 @@ macup ships as an npm package (npx macup, pnpm add -g macup), and the PRD also c
 binary so a user can install it without a Node runtime in place, with a planned Homebrew tap on top
 (docs/PRD.md sections 5.7 and 8.2, issue #22). The binary is built with bun build --compile,
 targeting darwin-arm64 and darwin-x64 (docs/PRD.md section 5.7). The build script confirms it:
-scripts/build-binary.ts runs `bun build --compile --minify --target=bun-<target>` over src/cli.ts
-for both darwin targets (scripts/build-binary.ts), and package.json exposes it as build:binary. Node
+apps/cli/scripts/build-binary.ts runs `bun build --compile --minify --target=bun-<target>` over apps/cli/src/cli.ts
+for both darwin targets (apps/cli/scripts/build-binary.ts), and apps/cli/package.json exposes it as build:binary,
+run via pnpm --filter macup build:binary or turbo run build:binary. Node
 is
 the primary runtime, and Bun >= 1.1 is for dev and for --compile (docs/PRD.md section 6.2).
 
 ## Decision
 
-Build the standalone binaries with bun build --compile, producing dist/macup-darwin-arm64 and
-dist/macup-darwin-x64 from src/cli.ts (scripts/build-binary.ts). Keep the npm package as the other
+Build the standalone binaries with bun build --compile, producing apps/cli/dist/macup-darwin-arm64 and
+apps/cli/dist/macup-darwin-x64 from apps/cli/src/cli.ts (apps/cli/scripts/build-binary.ts). Keep the npm package as the other
 distribution channel, with the Homebrew tap layered on the binaries (docs/PRD.md sections 5.7,
 8.2).
 

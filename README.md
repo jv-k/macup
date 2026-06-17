@@ -34,6 +34,10 @@ macup brew list --only-outdated
 # Update everything (all plugins, with confirmation)
 macup all update
 
+# Preview without running anything (install + update)
+macup brew update --dry-run
+macup brew install --dry-run
+
 # Add packages to your tracked list
 macup brew add git curl jq
 macup brew add --cask firefox visual-studio-code
@@ -81,7 +85,11 @@ macup ships with 7 built-in plugins:
 | `system` | macOS system updates (`softwareupdate`) | `list`, `install`, `update` |
 | `all` | Composite, fans across all plugins | `list`, `install`, `update` (partial-failure isolated) |
 
+A top-level `macup outdated` shows outdated packages across every available plugin in one pane (add `--json` for machine-readable output).
+
 Every plugin also supports `pin`, `unpin`, `skip`, `unskip` for packages tracked in your config.
+
+`<plugin> update` upgrades only tracked, outdated packages by default, the same scope as `install` and `list`. Pass `--all` to upgrade every outdated package, tracked or not. The composite `all update` stays system-wide. Both `install` and `update` accept `--dry-run` to print the commands without running them.
 
 ### Which plugins are available here?
 

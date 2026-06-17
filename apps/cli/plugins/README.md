@@ -5,10 +5,11 @@ Each file in this directory is one package-manager plugin. The plugin
 only implementations. Adding a new plugin is typically:
 
 1. Create `plugins/<id>.ts` exporting a `Plugin` as default.
-2. Import and append it to `BUILTIN_PLUGINS` in
-   [`src/plugins/registry.ts`](../src/plugins/registry.ts).
-3. Write integration tests under `test/integration/<id>/` that exercise
-   `list` / `install` / `update` against recorded fixtures.
+2. Import and append it to `INDIVIDUAL_PLUGINS` in
+   [`src/plugins/registry.ts`](../src/plugins/registry.ts). `BUILTIN_PLUGINS`
+   and the composite `all` plugin derive from that list.
+3. Write an integration test at `test/integration/plugins/<id>.test.ts` that
+   exercises `list` / `install` / `update` against recorded fixtures.
 
 That's it: no edits to dispatch, help, or completion code. The
 registry drives everything.

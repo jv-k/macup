@@ -1,13 +1,15 @@
 # Coding Standards
 
 <!-- Loaded by the reviewer and implementer agents via
-     @.sandcastle/CODING_STANDARDS.md. Derived by analysing src/*,
-     test/*, biome.json, tsconfig.json, package.json, and recent git
+     @.sandcastle/CODING_STANDARDS.md. Derived by analysing apps/cli/src/*,
+     apps/cli/test/*, biome.json, tsconfig.json, package.json, and recent git
      history. -->
 
 macup is a TypeScript/ESM CLI targeting Node ≥ 20 (and a `bun build
---compile` single-binary path). Standards below reflect the conventions
-already in the tree — new code should match, not invent.
+--compile` single-binary path). It lives in `apps/cli/` of a pnpm +
+Turborepo monorepo; the `src/` and `test/` paths below are relative to
+that package. Standards below reflect the conventions already in the
+tree — new code should match, not invent.
 
 ## Style
 
@@ -92,8 +94,10 @@ Tests are organised by concern under `test/`:
   `test/fixtures/`. No live subprocess calls.
 - `test/regression/` — one test per historical bug (especially
   completions / zsh edge cases).
-- `test/conformance/` — a parameterised suite that runs the plugin
-  contract against every plugin. New plugins must pass it.
+- `test/unit/plugins/conformance.test.ts` — a parameterised suite that
+  runs the plugin contract against every built-in. New plugins must pass it.
+- `test/completions/`, `test/config/` — completion-output and config
+  load/backup behaviour.
 - `test/e2e/` — end-to-end runs of `macup` via the built bundle.
 
 ### Rules
@@ -126,14 +130,15 @@ Tests are organised by concern under `test/`:
 ```text
 src/cli.ts           entrypoint: arg parsing + dispatch; does not implement
 src/commands/        one file per subcommand; thin glue to plugins/config
-src/plugins/         plugin contract + registry + one file per backend
+src/plugins/         plugin contract + registry (backends live in plugins/)
   types.ts           Plugin interface, manifest schema, shared types
   registry.ts        enumerates built-ins, filters by OS + PATH
   selection.ts       pin/skip resolver (pure)
-  brew.ts / npm.ts / pnpm.ts / appstore.ts / xcode.ts / system.ts
+  defaults.ts        default applist seed
+plugins/             one file per backend (sibling of src/, not under it)
+  brew.ts / npm.ts / pnpm.ts / appstore.ts / mas.ts / xcode.ts / system.ts
   all.ts             composite with per-plugin error isolation
 src/config/          applist.yaml schema, XDG paths, backup/restore
-src/bundles/         (v1.1) schema, loader, installer, cache
 src/exec/            subprocess wrapper (run.ts) — central shell-out path
 src/ui/              output helpers, prompt wrappers, log / section / pill
 src/errors.ts        MacupError + typed subclasses

@@ -12,10 +12,10 @@ human-editable, version-controllable artifact rather than state hidden in each m
 
 The config is a YAML file, applist.yaml, resolved at an XDG-compliant path (docs/PRD.md section
 5.2). It is parsed comment-preserving through a CST so a round-trip does not destroy a user's hand
-edits (src/config/store.ts uses parseDocument from the yaml library, and docs/PRD.md section 5.2
+edits (apps/cli/src/config/store.ts uses parseDocument from the yaml library, and docs/PRD.md section 5.2
 calls it a "comment-preserving YAML round-trip"). The shape is defined and validated by a Zod
-schema, ApplistSchema in src/config/schema.ts, checked with safeParse on load, with an
-ErrInvalidConfig thrown on failure (src/config/store.ts around the safeParse call). The schema is
+schema, ApplistSchema in apps/cli/src/config/schema.ts, checked with safeParse on load, with an
+ErrInvalidConfig thrown on failure (apps/cli/src/config/store.ts around the safeParse call). The schema is
 the contract for
 the file's structure (lists per plugin, a pins map, a skip map).
 
@@ -23,7 +23,7 @@ the file's structure (lists per plugin, a pins map, a skip map).
 
 applist.yaml is the single source of truth for tracked packages, pins, and skips, and it is
 declarative rather than imperative (docs/PRD.md section 10.2, principle 2). Its structure is a Zod
-schema (src/config/schema.ts). The file is parsed and validated on load and rejected with a typed
+schema (apps/cli/src/config/schema.ts). The file is parsed and validated on load and rejected with a typed
 error if it does not match. YAML is the on-disk format, parsed CST-first so comments and unchanged
 lines survive a round-trip.
 
@@ -42,12 +42,12 @@ lines survive a round-trip.
 ## Consequences
 
 - One file to read, edit, diff, and commit, which delivers the reproducibility goal (G7).
-- Validation lives at one boundary: src/config/store.ts validates on load, so the rest of the app
-  works with a parsed, typed Applist (src/config/schema.ts) and does not re-check shape.
+- Validation lives at one boundary: apps/cli/src/config/store.ts validates on load, so the rest of the app
+  works with a parsed, typed Applist (apps/cli/src/config/schema.ts) and does not re-check shape.
 - Comment preservation constrains the writer: edits go through the CST, not a parse-and-reserialize,
   which the PRD flags as a real hazard (comment drift on splice, docs/PRD.md risk R2). A fuzz test
   gates changes to that path (docs/PRD.md sections 5.2 and 6.3).
-- The schema in src/config/schema.ts and the file format move together, so a schema change is a
+- The schema in apps/cli/src/config/schema.ts and the file format move together, so a schema change is a
   config format change and needs migration handling (older flat shapes auto-migrate on load,
   docs/PRD.md section 5.2). A config schema version field is tracked but not yet shipped
   (docs/PRD.md section

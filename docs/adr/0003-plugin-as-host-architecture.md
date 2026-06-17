@@ -10,10 +10,10 @@ and its own upgrade semantics (docs/PRD.md section 2). A design that special-cas
 the dispatch, help, and completions code would grow a branch per manager and couple the core to
 every backend at once.
 
-The code instead routes everything through one contract. src/plugins/registry.ts is the single
-chokepoint between the plugin implementations in /plugins/ and the rest of src/: it enumerates a
+The code instead routes everything through one contract. apps/cli/src/plugins/registry.ts is the single
+chokepoint between the plugin implementations in apps/cli/plugins/ and the rest of src/: it enumerates a
 closed set of built-in plugins, then filters them by supported OS and by which binaries are on
-PATH (src/plugins/registry.ts, buildRegistry and BUILTIN_PLUGINS). Each plugin carries a manifest
+PATH (apps/cli/src/plugins/registry.ts, buildRegistry and BUILTIN_PLUGINS). Each plugin carries a manifest
 that declares its supported OS, required binaries, and capabilities, and the rest of the app
 (dispatch, help, completions, the wizard) reads those manifests rather than hard-coding per-manager
 behaviour (docs/PRD.md sections 5.1, 5.4, 6.1).
@@ -22,8 +22,8 @@ behaviour (docs/PRD.md sections 5.1, 5.4, 6.1).
 
 macup is a host, not a package manager: plugins own their semantics and macup orchestrates them
 through a single Plugin contract (docs/PRD.md section 10.2, principle 1). Adding a package manager
-is one new file in /plugins/ plus one registration line in src/plugins/registry.ts, with no edits
-to dispatch, help, or completions (docs/PRD.md section 6.1, and the src/plugins/registry.ts comment
+is one new file in apps/cli/plugins/ plus one registration line in apps/cli/src/plugins/registry.ts, with no edits
+to dispatch, help, or completions (docs/PRD.md section 6.1, and the apps/cli/src/plugins/registry.ts comment
 on buildRegistry).
 
 ## Alternatives

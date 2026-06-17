@@ -10,17 +10,15 @@
   "exports": {
     ".": "./dist/cli.mjs"
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
+  "files": ["dist", "README.md", "LICENSE"],
   "engines": {
     "node": ">=20"
   },
   "packageManager": "pnpm@10.33.1",
   "scripts": {
     "build": "tsup",
+    "prepare": "simple-git-hooks || true",
+    "deslop:lint": "uvx --from git+https://github.com/jv-k/deslopper@ef16c9dc43f0e888dc15354522ee08fe795c917a deslopper lint",
     "dev": "tsx src/cli.ts",
     "dev:watch": "tsup --watch --onSuccess 'echo built'",
     "test": "vitest run",
@@ -49,9 +47,7 @@
   ],
   "author": "John Valai <git@jvk.to>",
   "license": "MIT",
-  "os": [
-    "darwin"
-  ],
+  "os": ["darwin"],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jv-k/macup.git"
@@ -77,16 +73,16 @@
     "@types/node": "^22.10.0",
     "@types/semver": "^7.7.1",
     "node-pty": "^1.1.0",
+    "simple-git-hooks": "^2.13.1",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   },
   "pnpm": {
-    "onlyBuiltDependencies": [
-      "@biomejs/biome",
-      "esbuild",
-      "node-pty"
-    ]
+    "onlyBuiltDependencies": ["@biomejs/biome", "esbuild", "node-pty"]
+  },
+  "simple-git-hooks": {
+    "pre-commit": "FILES=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.markdown' | grep -Ev '(^|/)(node_modules|\\.sandcastle|\\.github/chatmodes|docs/superpowers|\\.worktrees)/' || true); [ -z \"$FILES\" ] && exit 0; echo \"$FILES\" | xargs uvx --from git+https://github.com/jv-k/deslopper@ef16c9dc43f0e888dc15354522ee08fe795c917a deslopper lint"
   }
 }

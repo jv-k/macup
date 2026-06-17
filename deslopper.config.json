@@ -1,0 +1,13 @@
+{
+  "extends": ["deslopper:recommended"],
+  "files": {
+    "include": ["**/*.md", "**/*.markdown"],
+    "exclude": [
+      ".sandcastle/**",
+      ".github/chatmodes/**",
+      "docs/superpowers/**",
+      ".worktrees/**",
+      "node_modules/**"
+    ]
+  }
+}

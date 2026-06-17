@@ -1,86 +1,27 @@
 {
-  "name": "macup",
-  "version": "1.0.0",
-  "description": "A plugin-based CLI for tracking and updating developer packages on macOS — Homebrew, npm, App Store, Xcode, and system updates with pins, skip lists, and an interactive wizard.",
+  "name": "macup-monorepo",
+  "private": true,
   "type": "module",
-  "bin": {
-    "macup": "./dist/cli.mjs"
-  },
-  "main": "./dist/cli.mjs",
-  "exports": {
-    ".": "./dist/cli.mjs"
-  },
-  "files": ["dist", "README.md", "LICENSE"],
-  "engines": {
-    "node": ">=20"
-  },
+  "license": "MIT",
   "packageManager": "pnpm@10.33.1",
   "scripts": {
-    "build": "tsup",
-    "prepare": "simple-git-hooks || true",
-    "deslop:lint": "uvx --from git+https://github.com/jv-k/deslopper@ef16c9dc43f0e888dc15354522ee08fe795c917a deslopper lint",
-    "dev": "tsx src/cli.ts",
-    "dev:watch": "tsup --watch --onSuccess 'echo built'",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "build": "turbo run build",
+    "build:binary": "turbo run build:binary",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "typecheck": "tsc --noEmit",
     "shellcheck": "git ls-files '*.sh' | xargs shellcheck --severity=warning",
-    "build:binary": "bun scripts/build-binary.ts",
+    "deslop:lint": "uvx --from git+https://github.com/jv-k/deslopper@ef16c9dc43f0e888dc15354522ee08fe795c917a deslopper lint",
     "sandcastle": "npx tsx .sandcastle/main.mts",
-    "screenshots": "./dev/screenshots.sh",
-    "screenshots:help": "./dev/screenshots.sh help",
-    "screenshots:demo": "./dev/screenshots.sh demo"
-  },
-  "keywords": [
-    "macos",
-    "package-manager",
-    "homebrew",
-    "npm",
-    "app-store",
-    "xcode",
-    "automation",
-    "cli",
-    "maintenance"
-  ],
-  "author": "John Valai <git@jvk.to>",
-  "license": "MIT",
-  "os": ["darwin"],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/jv-k/macup.git"
-  },
-  "bugs": {
-    "url": "https://github.com/jv-k/macup/issues"
-  },
-  "homepage": "https://github.com/jv-k/macup",
-  "preferGlobal": true,
-  "dependencies": {
-    "@clack/core": "^1.3.0",
-    "@clack/prompts": "^1.2.0",
-    "citty": "^0.1.6",
-    "execa": "^9.6.1",
-    "picocolors": "^1.1.1",
-    "semver": "^7.7.4",
-    "yaml": "^2.8.3",
-    "zod": "^4.3.6"
+    "prepare": "simple-git-hooks || true"
   },
   "devDependencies": {
     "@ai-hero/sandcastle": "^0.5.1",
     "@biomejs/biome": "^1.9.4",
-    "@types/node": "^22.10.0",
-    "@types/semver": "^7.7.1",
-    "node-pty": "^1.1.0",
     "simple-git-hooks": "^2.13.1",
-    "tsup": "^8.3.5",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": ["@biomejs/biome", "esbuild", "node-pty"]
+    "turbo": "^2.3.0"
   },
   "simple-git-hooks": {
     "pre-commit": "FILES=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.markdown' | grep -Ev '(^|/)(node_modules|\\.sandcastle|\\.github/chatmodes|docs/superpowers|\\.worktrees)/' || true); [ -z \"$FILES\" ] && exit 0; echo \"$FILES\" | xargs uvx --from git+https://github.com/jv-k/deslopper@ef16c9dc43f0e888dc15354522ee08fe795c917a deslopper lint"

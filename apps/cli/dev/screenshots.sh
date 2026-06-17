@@ -12,7 +12,8 @@
 
 set -eo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# apps/cli/dev/screenshots.sh → ../../ is the monorepo root, where img/ lives.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
 if ! command -v vhs >/dev/null 2>&1; then
@@ -21,8 +22,8 @@ if ! command -v vhs >/dev/null 2>&1; then
 fi
 
 # dev/sandbox.sh invokes dist/cli.mjs via a shim; make sure it's fresh.
-if [ ! -f dist/cli.mjs ] || [ src/cli.ts -nt dist/cli.mjs ]; then
-  echo "screenshots: building dist/cli.mjs ..." >&2
+if [ ! -f apps/cli/dist/cli.mjs ] || [ apps/cli/src/cli.ts -nt apps/cli/dist/cli.mjs ]; then
+  echo "screenshots: building apps/cli/dist/cli.mjs ..." >&2
   pnpm build >/dev/null
 fi
 
@@ -53,17 +54,17 @@ target="${1:-all}"
 case "$target" in
   help)
     clean img/screenshot.png img/tmp/help.gif
-    vhs dev/help.tape
+    vhs apps/cli/dev/help.tape
   ;;
   demo)
     clean img/demo.gif
-    vhs dev/demo.tape
+    vhs apps/cli/dev/demo.tape
     compress_gif img/demo.gif
   ;;
   all)
     clean img/screenshot.png img/tmp/help.gif img/demo.gif
-    vhs dev/help.tape
-    vhs dev/demo.tape
+    vhs apps/cli/dev/help.tape
+    vhs apps/cli/dev/demo.tape
     compress_gif img/demo.gif
   ;;
   *)

@@ -26,7 +26,7 @@ Set PlaybackSpeed 1.0
 
 # Boot the sandbox off-camera — we only want the macup output on screen.
 Hide
-Type "./dev/sandbox.sh -q"
+Type "./apps/cli/dev/sandbox.sh -q"
 Enter
 Sleep 2s
 Type "clear"

@@ -7,4 +7,8 @@ coverage/
 .sandcastle/logs/
 .sandcastle/worktrees/
 img/tmp/
+.turbo/
+# prepack copies (created by apps/cli prepack, removed by postpack)
+apps/cli/README.md
+apps/cli/LICENSE.md
 

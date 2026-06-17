@@ -13,10 +13,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "isolatedModules": true,
-    "noEmit": true,
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true
-  },
-  "include": ["src/**/*", "test/**/*", "plugins/**/*"],
-  "exclude": ["node_modules", "dist", ".worktrees", "bin", "scripts"]
+  }
 }

@@ -6,7 +6,9 @@
 #   export MACUP_AUDIT_DIR=$(mktemp -d); dev/audit-sandbox.sh brew add curl
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+# apps/cli/dev/audit-sandbox.sh → ../.. is the CLI package root (apps/cli),
+# where the build emits dist/cli.mjs. (Was git-toplevel; dist now lives here.)
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SANDBOX="${MACUP_AUDIT_DIR:-$(mktemp -d -t macup-audit)}"
 export MACUP_CONFIG="$SANDBOX/applist.yaml"
 

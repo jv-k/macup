@@ -42,7 +42,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       - uses: actions/setup-node@v4
         with:
@@ -54,13 +54,16 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
 
+      - name: Ensure img/tmp exists for vhs Output
+        run: mkdir -p img/tmp
+
       - name: Render help.tape
         uses: charmbracelet/vhs-action@v2
         with:
-          path: dev/help.tape
+          path: apps/cli/dev/help.tape
 
       - name: Render demo.tape
-        run: vhs dev/demo.tape
+        run: vhs apps/cli/dev/demo.tape
 
       - name: Upload vhs artifacts
         uses: actions/upload-artifact@v4

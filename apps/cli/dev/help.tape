@@ -25,7 +25,7 @@ Set TypingSpeed 40ms
 # Boot the sandbox off-camera so `macup` is on PATH via the shim and the
 # subshell has a clean `$ ` prompt instead of the user's custom PS1.
 Hide
-Type "./dev/sandbox.sh -q"
+Type "./apps/cli/dev/sandbox.sh -q"
 Enter
 Sleep 2s
 Type "clear"

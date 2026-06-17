@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "ignore": ["dist/**", "bin/**", ".worktrees/**", "node_modules/**", "pnpm-lock.yaml"]
+    "ignore": ["**/dist/**", "bin/**", "**/.worktrees/**", "**/node_modules/**", "pnpm-lock.yaml"]
   },
   "formatter": {
     "enabled": true,

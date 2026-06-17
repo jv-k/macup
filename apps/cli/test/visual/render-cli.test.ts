@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { renderBoxStream } from './render-cli';
+import { renderBoxStream, renderStatusBarFrame } from './render-cli';
+
+describe('renderStatusBarFrame', () => {
+  it('renders the pinned bar message into the grid', async () => {
+    const grid = await renderStatusBarFrame((bar) => {
+      bar.start('Checking brew');
+    });
+    expect(grid).toContain('Checking brew');
+  });
+});
 
 describe('renderBoxStream', () => {
   it('streams user-action output into the box pane grid', async () => {

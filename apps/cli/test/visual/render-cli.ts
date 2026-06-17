@@ -22,9 +22,12 @@ export async function renderStatusBarFrame(
     color: false,
     framesMs: FROZEN_FRAMES_MS,
   });
-  await build(bar);
-  bar.stop();
-  return renderGrid(rec.bytes(), COLS, ROWS);
+  try {
+    await build(bar);
+    return renderGrid(rec.bytes(), COLS, ROWS);
+  } finally {
+    bar.stop();
+  }
 }
 
 export interface BoxStreamOptions {
@@ -55,8 +58,10 @@ export async function renderBoxStream(opts: BoxStreamOptions): Promise<string> {
 
   bar.start(opts.message);
   bar.openBox(opts.boxTitle);
-  await opts.drive(exec);
-  const grid = renderGrid(rec.bytes(), COLS, ROWS);
-  bar.stop();
-  return grid;
+  try {
+    await opts.drive(exec);
+    return renderGrid(rec.bytes(), COLS, ROWS);
+  } finally {
+    bar.stop();
+  }
 }

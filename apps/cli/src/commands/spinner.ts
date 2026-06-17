@@ -14,9 +14,9 @@
 // scroll-region tricks are sketchy under multiplexers and unsupported TERMs.
 
 import { spinner } from '@clack/prompts';
-import { StatusBar } from '../ui/status-bar';
-import { supportsScrollRegions } from '../ui/terminal-caps';
 import * as log from '../ui/log';
+import type { StatusBar } from '../ui/status-bar';
+import { supportsScrollRegions } from '../ui/terminal-caps';
 
 export interface SpinnerDeps {
   readonly bar: StatusBar;

@@ -10,7 +10,7 @@ import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
 import { generateBashCompletions } from '../completions/bash';
 import { generateFishCompletions } from '../completions/fish';
 import { generateZshCompletions } from '../completions/zsh';
-import { detectShellFromEnv, type Shell, SUPPORTED_SHELLS, isShell } from './shell';
+import { SUPPORTED_SHELLS, type Shell, detectShellFromEnv, isShell } from './shell';
 
 export async function runCompletions(args: ParsedArgs, deps: CliDeps): Promise<void> {
   const value = args.completions;
@@ -47,7 +47,8 @@ function resolveShell(value: string, env: NodeJS.ProcessEnv): Shell | undefined 
 
 export class CompletionsAction implements FlagAction {
   readonly name = 'completions';
-  readonly description = `Emit shell completions for ${SUPPORTED_SHELLS.join('|')} (omit value to auto-detect from $SHELL).`;
+  readonly description =
+    `Emit shell completions for ${SUPPORTED_SHELLS.join('|')} (omit value to auto-detect from $SHELL).`;
   readonly args = {
     completions: {
       type: 'string' as const,

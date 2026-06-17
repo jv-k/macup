@@ -6,7 +6,7 @@ import { generateBashCompletions } from '../completions/bash';
 import { generateFishCompletions } from '../completions/fish';
 import { generateZshCompletions } from '../completions/zsh';
 import type { Plugin } from '../plugins/types';
-import { detectShellFromEnv, isShell, type Shell, SUPPORTED_SHELLS } from './shell';
+import { SUPPORTED_SHELLS, type Shell, detectShellFromEnv, isShell } from './shell';
 
 export type { Shell };
 
@@ -141,10 +141,7 @@ export function formatInstallReport(report: InstallReport): string {
   return lines.join('\n');
 }
 
-export async function runInstallCompletions(
-  args: ParsedArgs,
-  deps: CliDeps,
-): Promise<void> {
+export async function runInstallCompletions(args: ParsedArgs, deps: CliDeps): Promise<void> {
   const value = args['install-completions'];
   if (typeof value !== 'string') return;
   const shell = resolveShellArg(value, deps.env);
@@ -178,7 +175,8 @@ function resolveShellArg(value: string, env: NodeJS.ProcessEnv): Shell | undefin
 
 export class InstallCompletionsAction implements FlagAction {
   readonly name = 'install-completions';
-  readonly description = `Generate and write shell completions to the standard XDG path for ${SUPPORTED_SHELLS.join('|')} (omit value to auto-detect).`;
+  readonly description =
+    `Generate and write shell completions to the standard XDG path for ${SUPPORTED_SHELLS.join('|')} (omit value to auto-detect).`;
   readonly args = {
     'install-completions': {
       type: 'string' as const,

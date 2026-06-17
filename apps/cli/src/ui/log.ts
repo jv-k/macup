@@ -142,7 +142,9 @@ export function versionBlock(opts: {
   lines.push(`  ${useColorFn() ? pc.dim(opts.description) : opts.description}`);
   lines.push('');
   lines.push(`  ${SYM.bullet} Author:   ${opts.author}`);
-  lines.push(`  ${SYM.bullet} Homepage: ${useColorFn() ? pc.underline(opts.homepage) : opts.homepage}`);
+  lines.push(
+    `  ${SYM.bullet} Homepage: ${useColorFn() ? pc.underline(opts.homepage) : opts.homepage}`,
+  );
   lines.push('');
   return lines.join('\n');
 }

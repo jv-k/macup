@@ -1,5 +1,5 @@
 import type { ExecRunner } from '../plugins/types';
-import { type UiSink, StreamingExecRunner } from './streaming';
+import { StreamingExecRunner, type UiSink } from './streaming';
 import { TracingExecRunner } from './tracing';
 
 export interface BuildExecRunnerOptions {

@@ -5,8 +5,8 @@
 // error and sets exit code 1 — citty's args parser already accepts the
 // flag at the type level, but it doesn't validate the numeric range.
 
-import { renderAppleLogo } from '../ui/logo';
 import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
+import { renderAppleLogo } from '../ui/logo';
 
 export async function runLogo(args: ParsedArgs, deps: CliDeps): Promise<void> {
   let scale = 1;

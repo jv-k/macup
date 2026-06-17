@@ -23,8 +23,8 @@
 // Usage:
 //   npx tsx .sandcastle/main.mts
 
-import * as sandcastle from "@ai-hero/sandcastle";
-import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import * as sandcastle from '@ai-hero/sandcastle';
+import { docker } from '@ai-hero/sandcastle/sandboxes/docker';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -34,14 +34,14 @@ const MAX_ITERATIONS = 10;
 const MAX_PARALLEL = 4;
 
 const hooks = {
-  sandbox: { onSandboxReady: [{ command: "pnpm install --frozen-lockfile" }] },
+  sandbox: { onSandboxReady: [{ command: 'pnpm install --frozen-lockfile' }] },
 };
 // node_modules intentionally NOT copied: host is darwin/arm64 and the
 // sandbox is linux/arm64, so pnpm refuses to reuse the darwin binaries
 // and aborts on `confirmModulesPurge` for lack of a TTY. A fresh install
 // inside the container is faster than the abort + retry loop.
 const copyToWorktree: string[] = [];
-const agent = sandcastle.claudeCode("claude-opus-4-6");
+const agent = sandcastle.claudeCode('claude-opus-4-6');
 
 // ---------------------------------------------------------------------------
 // Main loop
@@ -55,16 +55,14 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   // -------------------------------------------------------------------------
   const plan = await sandcastle.run({
     sandbox: docker(),
-    name: "planner",
+    name: 'planner',
     agent,
-    promptFile: "./.sandcastle/plan-prompt.md",
+    promptFile: './.sandcastle/plan-prompt.md',
   });
 
   const planMatch = plan.stdout.match(/<plan>([\s\S]*?)<\/plan>/);
   if (!planMatch) {
-    throw new Error(
-      "Planner did not produce a <plan> tag.\n\n" + plan.stdout,
-    );
+    throw new Error(`Planner did not produce a <plan> tag.\n\n${plan.stdout}`);
   }
 
   const { issues } = JSON.parse(planMatch[1]) as {
@@ -72,7 +70,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   };
 
   if (issues.length === 0) {
-    console.log("Planner returned no issues. Nothing to do.");
+    console.log('Planner returned no issues. Nothing to do.');
     break;
   }
 
@@ -84,10 +82,13 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   // -------------------------------------------------------------------------
   let running = 0;
   const queue: (() => void)[] = [];
-  const acquire = () =>
-    running < MAX_PARALLEL
-      ? (running++, Promise.resolve())
-      : new Promise<void>((resolve) => queue.push(resolve));
+  const acquire = () => {
+    if (running < MAX_PARALLEL) {
+      running++;
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => queue.push(resolve));
+  };
   const release = () => {
     running--;
     const next = queue.shift();
@@ -105,11 +106,11 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
           hooks,
           copyToWorktree,
           sandbox: docker(),
-          branchStrategy: { type: "branch", branch: issue.branch },
+          branchStrategy: { type: 'branch', branch: issue.branch },
           name: `implementer-${issue.number}`,
           maxIterations: 100,
           agent,
-          promptFile: "./.sandcastle/implement-prompt.md",
+          promptFile: './.sandcastle/implement-prompt.md',
           promptArgs: {
             ISSUE_NUMBER: String(issue.number),
             ISSUE_TITLE: issue.title,
@@ -126,11 +127,11 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
           hooks,
           copyToWorktree,
           sandbox: docker(),
-          branchStrategy: { type: "branch", branch: issue.branch },
+          branchStrategy: { type: 'branch', branch: issue.branch },
           name: `reviewer-${issue.number}`,
           maxIterations: 1,
           agent,
-          promptFile: "./.sandcastle/review-prompt.md",
+          promptFile: './.sandcastle/review-prompt.md',
           promptArgs: {
             BRANCH: issue.branch,
             ISSUE_NUMBER: String(issue.number),
@@ -146,25 +147,25 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   );
 
   for (const [i, outcome] of settled.entries()) {
-    if (outcome.status === "rejected") {
-      console.error(
-        `  ✗ #${issues[i].number} (${issues[i].branch}) failed: ${outcome.reason}`,
-      );
+    if (outcome.status === 'rejected') {
+      console.error(`  ✗ #${issues[i].number} (${issues[i].branch}) failed: ${outcome.reason}`);
     }
   }
 
   const merged = settled
     .filter(
-      (o): o is PromiseFulfilledResult<{
+      (
+        o,
+      ): o is PromiseFulfilledResult<{
         issue: (typeof issues)[number];
         branch: string;
         committed: boolean;
-      }> => o.status === "fulfilled" && o.value.committed,
+      }> => o.status === 'fulfilled' && o.value.committed,
     )
     .map((o) => o.value);
 
   if (merged.length === 0) {
-    console.log("No branches produced commits. Skipping merge phase.");
+    console.log('No branches produced commits. Skipping merge phase.');
     continue;
   }
 
@@ -173,19 +174,17 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   // -------------------------------------------------------------------------
   await sandcastle.run({
     sandbox: docker(),
-    name: "merger",
+    name: 'merger',
     maxIterations: 10,
     agent,
-    promptFile: "./.sandcastle/merge-prompt.md",
+    promptFile: './.sandcastle/merge-prompt.md',
     promptArgs: {
-      BRANCHES: merged.map((m) => `- ${m.branch}`).join("\n"),
-      ISSUES: merged
-        .map((m) => `- #${m.issue.number}: ${m.issue.title}`)
-        .join("\n"),
+      BRANCHES: merged.map((m) => `- ${m.branch}`).join('\n'),
+      ISSUES: merged.map((m) => `- #${m.issue.number}: ${m.issue.title}`).join('\n'),
     },
   });
 
   console.log(`\nMerge phase complete for ${merged.length} branch(es).`);
 }
 
-console.log("\nAll iterations done.");
+console.log('\nAll iterations done.');

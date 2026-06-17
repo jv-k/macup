@@ -136,7 +136,7 @@ async function setupSandbox() {
 
 ### 3.4 Regression tests: `test/regression/`
 
-One file per historical bug, named to describe the symptom (see existing examples like [add-remove-sees-packages.test.ts](test/regression/add-remove-sees-packages.test.ts)). Each test references the issue/PR that introduced it. Never delete a regression test without a PR explaining why.
+One file per historical bug, named to describe the symptom (see existing examples like [add-remove-sees-packages.test.ts](../apps/cli/test/regression/add-remove-sees-packages.test.ts)). Each test references the issue/PR that introduced it. Never delete a regression test without a PR explaining why.
 
 ### 3.5 Config and completions
 

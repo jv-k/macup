@@ -14,7 +14,7 @@ What macup does and why, with acceptance conditions.
 
 Lookup material: contracts, manifests, and the command surface.
 
-- [../plugins/README.md](../plugins/README.md): the plugin authoring contract (the
+- [../apps/cli/plugins/README.md](../apps/cli/plugins/README.md): the plugin authoring contract (the
   `Plugin` shape, manifest fields, error handling, pins and skip).
 - The CLI `--help`: run `macup --help` for the live command, flag, and subcommand
   reference. It is generated from the plugin manifests, so it stays in step with the code.

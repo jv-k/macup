@@ -98,7 +98,7 @@ plugins: 6 / 7 available  (platform: darwin)
 
 ### Adding a plugin
 
-See [`plugins/README.md`](plugins/README.md) for the authoring contract. Adding a new backend (e.g. `pip`, `cargo`, `go`) is one file in `/plugins/` plus one registry line.
+See [`apps/cli/plugins/README.md`](apps/cli/plugins/README.md) for the authoring contract. Adding a new backend (e.g. `pip`, `cargo`, `go`) is one file in `apps/cli/plugins/` plus one registry line.
 
 ## Configuration
 
@@ -180,12 +180,12 @@ The generated files are derived from plugin manifests, so adding a plugin auto-e
 git clone https://github.com/jv-k/macup.git
 cd macup
 pnpm install
-pnpm dev -- brew list            # run from source via tsx
-pnpm test                        # vitest (unit + integration + regression)
-pnpm lint                        # biome check
-pnpm typecheck                   # tsc --noEmit
-pnpm build                       # tsup → dist/cli.mjs
-pnpm build:binary darwin-arm64   # bun build --compile → single binary
+pnpm --filter macup dev -- brew list          # run cli from source via tsx
+pnpm test                                     # turbo → vitest (unit + integration + regression)
+pnpm lint                                     # biome check (whole workspace)
+pnpm typecheck                                # turbo → tsc --noEmit
+pnpm build                                    # turbo → apps/cli/dist/cli.mjs
+pnpm --filter macup build:binary darwin-arm64 # bun build --compile → single binary
 ```
 
 ## License

@@ -29,17 +29,17 @@ steps. The design is the gate: agree the approach before building against it.
 
 Pin the interface before building either side against it. macup's contract is two files:
 
-- [src/plugins/types.ts](src/plugins/types.ts): the `Plugin` interface, plus
+- [apps/cli/src/plugins/types.ts](apps/cli/src/plugins/types.ts): the `Plugin` interface, plus
   `PluginManifest`, `PluginCapabilities`, `ExecRunner`, and the package and status types
   every plugin returns.
-- [src/config/schema.ts](src/config/schema.ts): the Zod schemas (`ApplistSchema`,
+- [apps/cli/src/config/schema.ts](apps/cli/src/config/schema.ts): the Zod schemas (`ApplistSchema`,
   `ApplistKeySchema`, `BrewListSchema`) that define the shape of `applist.yaml`.
 
 A new plugin obeys the `Plugin` interface and the manifest schema. A change to the
 config shape changes the Zod schema first, then the code that reads it. Adding a package
-manager is a one-file plus one-line change: a new `plugins/<id>.ts` and its registration
-in [src/plugins/registry.ts](src/plugins/registry.ts). See
-[plugins/README.md](plugins/README.md) for the plugin author contract.
+manager is a one-file plus one-line change: a new `apps/cli/plugins/<id>.ts` and its registration
+in [apps/cli/src/plugins/registry.ts](apps/cli/src/plugins/registry.ts). See
+[apps/cli/plugins/README.md](apps/cli/plugins/README.md) for the plugin author contract.
 
 ## Dev commands
 

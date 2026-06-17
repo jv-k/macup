@@ -39,6 +39,25 @@ export function rewriteFlagAliases(argv: string[]): void {
   }
 }
 
+// Return the flag-style tokens in `rawArgs` that aren't in `known`. Used to
+// reject `macup --bogus` with a non-zero exit instead of silently falling
+// through to the wizard (A-1). The `=value` suffix is ignored when matching
+// (`--completions=zsh` checks `--completions`), positionals are skipped, and
+// scanning stops at the `--` end-of-flags marker.
+export function findUnknownTopLevelFlags(
+  rawArgs: readonly string[],
+  known: ReadonlySet<string>,
+): string[] {
+  const unknown: string[] = [];
+  for (const tok of rawArgs) {
+    if (tok === '--') break;
+    if (!tok.startsWith('-')) continue;
+    const name = tok.split('=')[0] as string;
+    if (!known.has(name)) unknown.push(name);
+  }
+  return unknown;
+}
+
 // Inspect argv for --debug/-D/--verbose/-V, return the parsed flags, and
 // strip the matched tokens from argv so citty sees a clean tail.
 export function extractVerbosityFlags(argv: string[]): VerbosityFlags {

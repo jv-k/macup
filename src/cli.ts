@@ -21,7 +21,7 @@
 
 import type { ArgsDef } from 'citty';
 import { defineCommand, runMain } from 'citty';
-import { extractVerbosityFlags, rewriteFlagAliases } from './cli/argv';
+import { extractVerbosityFlags, findUnknownTopLevelFlags, rewriteFlagAliases } from './cli/argv';
 import { bootstrap } from './cli/bootstrap';
 import { printVersionSplash, showCustomHelp } from './cli/help';
 import type { FlagAction } from './cli/types';
@@ -137,6 +137,28 @@ for (const action of flagActions) {
   }
 }
 
+// Known top-level flags, for rejecting unknown ones (A-1). citty is permissive
+// about unrecognised --flags on the root command, so we detect them ourselves
+// before falling through to the wizard. --help/--version are intercepted above;
+// verbosity flags are stripped from argv before citty.
+const KNOWN_TOP_LEVEL_FLAGS = new Set<string>([
+  '--help',
+  '-h',
+  '--version',
+  '-v',
+  '--verbose',
+  '-V',
+  '--debug',
+  '-D',
+]);
+for (const [name, def] of Object.entries(flagActionArgs)) {
+  KNOWN_TOP_LEVEL_FLAGS.add(`--${name}`);
+  const alias = (def as { alias?: string | string[] }).alias;
+  if (alias) {
+    for (const a of Array.isArray(alias) ? alias : [alias]) KNOWN_TOP_LEVEL_FLAGS.add(`-${a}`);
+  }
+}
+
 const main = defineCommand({
   meta: {
     name: 'macup',
@@ -168,6 +190,15 @@ const main = defineCommand({
         }
         return;
       }
+    }
+
+    // No flag matched: reject unknown top-level flags (A-1) before falling
+    // through to the wizard, so `macup --bogus` errors instead of exiting 0.
+    const unknownFlags = findUnknownTopLevelFlags(rawArgs, KNOWN_TOP_LEVEL_FLAGS);
+    if (unknownFlags.length > 0) {
+      console.error(`error: unknown option ${unknownFlags[0]}`);
+      process.exitCode = 1;
+      return;
     }
 
     // No flag matched: run the interactive wizard (or print a non-TTY hint).

@@ -34,3 +34,16 @@ describe('regression: `add` with zero packages exits non-zero', () => {
     }
   });
 });
+
+describe('regression: unknown top-level flag exits non-zero (A-1)', () => {
+  it('`macup --bogus-flag` exits 1 with an "unknown option" error', async () => {
+    try {
+      await exec(`node "${CLI}" --bogus-flag`, { timeout: 10_000, cwd: ROOT, env: ENV });
+      expect.fail('expected non-zero exit code');
+    } catch (err) {
+      const e = err as { code?: number; stderr?: string };
+      expect(e.code).toBe(1);
+      expect(e.stderr ?? '').toContain('unknown option');
+    }
+  });
+});

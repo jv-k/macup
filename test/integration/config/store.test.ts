@@ -311,4 +311,16 @@ describe('ConfigStore — backup integrity', () => {
     const backups = await readdir(backupDir);
     expect(backups.length).toBe(2);
   });
+
+  it('no-op mutation on a flow-style config creates no backup (C-2)', async () => {
+    // Flow style: the YAML serializer normalizes `[git, jq]` → `[ git, jq ]`.
+    // A no-op add must still report unchanged and write no backup.
+    await seed('brew:\n  formulas: [git, jq]\n');
+    const s = await store();
+    s.add('brew.formulas', ['git']); // already tracked → no semantic change
+    const r = await s.save('add');
+    expect(r.changed).toBe(false);
+    expect(r.backupPath).toBeUndefined();
+    await expect(readdir(backupDir)).rejects.toThrow(); // dir never created
+  });
 });

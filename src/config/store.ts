@@ -180,6 +180,14 @@ export class ConfigStore {
         : { migrated: true };
     }
 
+    // Baseline the no-change guard against the SERIALIZED form. The YAML
+    // serializer normalizes formatting (flow `[a, b]` → `[ a, b ]`), so
+    // comparing a later doc.toString() against the raw on-disk text would
+    // flag a cosmetic-only reflow as a change — triggering a spurious backup
+    // and rewrite on a no-op mutation (C-2). Re-baselining means a no-op
+    // serializes identically and save() correctly reports "unchanged".
+    this.originalText = this.doc.toString();
+
     const parsed = ApplistSchema.safeParse(this.doc.toJS() ?? {});
     if (!parsed.success) {
       // Migration ran, then validation failed → the on-disk file was just

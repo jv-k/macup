@@ -61,6 +61,11 @@ class Screen {
     this.row = 0;
     this.col = 0;
   }
+  // NOTE: advances exactly one grid cell per call. The parser loop iterates
+  // by UTF-16 code unit, so a surrogate-pair or East-Asian-wide glyph occupies
+  // one cell and can shift a trailing border left by one column (e.g. an emoji
+  // line losing its closing box border). Deterministic and snapshot-only; if a
+  // non-emoji wide-glyph scenario is added, switch to code-point iteration + wcwidth.
   put(ch: string): void {
     const line = this.cells[this.row];
     if (line && this.col < this.cols) {

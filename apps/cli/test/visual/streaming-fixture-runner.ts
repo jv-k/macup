@@ -30,6 +30,10 @@ export class StreamingFixtureRunner implements ExecRunner {
   async run(cmd: string, args: readonly string[], opts: ExecRunOptions = {}): Promise<ExecResult> {
     const f = this.fixtures.find((e) => e.cmd === cmd && argsEqual(e.args, args));
     if (!f) throw new Error(`Fixture miss: ${cmd} ${args.join(' ')}`);
+    // Emits the whole recorded stream in one chunk (deterministic for frame
+    // snapshots). The real ExecRunner delivers many partial chunks at arbitrary
+    // byte boundaries; mid-line/CRLF-straddling buffering is covered separately
+    // by test/unit/ui/status-bar-sink.test.ts, not by these frames.
     if (f.result.stdout) opts.onStdout?.(f.result.stdout);
     if (f.result.stderr) opts.onStderr?.(f.result.stderr);
     return f.result;

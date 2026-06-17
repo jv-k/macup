@@ -218,7 +218,9 @@ describe('ConfigStore — legacy layout migration', () => {
     // migration backup so the user can recover their original file.
     await seed('npm_apps: not-a-list\n');
     const s = new ConfigStore({ applistPath, backupDir });
-    await expect(s.load()).rejects.toThrow(/auto-migration ran; original saved to .*applist_migration_/);
+    await expect(s.load()).rejects.toThrow(
+      /auto-migration ran; original saved to .*applist_migration_/,
+    );
   });
 
   it('migrates flat keys to nested layout on load and writes a migration backup', async () => {
@@ -293,5 +295,20 @@ describe('ConfigStore — legacy layout migration', () => {
     expect(result.migrated).toBe(true);
     expect(s.list('brew.formulas')).toEqual(['git']);
     expect(s.list('npm')).toEqual(['typescript']);
+  });
+});
+
+describe('ConfigStore — backup integrity', () => {
+  it('keeps both backups when two same-op saves collide in one second (C-1)', async () => {
+    await seed('brew:\n  formulas:\n    - git\n');
+    const fixed = new Date('2026-06-17T09:00:00');
+    const s = new ConfigStore({ applistPath, backupDir }, { now: () => fixed });
+    await s.load();
+    s.add('brew.formulas', ['curl']);
+    await s.save('add');
+    s.add('brew.formulas', ['wget']);
+    await s.save('add');
+    const backups = await readdir(backupDir);
+    expect(backups.length).toBe(2);
   });
 });

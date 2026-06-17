@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Document, Scalar, YAMLMap, YAMLSeq, parseDocument } from 'yaml';
@@ -199,7 +200,7 @@ export class ConfigStore {
     await mkdir(this.paths.backupDir, { recursive: true });
     let backupPath: string | undefined;
     if (this.fileExisted) {
-      backupPath = join(this.paths.backupDir, `applist_migration_${timestamp(this.now())}.yaml`);
+      backupPath = this.uniqueBackupPath('applist_migration');
       await copyFile(this.paths.applistPath, backupPath);
     }
     await atomicWriteFile(this.paths.applistPath, newText);
@@ -211,6 +212,19 @@ export class ConfigStore {
   private requireDoc(): Document {
     if (!this.doc) throw new Error('ConfigStore.load() must be called before mutations');
     return this.doc;
+  }
+
+  // Collision-proof backup path. Backup names use second-resolution
+  // timestamps, so two same-operation saves within one second would
+  // otherwise overwrite each other and silently lose a backup (C-1).
+  // Append an incrementing suffix when the candidate already exists.
+  private uniqueBackupPath(prefix: string): string {
+    const stamp = timestamp(this.now());
+    let candidate = join(this.paths.backupDir, `${prefix}_${stamp}.yaml`);
+    for (let n = 2; existsSync(candidate); n++) {
+      candidate = join(this.paths.backupDir, `${prefix}_${stamp}_${n}.yaml`);
+    }
+    return candidate;
   }
 
   list(key: ApplistKey): readonly string[] {
@@ -346,7 +360,7 @@ export class ConfigStore {
     // block writing the new config.
     let backupPath: string | undefined;
     if (this.fileExisted) {
-      backupPath = join(this.paths.backupDir, `applist_${operation}_${timestamp(this.now())}.yaml`);
+      backupPath = this.uniqueBackupPath(`applist_${operation}`);
       await copyFile(this.paths.applistPath, backupPath);
     }
     await atomicWriteFile(this.paths.applistPath, newText);

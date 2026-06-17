@@ -1,0 +1,47 @@
+---
+title: Configuration
+description: The applist.yaml file, resolution order, and backups.
+---
+
+# Configuration
+
+macup tracks your packages in a YAML file:
+
+```yaml
+# ~/.config/macup/applist.yaml
+brew:
+  formulas:
+    - git
+    - jq
+  casks:
+    - firefox
+npm:
+  - typescript
+appstore:
+  - Xcode
+
+pins:
+  npm:
+    typescript: "5.3.3"
+
+skip:
+  brew:
+    - legacy-dep
+```
+
+See the [config schema reference](/docs/reference/config-schema) for every key
+and its type.
+
+## Resolution order
+
+1. `$MACUP_CONFIG` (explicit path)
+2. `$MACOS_UPDATETOOL_CONFIG` (legacy, emits a deprecation warning)
+3. `$XDG_CONFIG_HOME/macup/applist.yaml`
+4. `~/.config/macup/applist.yaml`
+5. `~/.config/macos-updatetool/applist.yaml` (legacy, auto-migration prompt on first mutation)
+
+## Backups
+
+A timestamped backup is written before every config mutation (`add`, `remove`,
+`pin`, `skip`). If nothing changed, the backup is removed. Manage them with
+`macup --cleanup` and `macup --restore`.

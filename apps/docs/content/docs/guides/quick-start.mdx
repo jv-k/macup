@@ -1,0 +1,35 @@
+---
+title: Quick start
+description: The commands you will use most.
+---
+
+# Quick start
+
+```bash
+# Interactive wizard: pick plugin, command, packages
+macup
+
+# List outdated Homebrew formulas
+macup brew list --only-outdated
+
+# Update everything, with confirmation
+macup all update
+
+# Preview without running anything
+macup brew update --dry-run
+
+# Track packages
+macup brew add git curl jq
+macup brew add --cask firefox visual-studio-code
+macup npm add typescript
+
+# Pin to a maximum version
+macup npm pin typescript 5.3.3
+
+# Skip a package from future updates
+macup brew skip legacy-dep
+```
+
+Bare top-level words also work: `macup version` is rewritten to `--version`,
+so existing scripts keep working. See the
+[global flags reference](/docs/reference/global-flags) for the full set.

@@ -1,0 +1,11 @@
+{
+  "title": "Guides",
+  "pages": [
+    "installation",
+    "quick-start",
+    "configuration",
+    "the-wizard",
+    "verbosity",
+    "shell-completions"
+  ]
+}

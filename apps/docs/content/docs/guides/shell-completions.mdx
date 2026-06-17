@@ -1,0 +1,28 @@
+---
+title: Shell completions
+description: Install tab completion for zsh, bash, and fish.
+---
+
+# Shell completions
+
+The easy path auto-detects your shell and writes to the standard location:
+
+```bash
+macup --install-completions
+```
+
+For zsh this also clears cached `.zcompdump` files so the new completions load
+on the next shell start.
+
+## Manual install
+
+`--completions` prints to stdout, for dotfiles or scripted setups:
+
+```bash
+macup --completions=zsh  > ~/.local/share/zsh/site-functions/_macup
+macup --completions=bash > ~/.local/share/bash-completion/completions/macup
+macup --completions=fish > ~/.config/fish/completions/macup.fish
+```
+
+The generated files derive from the plugin manifests, so adding a plugin
+extends all three shells automatically.

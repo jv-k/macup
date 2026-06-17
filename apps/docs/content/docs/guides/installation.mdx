@@ -1,0 +1,27 @@
+---
+title: Installation
+description: Install macup on macOS.
+---
+
+# Installation
+
+macup targets macOS and Node 20 or newer.
+
+```bash
+# via npm or pnpm
+pnpm add -g macup
+# or run without installing
+npx macup
+
+# via bun
+bun add -g macup
+```
+
+After installing, verify it runs:
+
+```bash
+macup --version
+```
+
+Then set up [shell completions](/docs/guides/shell-completions) so commands,
+plugins, and flags tab-complete.

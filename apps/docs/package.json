@@ -7,9 +7,7 @@
     "dev": "tsx scripts/generate-reference.ts && next dev",
     "start": "next start",
     "typecheck": "fumadocs-mdx && next typegen && tsc --noEmit",
-    "postinstall": "fumadocs-mdx",
-    "lint": "biome check",
-    "format": "biome format --write"
+    "postinstall": "fumadocs-mdx"
   },
   "dependencies": {
     "macup": "workspace:*",
@@ -31,7 +29,6 @@
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.0",
     "tsx": "^4.19.2",
-    "typescript": "^6.0.3",
-    "@biomejs/biome": "^2.4.16"
+    "typescript": "^6.0.3"
   }
 }

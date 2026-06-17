@@ -57,6 +57,22 @@ jobs:
           name: dist
           path: apps/cli/dist/
 
+  docs-build:
+    name: Build docs site
+    runs-on: macos-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build --filter=docs
+
   compile-smoke:
     name: Compile smoke (bun --compile)
     runs-on: macos-latest

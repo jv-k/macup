@@ -2,15 +2,22 @@
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "build": {
-      "outputs": ["dist/**"]
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "build:binary": {
       "dependsOn": ["build"],
       "outputs": ["dist/macup-*", "dist/checksums.txt"]
     },
-    "typecheck": {},
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
     "test": {
       "dependsOn": ["build"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
     }
   }
 }

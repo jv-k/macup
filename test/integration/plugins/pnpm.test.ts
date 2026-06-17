@@ -40,6 +40,44 @@ describe('pnpm plugin — check()', () => {
   });
 });
 
+describe('pnpm plugin — query failure (A-2)', () => {
+  it('warns instead of silently returning empty when `pnpm list -g` fails', async () => {
+    const warnings: string[] = [];
+    const exec = new FixtureExecRunner({
+      fixtures: [
+        {
+          cmd: 'pnpm',
+          args: ['list', '-g', '--json'],
+          result: {
+            stdout: '',
+            stderr: 'ERR_PNPM_NO_GLOBAL_BIN_DIR  global bin dir not in PATH',
+            exitCode: 1,
+          },
+        },
+        {
+          cmd: 'pnpm',
+          args: ['outdated', '-g', '--json'],
+          result: { stdout: '{}', stderr: '', exitCode: 0 },
+        },
+      ],
+      onPath: ['pnpm'],
+    });
+    const ctx: PluginContext = {
+      exec,
+      log: {
+        info: () => {},
+        warn: (m: string) => warnings.push(m),
+        error: () => {},
+        debug: () => {},
+      },
+      signal: new AbortController().signal,
+    };
+    const result = await pnpmPlugin.list(ctx, {});
+    expect(result).toEqual([]); // still graceful — no crash
+    expect(warnings.some((w) => /pnpm list/i.test(w))).toBe(true);
+  });
+});
+
 describe('pnpm plugin — list', () => {
   it('returns every globally installed pnpm package', async () => {
     const ctx = await makeCtx();

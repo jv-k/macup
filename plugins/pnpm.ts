@@ -35,6 +35,13 @@ function safeParseJson<T>(text: string): T | undefined {
 
 async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<PackageStatus[]> {
   const listResult = await ctx.exec.run('pnpm', ['list', '-g', '--json']);
+  if (listResult.exitCode !== 0) {
+    // Surface the failure instead of silently reporting "no packages" — the
+    // query can fail for reasons the user must fix (e.g. the global bin dir
+    // not on PATH). Default mode floats warnings above the status bar (A-2).
+    const detail = (listResult.stderr || listResult.stdout).trim().split('\n')[0] ?? '';
+    ctx.log.warn(`pnpm list -g failed (exit ${listResult.exitCode})${detail ? `: ${detail}` : ''}`);
+  }
   const listParsed = safeParseJson<PnpmListEntry[]>(listResult.stdout);
   const installed = listParsed?.[0]?.dependencies ?? {};
 

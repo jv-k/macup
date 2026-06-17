@@ -9,6 +9,8 @@ class Screen {
   private readonly cells: string[][];
   private row = 0;
   private col = 0;
+  private savedRow = 0;
+  private savedCol = 0;
 
   constructor(
     private readonly cols: number,
@@ -38,9 +40,21 @@ class Screen {
     this.row = this.clampRow(this.row + 1);
     this.col = 0;
   }
+  saveCursor(): void {
+    this.savedRow = this.row;
+    this.savedCol = this.col;
+  }
+  restoreCursor(): void {
+    this.row = this.clampRow(this.savedRow);
+    this.col = this.clampCol(this.savedCol);
+  }
   eraseLine(): void {
     const line = this.cells[this.row];
     if (line) for (let c = 0; c < this.cols; c++) line[c] = ' ';
+  }
+  eraseToEndOfLine(): void {
+    const line = this.cells[this.row];
+    if (line) for (let c = this.col; c < this.cols; c++) line[c] = ' ';
   }
   eraseDisplay(): void {
     for (const line of this.cells) for (let c = 0; c < this.cols; c++) line[c] = ' ';
@@ -88,7 +102,14 @@ export function renderGrid(ansi: string, cols: number, rows: number): string {
             screen.moveColumn(Number(params[0] ?? '1'));
             break;
           case 'K':
-            screen.eraseLine();
+            if ((params[0] ?? '0') === '2') screen.eraseLine();
+            else screen.eraseToEndOfLine();
+            break;
+          case 's':
+            screen.saveCursor();
+            break;
+          case 'u':
+            screen.restoreCursor();
             break;
           case 'J':
             if ((params[0] ?? '0') === '2') screen.eraseDisplay();
@@ -100,6 +121,16 @@ export function renderGrid(ansi: string, cols: number, rows: number): string {
         i = CSI.lastIndex;
         continue;
       }
+    }
+    if (ch === '\x1b' && ansi[i + 1] === '7') {
+      screen.saveCursor();
+      i += 2;
+      continue;
+    }
+    if (ch === '\x1b' && ansi[i + 1] === '8') {
+      screen.restoreCursor();
+      i += 2;
+      continue;
     }
     if (ch === '\n') screen.newline();
     else if (ch === '\r') screen.carriageReturn();

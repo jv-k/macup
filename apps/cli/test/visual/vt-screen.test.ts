@@ -27,4 +27,22 @@ describe('renderGrid', () => {
     const grid = renderGrid('a\nb\n', 4, 4);
     expect(grid).toBe(['a', 'b'].join('\n'));
   });
+
+  it('saves and restores cursor position via ESC7/ESC8', () => {
+    // Write 'AB' at (1,1) — cursor is now at col 3 (0-indexed col 2).
+    // Save cursor. Move to (1,4) and write 'X'. Restore cursor (back to col 3).
+    // Write 'C' — lands at col 3 (0-indexed col 2).
+    // Grid col0='A', col1='B', col2='C', col3='X', trailing spaces trimmed.
+    const ansi = '\x1b[1;1HAB\x1b7\x1b[1;4HX\x1b8C';
+    const grid = renderGrid(ansi, 6, 1);
+    expect(grid).toBe('ABCX');
+  });
+
+  it('erases to end of line via ESC[K (param 0 or omitted)', () => {
+    // Write 'abcdef', move to col 4, erase to EOL, write 'Z'.
+    // Result: 'abc' then 'Z' at col 4, cols 5-6 space.
+    const ansi = '\x1b[1;1Habcdef\x1b[1;4H\x1b[KZ';
+    const grid = renderGrid(ansi, 6, 1);
+    expect(grid).toBe('abcZ');
+  });
 });

@@ -76,6 +76,13 @@ describe('generateZshCompletions', () => {
     expect(out).toContain("'brew:brew'");
     expect(out).toContain("'npm:npm'");
   });
+
+  it('includes subcommand flags: --dry-run, --only-outdated, --all, --cask (G-1)', () => {
+    expect(out).toContain('--dry-run');
+    expect(out).toContain('--only-outdated');
+    expect(out).toContain('--all');
+    expect(out).toContain('--cask');
+  });
 });
 
 describe('generateBashCompletions', () => {
@@ -92,6 +99,12 @@ describe('generateBashCompletions', () => {
 
   it('registers via `complete -F _macup macup`', () => {
     expect(out).toContain('complete -F _macup macup');
+  });
+
+  it('completes subcommand flags (--dry-run, --only-outdated, --cask) (G-1)', () => {
+    expect(out).toContain('--dry-run');
+    expect(out).toContain('--only-outdated');
+    expect(out).toContain('--cask');
   });
 });
 
@@ -110,5 +123,11 @@ describe('generateFishCompletions', () => {
   it('includes command completions', () => {
     expect(out).toContain('list');
     expect(out).toContain('install');
+  });
+
+  it('completes subcommand flags gated on the command (G-1)', () => {
+    expect(out).toContain('dry-run');
+    expect(out).toContain('only-outdated');
+    expect(out).toContain('cask');
   });
 });

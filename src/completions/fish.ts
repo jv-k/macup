@@ -1,5 +1,5 @@
 import type { Plugin } from '../plugins/types';
-import { commandsFor } from './shared';
+import { commandsFor, flagsForCommand } from './shared';
 
 export function generateFishCompletions(plugins: readonly Plugin[]): string {
   const lines: string[] = [
@@ -26,6 +26,12 @@ export function generateFishCompletions(plugins: readonly Plugin[]): string {
       lines.push(
         `complete -c macup -n "__fish_seen_subcommand_from ${id}" -a "${cmd}" -d "${cmd}"`,
       );
+      for (const flag of flagsForCommand(plugin, cmd)) {
+        const name = flag.replace(/^--/, '');
+        lines.push(
+          `complete -c macup -n "__fish_seen_subcommand_from ${id}; and __fish_seen_subcommand_from ${cmd}" -l ${name} -d "${flag}"`,
+        );
+      }
     }
   }
 

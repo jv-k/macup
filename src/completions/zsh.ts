@@ -1,5 +1,5 @@
 import type { Plugin } from '../plugins/types';
-import { commandsFor } from './shared';
+import { commandsFor, flagsForCommand } from './shared';
 
 export function generateZshCompletions(plugins: readonly Plugin[]): string {
   // Each plugin gets a `name:description` entry so zsh shows the
@@ -15,6 +15,20 @@ export function generateZshCompletions(plugins: readonly Plugin[]): string {
         .join(' ');
       return `      ${p.manifest.id}) _values 'command' ${cmds} ;;`;
     })
+    .join('\n');
+
+  // `<plugin>:<command>) ...` cases offering that subcommand's flags in the
+  // positional `rest` state ($words[2]=plugin, $words[3]=command).
+  const flagCases = plugins
+    .flatMap((p) =>
+      commandsFor(p)
+        .map((cmd) => ({ cmd, flags: flagsForCommand(p, cmd) }))
+        .filter((x) => x.flags.length > 0)
+        .map(
+          (x) =>
+            `        ${p.manifest.id}:${x.cmd}) _values 'flag' ${x.flags.map((f) => `'${f}'`).join(' ')} ;;`,
+        ),
+    )
     .join('\n');
 
   return `#compdef macup
@@ -50,7 +64,10 @@ ${pluginCases}
       esac
       ;;
     (rest)
-      _message 'package name(s)'
+      case "$words[2]:$words[3]" in
+${flagCases}
+        *) _message 'package name(s)' ;;
+      esac
       ;;
   esac
 }

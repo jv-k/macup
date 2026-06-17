@@ -13,3 +13,20 @@ export function commandsFor(plugin: Plugin): string[] {
   }
   return cmds;
 }
+
+// Flags a given subcommand accepts, for shell completion. Mirrors the citty
+// arg defs in src/commands/from-manifest.ts — keep in sync (that file is the
+// source of truth). Subtype shortcuts (--cask/--formula) are only offered for
+// plugins that declare more than one subtype (e.g. brew).
+const SUBTYPE_COMMANDS = new Set(['list', 'install', 'update', 'add', 'remove']);
+
+export function flagsForCommand(plugin: Plugin, command: string): string[] {
+  const flags: string[] = [];
+  if (command === 'list') flags.push('--only-outdated', '--all', '--json');
+  if (command === 'install') flags.push('--dry-run', '--verbose');
+  if (command === 'update') flags.push('--dry-run', '--all', '--verbose');
+  if ((plugin.manifest.subtypes?.length ?? 0) > 1 && SUBTYPE_COMMANDS.has(command)) {
+    flags.push('--cask', '--formula');
+  }
+  return flags;
+}

@@ -83,7 +83,7 @@ class Screen {
 }
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: parsing terminal escapes
-const CSI = /\x1b\[([0-9;]*)([A-Za-z])/y;
+const CSI = /\x1b\[([0-9;?]*)([A-Za-z])/y;
 
 export function renderGrid(ansi: string, cols: number, rows: number): string {
   const screen = new Screen(cols, rows);
@@ -94,7 +94,13 @@ export function renderGrid(ansi: string, cols: number, rows: number): string {
       CSI.lastIndex = i;
       const m = CSI.exec(ansi);
       if (m) {
-        const params = (m[1] ?? '').split(';').filter((s) => s.length > 0);
+        const raw = m[1] ?? '';
+        // DEC-private sequences (?-prefixed) do not affect the text grid.
+        if (raw.startsWith('?')) {
+          i = CSI.lastIndex;
+          continue;
+        }
+        const params = raw.split(';').filter((s) => s.length > 0);
         const final = m[2];
         switch (final) {
           case 'H': {

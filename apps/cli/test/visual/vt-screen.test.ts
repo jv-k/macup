@@ -45,4 +45,13 @@ describe('renderGrid', () => {
     const grid = renderGrid(ansi, 6, 1);
     expect(grid).toBe('abcZ');
   });
+
+  it('consumes DEC-private cursor show/hide without leaking bytes', () => {
+    expect(renderGrid('\x1b[?25l\x1b[?25hX', 10, 1)).toBe('X');
+  });
+
+  it('ignores DEC-private modes whose final char collides with a handled CSI', () => {
+    // ?2J must NOT erase the display the way 2J would
+    expect(renderGrid('ab\x1b[?2Jcd', 10, 1)).toBe('abcd');
+  });
 });

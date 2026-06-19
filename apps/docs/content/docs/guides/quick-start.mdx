@@ -1,35 +1,109 @@
 ---
 title: Quick start
-description: The commands you will use most.
+description: Run the wizard, see what is outdated, update safely, and track packages.
 ---
 
 # Quick start
 
+This page orients you. Each task below links to the guide that goes deeper.
+
+## Run the wizard
+
+Run `macup` with no arguments to start the interactive wizard. Pick a category,
+then an action, and confirm the exact command before it runs.
+
 ```bash
-# Interactive wizard: pick plugin, command, packages
+# Launch the wizard (needs a TTY on stdin)
 macup
-
-# List outdated Homebrew formulas
-macup brew list --only-outdated
-
-# Update everything, with confirmation
-macup all update
-
-# Preview without running anything
-macup brew update --dry-run
-
-# Track packages
-macup brew add git curl jq
-macup brew add --cask firefox visual-studio-code
-macup npm add typescript
-
-# Pin to a maximum version
-macup npm pin typescript 5.3.3
-
-# Skip a package from future updates
-macup brew skip legacy-dep
 ```
 
-Bare top-level words also work: `macup version` is rewritten to `--version`,
-so existing scripts keep working. See the
-[global flags reference](/docs/reference/global-flags) for the full set.
+Piped or non-interactive? The wizard does not run. macup prints a one-line hint
+instead. See [The wizard](/docs/guides/the-wizard).
+
+## See what is outdated
+
+Aggregate outdated packages across every plugin in one pane.
+
+```bash
+# Cross-plugin outdated report, behind a spinner
+macup outdated
+
+# Same data as JSON, no spinner or header
+macup outdated --json
+```
+
+More on the summary and per-plugin listings in [Checking what is
+outdated](/docs/guides/checking-outdated).
+
+## Update safely
+
+Add `--dry-run` to any plugin's `update` to preview what it would run without
+upgrading anything.
+
+```bash
+# Show the upgrade plan, change nothing
+macup brew update --dry-run
+
+# Upgrade tracked + outdated packages (the default scope)
+macup brew update
+
+# Upgrade every outdated package, not just tracked ones
+macup brew update --all
+```
+
+`--dry-run` lives on per-plugin `install` and `update` only, not on `macup`
+itself. See [Safe updates](/docs/guides/safe-updates).
+
+## Track packages
+
+`add` is config-only: it edits your tracked applist, it does not install.
+
+```bash
+# Track Homebrew formulas (the default subtype)
+macup brew add ripgrep fd
+
+# Track Homebrew casks
+macup brew add --cask firefox
+
+# Track npm globals (npm has no subtypes)
+macup npm add typescript
+```
+
+See [Configuration](/docs/guides/configuration) for the applist file.
+
+## Pin and skip
+
+Pin a tracked package to a maximum version, or skip it from future updates.
+During `update`, pinned packages report as `Pinned (skipping)` and skipped ones
+as `Skipped`.
+
+```bash
+# Hold a package at or below a version (name and version both required)
+macup npm pin typescript 5.3.3
+
+# Exclude packages from future updates
+macup npm skip eslint
+
+# Reverse either
+macup npm unpin typescript
+macup npm unskip eslint
+```
+
+How pins and skips shape an update is covered in [Selective
+updates](/docs/concepts/selective-updates). The `pins` and `skip` applist fields
+are in the [config schema reference](/docs/reference/config-schema).
+
+## Bare words become flags
+
+A bare top-level word is rewritten to its `--flag` form before parsing. Only the
+first positional is rewritten.
+
+```bash
+# These pairs are equivalent
+macup version   # macup --version
+macup config    # macup --config
+macup plugins   # macup --plugins
+```
+
+Rewritten words: `version`, `config`, `cleanup`, `restore`, `logo`, `plugins`,
+`install-completions`. See the [global flags reference](/docs/reference/global-flags).

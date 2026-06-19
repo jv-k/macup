@@ -1,0 +1,121 @@
+---
+title: Checking what is outdated
+description: One command to see every outdated package across all your package managers.
+---
+
+# Checking what is outdated
+
+`macup outdated` checks every registered plugin (except the composite `all`,
+which is skipped so it doesn't double-count its constituents) and aggregates
+the results into one pane:
+
+```bash
+# Check Homebrew, npm, pnpm, App Store, Xcode, and system updates at once
+macup outdated
+```
+
+In a TTY it prints an `OUTDATED` header, then a spinner that reports per-plugin
+progress (`Checking plugins… (3/6) Homebrew`) while it works. Each plugin is
+checked in parallel. A failure in one is isolated and the rest still render.
+
+```text
+  OUTDATED
+
+  ! brew  (8 outdated)  deno · gh · jq · node · pnpm · ripgrep +2
+  ✓ npm   up to date
+  ? appstore  unavailable: mas not installed
+
+  8 packages outdated  · run `macup all update` to upgrade
+```
+
+Rows read as:
+
+- `! <id>  (<N> outdated)  name · name · … +K`: outdated packages, with the
+  first six names listed and a `+K` overflow count.
+- `✓ <id>  up to date`: nothing to upgrade.
+- `? <id>  unavailable: <reason>`: the backend is missing or its check failed.
+
+When something is outdated the footer points at `macup all update` to upgrade
+everything. See [the all plugin](/docs/reference/all) for how that runs. When
+nothing is outdated the footer reads `Everything up to date.` instead.
+
+## JSON for scripting
+
+`--json` is the only flag `outdated` accepts. It emits the full report and
+writes no header or spinner, so stdout stays pristine:
+
+```bash
+# Pretty-printed JSON report
+macup outdated --json
+```
+
+The payload shape:
+
+```json
+{
+  "totalOutdated": 8,
+  "plugins": [
+    {
+      "pluginId": "brew",
+      "displayName": "Homebrew",
+      "available": true,
+      "outdated": [ /* PackageStatus[] */ ]
+    }
+  ]
+}
+```
+
+An unavailable plugin has `available: false` and a `reason` string. See
+[Scripting macup](/docs/guides/scripting) for parsing the payload with jq.
+
+## Per-plugin listings
+
+`macup outdated` is a summary. To see the actual packages for one manager, use
+its `list` subcommand:
+
+```bash
+# Only the outdated packages tracked by one plugin
+macup brew list --only-outdated
+
+# Every tracked package: Up-to-date, Outdated, Not installed
+macup brew list
+
+# Every installed package, not just the tracked applist set
+macup brew list --all
+
+# Machine-readable PackageStatus[] for one plugin
+macup brew list --json
+```
+
+The flag is spelled `--only-outdated`. With it set, the up-to-date and
+not-installed blocks are suppressed. If nothing is outdated you get
+`All <label> packages are up-to-date!`.
+
+By default `list` shows only packages tracked in your
+[applist.yaml](/docs/guides/configuration). If you track none, it falls back to
+showing everything installed and suggests `macup <id> add <name...>`.
+
+Homebrew adds subtype scoping. Without a subtype flag, `list` shows every
+subtype:
+
+```bash
+# Scope to casks (or --formula for formulas) and restrict to outdated
+macup brew list --cask --only-outdated
+```
+
+## Across every manager
+
+The composite `all` plugin fans `list` out across every constituent:
+
+```bash
+# Combined view of every plugin
+macup all list
+
+# Combined view, outdated only
+macup all list --only-outdated
+```
+
+`all list` takes the same flags as any plugin's `list`. For a one-pane summary
+rather than full listings, reach for `macup outdated` instead.
+
+To check and upgrade interactively, run [the wizard](/docs/guides/the-wizard).

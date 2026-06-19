@@ -90,7 +90,8 @@ On SIGINT, macup cancels in-flight subprocesses, then exits `130`.
 
 A failing subprocess does **not** propagate its own exit code. The runner
 throws a generic error whose message includes the subprocess code, and macup
-exits `1`. Do not read the subprocess's exit status from macup's.
+exits `1`. Do not read the subprocess's exit status from macup's. The
+[exit codes reference](/docs/reference/exit-codes) is the canonical list.
 
 ## Non-TTY behavior
 
@@ -120,7 +121,9 @@ MACUP_STATUS_BAR=off macup all update
 
 `MACUP_STATUS_BAR=off` disables the bar regardless of terminal. An empty or
 `dumb` `$TERM` disables it too. `MACUP_STATUS_BAR=force` is a no-op now that the
-bar is on by default on capable TTYs.
+bar is on by default on capable TTYs. The
+[environment variables reference](/docs/reference/environment-variables) lists
+every variable macup reads.
 
 ## Keeping stdout clean
 

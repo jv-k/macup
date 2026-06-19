@@ -52,6 +52,33 @@ function pluginsOverview(plugins: PluginDoc[]): string {
     const req = p.requires.length ? p.requires.join(', ') : 'always available';
     out += `| [\`${p.id}\`](/docs/reference/${p.id}) | ${p.displayName} | ${cmds} | ${req} |\n`;
   }
+  out += flagAvailability(plugins);
+  return out;
+}
+
+// A matrix of which scoping and output flags each plugin command accepts,
+// unioned across plugins, so a reader sees at a glance that `--json` is on
+// `list` and `--dry-run` only on `install`/`update`.
+function flagAvailability(plugins: PluginDoc[]): string {
+  const FLAGS = ['--all', '--only-outdated', '--json', '--dry-run', '--cask', '--formula'];
+  const COMMANDS = ['list', 'install', 'update', 'add', 'remove'];
+  const accept = new Map<string, Set<string>>(FLAGS.map((f) => [f, new Set<string>()]));
+  for (const p of plugins) {
+    for (const c of p.commands) {
+      for (const f of c.flags) {
+        accept.get(f.flag)?.add(c.name);
+      }
+    }
+  }
+  let out = `\n## Flag availability\n\nWhich scoping and output flags each command accepts:\n\n`;
+  out += `| Command | ${FLAGS.map((f) => `\`${f}\``).join(' | ')} |\n`;
+  out += `| --- | ${FLAGS.map(() => '---').join(' | ')} |\n`;
+  for (const cmd of COMMANDS) {
+    const cells = FLAGS.map((f) => (accept.get(f)?.has(cmd) ? 'yes' : ' '));
+    out += `| \`${cmd}\` | ${cells.join(' | ')} |\n`;
+  }
+  out += '\nThe top-level `macup outdated` command also accepts `--json`. ';
+  out += '`--cask` and `--formula` are Homebrew only.\n';
   return out;
 }
 
@@ -74,8 +101,35 @@ function configPage(meta: DocsMetadata): string {
   return out;
 }
 
+function exitCodesPage(meta: DocsMetadata): string {
+  let out = frontmatter('Exit codes', 'The status codes macup returns, for scripts and CI.');
+  out += `# Exit codes\n\nmacup returns a small, stable set of exit codes.\n\n`;
+  out += `| Code | Meaning |\n| --- | --- |\n`;
+  for (const e of meta.exitCodes) {
+    out += `| \`${e.code}\` | ${e.meaning} |\n`;
+  }
+  return out;
+}
+
+function envVarsPage(meta: DocsMetadata): string {
+  let out = frontmatter('Environment variables', 'The environment variables macup reads.');
+  out += `# Environment variables\n\nmacup reads these environment variables.\n\n`;
+  out += `| Variable | Effect |\n| --- | --- |\n`;
+  for (const v of meta.envVars) {
+    out += `| \`${v.name}\` | ${v.description} |\n`;
+  }
+  return out;
+}
+
 function metaJson(plugins: PluginDoc[]): string {
-  const pages = ['plugins', ...plugins.map((p) => p.id), 'global-flags', 'config-schema'];
+  const pages = [
+    'plugins',
+    ...plugins.map((p) => p.id),
+    'global-flags',
+    'config-schema',
+    'exit-codes',
+    'environment-variables',
+  ];
   return `${JSON.stringify({ title: 'Reference', pages }, null, 2)}\n`;
 }
 
@@ -89,8 +143,10 @@ function main(): void {
   }
   writeFileSync(join(OUT, 'global-flags.mdx'), globalFlagsPage(meta));
   writeFileSync(join(OUT, 'config-schema.mdx'), configPage(meta));
+  writeFileSync(join(OUT, 'exit-codes.mdx'), exitCodesPage(meta));
+  writeFileSync(join(OUT, 'environment-variables.mdx'), envVarsPage(meta));
   writeFileSync(join(OUT, 'meta.json'), metaJson(meta.plugins));
-  console.log(`generated ${meta.plugins.length + 3} reference pages -> ${OUT}`);
+  console.log(`generated ${meta.plugins.length + 5} reference pages -> ${OUT}`);
 }
 
 main();

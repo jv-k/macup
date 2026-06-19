@@ -48,4 +48,22 @@ describe('docsMetadata', () => {
   it('reports a semver-shaped version', () => {
     expect(docsMetadata().version).toMatch(/\d+\.\d+\.\d+/);
   });
+
+  it('documents the stable exit codes 0, 1, and 130', () => {
+    const meta = docsMetadata();
+    expect(meta.exitCodes.map((e) => e.code)).toEqual([0, 1, 130]);
+    for (const e of meta.exitCodes) {
+      expect(e.meaning, `exit ${e.code}`).not.toBe('');
+    }
+  });
+
+  it('documents the status-bar and config environment variables', () => {
+    const meta = docsMetadata();
+    expect(meta.envVars.map((v) => v.name)).toEqual(
+      expect.arrayContaining(['MACUP_STATUS_BAR', 'NO_COLOR', 'MACUP_CONFIG', 'XDG_CONFIG_HOME']),
+    );
+    for (const v of meta.envVars) {
+      expect(v.description, v.name).not.toBe('');
+    }
+  });
 });

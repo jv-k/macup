@@ -54,11 +54,23 @@ export interface ConfigFieldDoc {
   description: string;
 }
 
+export interface ExitCodeDoc {
+  code: number;
+  meaning: string;
+}
+
+export interface EnvVarDoc {
+  name: string;
+  description: string;
+}
+
 export interface DocsMetadata {
   version: string;
   plugins: PluginDoc[];
   globalFlags: GlobalFlagDoc[];
   config: ConfigFieldDoc[];
+  exitCodes: ExitCodeDoc[];
+  envVars: EnvVarDoc[];
 }
 
 // Prose per per-command flag. The LIST of flags for each command comes
@@ -99,6 +111,50 @@ const GLOBAL_FLAGS: GlobalFlagDoc[] = [
   { flag: '--cleanup', description: 'Delete all config backup files (with confirmation).' },
   { flag: '--restore', description: 'Interactively pick and restore a config backup.' },
   { flag: '--logo', description: 'Print the macup logo splash.' },
+];
+
+// The stable process exit codes, mirroring src/cli.ts (0 on success, 130 on
+// SIGINT, 1 otherwise). Kept here so the reference page cannot drift.
+const EXIT_CODES: ExitCodeDoc[] = [
+  { code: 0, meaning: 'Success, including `--help` and `--version`.' },
+  {
+    code: 1,
+    meaning:
+      'Failure: any error, an unknown top-level flag, a usage error, or a failed subprocess.',
+  },
+  {
+    code: 130,
+    meaning: 'Interrupted with Ctrl-C (SIGINT). In-flight subprocesses are cancelled first.',
+  },
+];
+
+// Environment variables macup reads, with the prose used for the reference.
+// Mirrors the reads in src/ui/terminal-caps.ts, src/runtime.ts, and the config
+// path resolution; centralized here so the guides can link instead of repeat.
+const ENV_VARS: EnvVarDoc[] = [
+  {
+    name: 'MACUP_STATUS_BAR',
+    description:
+      'Set to `off` to disable the pinned status bar. `force` is a no-op now that the bar is on by default on capable TTYs.',
+  },
+  { name: 'NO_COLOR', description: 'When set to any value, disables colored output.' },
+  { name: 'TERM', description: 'An empty value or `dumb` disables the status bar.' },
+  {
+    name: 'MACUP_CONFIG',
+    description: 'Explicit path to the applist file. Takes precedence over the default locations.',
+  },
+  {
+    name: 'MACOS_UPDATETOOL_CONFIG',
+    description: 'Legacy applist path. Honored with a deprecation warning.',
+  },
+  {
+    name: 'XDG_CONFIG_HOME',
+    description: 'Base config directory. macup reads `$XDG_CONFIG_HOME/macup/applist.yaml`.',
+  },
+  {
+    name: 'XDG_DATA_HOME',
+    description: 'Base data directory. Sets where `--install-completions` writes completion files.',
+  },
 ];
 
 // Prose per applist key. The LIST of list-keys comes from ApplistKeySchema
@@ -160,5 +216,7 @@ export function docsMetadata(): DocsMetadata {
         description: 'Packages excluded from all updates.',
       },
     ],
+    exitCodes: EXIT_CODES,
+    envVars: ENV_VARS,
   };
 }

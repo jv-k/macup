@@ -17,7 +17,7 @@ export default function HomePage() {
 
       <div className="flex flex-wrap items-center justify-center gap-3">
         <Link
-          href="/docs/guides/quick-start"
+          href="/docs/getting-started/quick-start"
           className="rounded-lg bg-fd-primary px-5 py-2.5 font-medium text-fd-primary-foreground transition-opacity hover:opacity-90"
         >
           Quick start

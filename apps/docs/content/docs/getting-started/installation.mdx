@@ -5,23 +5,61 @@ description: Install macup on macOS.
 
 # Installation
 
-macup targets macOS and Node 20 or newer.
+<Callout type="info">
+macup is macOS only by design. Its backends are Homebrew, the Mac App Store,
+Xcode, and `softwareupdate`, so there is no Linux or Windows build.
+</Callout>
+
+macup needs macOS and Node 20 or newer. Install it as a global package, or run
+it once with `npx`.
+
+<Tabs items={['npm', 'pnpm', 'npx', 'bun']}>
+
+<Tab value="npm">
 
 ```bash
-# via npm or pnpm
-pnpm add -g macup
-# or run without installing
-npx macup
+npm i -g macup
+```
 
-# via bun
+</Tab>
+
+<Tab value="pnpm">
+
+```bash
+pnpm add -g macup
+```
+
+</Tab>
+
+<Tab value="npx">
+
+```bash
+# Run once without installing
+npx macup
+```
+
+</Tab>
+
+<Tab value="bun">
+
+```bash
 bun add -g macup
 ```
+
+</Tab>
+
+</Tabs>
 
 After installing, verify it runs:
 
 ```bash
 macup --version
 ```
+
+<Callout type="info">
+A Homebrew tap (`brew install jv-k/tap/macup`) is planned but not live yet. Use
+npm, pnpm, or npx for now.
+</Callout>
 
 Then set up [shell completions](/docs/guides/shell-completions) so commands,
 plugins, and flags tab-complete.

@@ -1,14 +1,11 @@
 {
   "title": "Guides",
   "pages": [
-    "installation",
-    "quick-start",
-    "the-wizard",
     "checking-outdated",
     "configuration",
     "safe-updates",
-    "verbosity",
     "scripting",
+    "verbosity",
     "shell-completions"
   ]
 }

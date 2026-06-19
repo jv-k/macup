@@ -41,7 +41,7 @@ test('home (light)', async ({ page }) => {
 
 test('quick-start guide (dark)', async ({ page }) => {
   await forceDark(page);
-  await page.goto('/docs/guides/quick-start');
+  await page.goto('/docs/getting-started/quick-start');
   await settle(page);
   await expect(page).toHaveScreenshot('guide-quick-start-dark.png', { fullPage: true });
 });

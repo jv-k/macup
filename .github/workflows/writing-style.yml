@@ -23,6 +23,6 @@ jobs:
       - uses: astral-sh/setup-uv@v8.2.0
       - name: Run deslopper on changed Markdown
         run: |
-          files=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- '*.md' '*.markdown')
+          files=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- '*.md' '*.markdown' '*.mdx')
           [ -z "$files" ] && exit 0
-          uvx --from git+https://github.com/jv-k/deslopper@ef16c9dc43f0e888dc15354522ee08fe795c917a deslopper lint --format github $files
+          uvx --from git+https://github.com/jv-k/deslopper@cd56f1ac2bacb19e53681670c26e231cc07f0d12 deslopper lint --format github $files

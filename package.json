@@ -13,7 +13,7 @@
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "shellcheck": "git ls-files '*.sh' | xargs shellcheck --severity=warning",
-    "deslop:lint": "uvx --from git+https://github.com/jv-k/deslopper@ef16c9dc43f0e888dc15354522ee08fe795c917a deslopper lint",
+    "deslop:lint": "uvx --from git+https://github.com/jv-k/deslopper@cd56f1ac2bacb19e53681670c26e231cc07f0d12 deslopper lint",
     "sandcastle": "npx tsx .sandcastle/main.mts",
     "prepare": "simple-git-hooks || true"
   },
@@ -24,6 +24,6 @@
     "turbo": "^2.3.0"
   },
   "simple-git-hooks": {
-    "pre-commit": "FILES=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.markdown' | grep -Ev '(^|/)(node_modules|\\.sandcastle|\\.github/chatmodes|docs/superpowers|\\.worktrees)/' || true); [ -z \"$FILES\" ] && exit 0; echo \"$FILES\" | xargs uvx --from git+https://github.com/jv-k/deslopper@ef16c9dc43f0e888dc15354522ee08fe795c917a deslopper lint"
+    "pre-commit": "FILES=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.markdown' '*.mdx' | grep -Ev '(^|/)(node_modules|\\.sandcastle|\\.github/chatmodes|docs/superpowers|\\.worktrees)/' || true); [ -z \"$FILES\" ] && exit 0; echo \"$FILES\" | xargs uvx --from git+https://github.com/jv-k/deslopper@cd56f1ac2bacb19e53681670c26e231cc07f0d12 deslopper lint"
   }
 }

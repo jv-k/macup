@@ -1,0 +1,90 @@
+---
+title: Upgrade one backend only
+description: Update a single package manager instead of the whole machine.
+---
+
+# Upgrade one backend only
+
+Run `update` against one plugin to touch that backend alone. Everything else
+stays where it is.
+
+```bash
+# Upgrade tracked, outdated Homebrew packages only
+macup brew update
+```
+
+This leaves npm, the App Store, Xcode, and macOS untouched. Swap `brew` for any
+plugin id to scope the run elsewhere: `macup npm update`, `macup pnpm update`,
+`macup appstore update`.
+
+## Three scopes for one backend
+
+`macup brew update` defaults to packages that are both tracked (in your
+[applist.yaml](/docs/guides/configuration)) and outdated. Widen or narrow that
+set without leaving the plugin.
+
+```bash
+# Default: tracked AND outdated
+macup brew update
+
+# Every outdated formula and cask, tracked or not
+macup brew update --all
+
+# Named packages only, overriding the default and --all
+macup brew update git ripgrep
+```
+
+Explicit names win over both the tracked default and `--all`. Pins and skips
+still apply in every case: a skipped or pin-blocked package drops out even when
+you name it. See [selective updates](/docs/concepts/selective-updates) for how
+that filtering runs.
+
+<Callout type="info">
+
+Check what is outdated before you upgrade with `macup brew list --only-outdated`. See [checking outdated](/docs/guides/checking-outdated).
+
+</Callout>
+
+## Single backend versus the whole machine
+
+`macup all update` is system-wide. It runs every available manager and is not
+scoped to your applist.
+
+```bash
+# System-wide: every manager, every outdated package
+macup all update
+```
+
+Reach for one plugin when you want a narrow, predictable run: upgrade your brew
+formulas without pulling npm globals or a macOS update into the same pass.
+
+```bash
+# Bump Homebrew, leave npm and the App Store alone
+macup brew update
+
+# Bump npm globals on their own
+macup npm update
+```
+
+The composite [`all`](/docs/reference/all) plugin tracks nothing, so it has no
+tracked filter and no `pin` or `skip` subcommands. A single-backend run gives
+you that filtering back.
+
+## Preview first
+
+`--dry-run` prints the commands a backend would run and executes none of them.
+
+```bash
+# See the brew upgrades without running them
+macup brew update --dry-run
+```
+
+Single-manager runs such as `macup brew update` are not confirmation-gated.
+Only `macup all update` prompts before a system-wide change. Use `--dry-run`
+when you want a look before either runs. See [safe updates](/docs/guides/safe-updates).
+
+## See also
+
+- [Selective updates](/docs/concepts/selective-updates) explains how tracking, pins, and skips shape a run.
+- [Checking outdated](/docs/guides/checking-outdated) lists what is behind before you upgrade.
+- [Safe updates](/docs/guides/safe-updates) covers `--dry-run` and confirmation prompts.

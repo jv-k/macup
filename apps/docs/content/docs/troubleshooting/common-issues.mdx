@@ -1,0 +1,173 @@
+---
+title: Common issues
+description: Concrete fixes for the failures you are most likely to hit running macup.
+---
+
+# Common issues
+
+Each entry below pairs a symptom with the fix. Run the diagnostic command, read
+the reason, apply the change.
+
+## The wizard does not start
+
+You run `macup` with no arguments and it prints a logo and a one-line hint
+instead of the interactive picker:
+
+```text
+macup — 7 plugin(s). Run with --help or a command.
+```
+
+The wizard checks `stdin`. When stdin is not a TTY (piped, redirected, or under
+a CI runner), macup skips the picker and returns. This is by design, not a
+crash.
+
+Run a command directly instead of the no-arg wizard:
+
+```bash
+# Use an explicit command rather than the picker
+macup outdated
+
+# Or list what macup can do
+macup --help
+```
+
+<Callout type="info">
+
+The interactive picker runs only when stdin is a TTY. See
+[Scripting macup](/docs/guides/scripting) for the full stream-by-stream
+non-TTY behavior.
+
+</Callout>
+
+## A plugin is missing
+
+A backend you expected (Homebrew, npm, the App Store, Xcode) is absent from the
+output, or a command for it errors out. A plugin only registers when its binary
+is on `PATH`.
+
+List every built-in plugin and the reason each unavailable one is skipped:
+
+```bash
+macup --plugins
+```
+
+The report marks each plugin and names the missing binary:
+
+```text
+plugins: 6 / 7 available  (platform: darwin)
+
+  ✓ brew      Homebrew              list, install, update, add, remove  [formulas|casks]
+  ✗ appstore  Mac App Store         missing: mas
+  ✓ all       All package managers  list, install, update
+```
+
+`missing: mas` means `mas` is not on `PATH`. Install it (`brew install mas`),
+open a new shell so `PATH` refreshes, then re-run `macup --plugins` to confirm
+the plugin flips to `✓`. The [plugins reference](/docs/reference/plugins) lists
+each plugin's required binary.
+
+## Status-bar artifacts
+
+The pinned status bar leaves stray characters, a frozen line, or a broken
+scroll region. The bar relies on DECSTBM scroll regions, which a few terminals
+and CI runners do not implement correctly.
+
+Turn the bar off:
+
+```bash
+# Disable the pinned status bar for one run
+MACUP_STATUS_BAR=off macup all update
+```
+
+`MACUP_STATUS_BAR=off` disables the bar on every terminal. An empty or `dumb`
+`$TERM` disables it too. `MACUP_STATUS_BAR=force` is a no-op now that the bar is
+on by default on capable TTYs.
+
+<Callout type="info">
+
+For unattended runs, prefer `--debug`, which suppresses the bar and routes the
+shell-call trace to stderr so stdout stays clean. See
+[Verbosity](/docs/guides/verbosity) and the
+[environment variables reference](/docs/reference/environment-variables).
+
+</Callout>
+
+## A pin is not taking effect
+
+You pinned a package, but `update` upgrades it past the cap anyway. macup
+compares versions with semver. When either the latest version or the pin is not
+valid semver, the comparison treats them as equal and the package upgrades.
+
+The App Store backend (via `mas`) and many brew packages report non-semver
+versions such as date strings or build IDs, so a pin on those backends is
+permissive and will not block an upgrade. This is deliberate. A malformed pin
+should not trap you out of updates.
+
+To hold a non-semver package at a fixed version, use a skip instead, which
+excludes it regardless of version:
+
+```bash
+# Permissive on brew: the pin may not block
+macup brew pin some-formula 1.2.3
+
+# Reliable on brew: exclude it from updates entirely
+macup brew skip some-formula
+```
+
+npm and pnpm report standard semver, so pins there behave as you expect. See
+[Selective updates](/docs/concepts/selective-updates) for how pins and skips are
+resolved.
+
+## Migrating from macos-updatetool
+
+You used the predecessor `macos-updatetool` and want your old config honored.
+macup reads it and migrates it for you. Two cases:
+
+A legacy config file at `~/.config/macos-updatetool/applist.yaml` is read in
+place and migrated to `~/.config/macup/applist.yaml` on the first mutation. The
+original is copied to a timestamped backup before the rewrite.
+
+The `$MACOS_UPDATETOOL_CONFIG` environment variable is still honored, with a
+deprecation warning:
+
+```text
+warning: $MACOS_UPDATETOOL_CONFIG is deprecated; use $MACUP_CONFIG instead.
+```
+
+Inspect what macup resolved, including any migration notice, with `--config`:
+
+```bash
+macup --config
+```
+
+```text
+applist:     ~/.config/macos-updatetool/applist.yaml
+source:      legacy-home
+exists:      yes
+schema:      valid
+pins:        0
+skip:        0
+backups dir: ~/.config/macos-updatetool/backups
+
+legacy config detected at ~/.config/macos-updatetool/applist.yaml
+  → will be migrated to ~/.config/macup/applist.yaml on first mutation
+```
+
+The flat pre-1.x keys (`brew_formulas`, `brew_casks`, `npm_apps`, `pnpm_apps`,
+`appstore_apps`) are remapped to the current nested shape during the migration.
+Point `$MACUP_CONFIG` at a path of your choice to override resolution. The
+[config schema](/docs/reference/config-schema) documents the current keys.
+
+## See also
+
+<Cards>
+
+<Card title="Scripting macup" href="/docs/guides/scripting">JSON output, exit codes, and non-TTY behavior.</Card>
+
+<Card title="Selective updates" href="/docs/concepts/selective-updates">How tracking, pins, and skips shape an update.</Card>
+
+<Card title="Configuration" href="/docs/guides/configuration">The applist and where backups live.</Card>
+
+<Card title="Environment variables" href="/docs/reference/environment-variables">Every variable macup reads, with its effect.</Card>
+
+</Cards>

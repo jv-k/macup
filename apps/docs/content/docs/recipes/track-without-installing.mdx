@@ -1,0 +1,110 @@
+---
+title: Track a package without installing it
+description: Record a package in your applist with add, which edits config and installs nothing.
+---
+
+# Track a package without installing it
+
+`add` is config-only. It writes the package name into your
+[applist.yaml](/docs/guides/configuration) and installs nothing. Use it to
+record what you want a machine to carry, then install later (or on another
+machine) from the tracked set.
+
+```bash
+# Record ripgrep in the brew formula list. Nothing is installed.
+macup brew add ripgrep
+
+# Record a cask the same way
+macup brew add --cask firefox
+
+# Record a global npm package
+macup npm add typescript
+```
+
+Each prints what it tracked:
+
+```text
+Added to brew.formulas: ripgrep
+```
+
+<Callout type="info">
+
+`add`, `remove`, `pin`, and `skip` all edit `applist.yaml` and run no
+package-manager command. They exist on the plugins that track config
+(`brew`, `npm`, `pnpm`, `appstore`). `xcode` and `system` track nothing, so
+they have no such subcommands.
+
+</Callout>
+
+## add vs install
+
+`add` records intent. `install` acts on it. With no package names, `install`
+installs the whole tracked set for that key:
+
+```bash
+macup brew add ripgrep      # tracks ripgrep, installs nothing
+macup brew install          # installs every tracked brew formula
+macup brew install ripgrep  # installs one named package directly
+```
+
+So `add` then `install` is the two-step form of installing. Naming a package
+on `install` skips the applist and installs it now without tracking it.
+
+For brew, a bare `install` resolves to the formula list. Add `--cask` to
+install the tracked casks instead:
+
+```bash
+macup brew install --cask   # installs every tracked brew cask
+```
+
+## Where it lands
+
+A `--cask` add lands under the cask key, a bare add under the formula key:
+
+```yaml
+brew:
+  formulas:
+    - ripgrep
+  casks:
+    - firefox
+npm:
+  - typescript
+```
+
+Pins and skips are keyed by plugin id, not subtype, so a `brew` pin covers
+both formulas and casks. See
+[Selective updates](/docs/concepts/selective-updates) for how pins and skips
+shape an update.
+
+## Stop tracking
+
+`remove` is the inverse and is also config-only:
+
+```bash
+# Drop ripgrep from the applist. Leaves any installed copy in place.
+macup brew remove ripgrep
+```
+
+Removing a package from the applist does not uninstall it. macup edits config,
+not your installed packages.
+
+## Adding many at once
+
+`add` and `remove` take one or more names:
+
+```bash
+macup brew add ripgrep fd bat
+macup npm add typescript prettier eslint
+```
+
+Names already in the list are reported and left alone:
+
+```text
+Added to npm: prettier, eslint
+Already tracked: typescript
+```
+
+A config change that edits the file writes a timestamped backup of
+`applist.yaml` before it saves. See [Safe updates](/docs/guides/safe-updates)
+for the backup and restore flow, and [Configuration](/docs/guides/configuration)
+for the file and where it lives.

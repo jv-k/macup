@@ -1,0 +1,88 @@
+---
+title: Pin a package to a known-good version
+description: Hold a package at or below a version so update never moves it past a release you trust.
+---
+
+# Pin a package to a known-good version
+
+A pin caps the highest version a package may upgrade to. Set one when a newer
+release breaks your build and you want `update` to hold the line until you lift
+the pin.
+
+## Pin it
+
+`pin` takes a package name and a version, both required.
+
+```bash
+# Hold typescript at 5.3.3 or lower
+macup npm pin typescript 5.3.3
+```
+
+macup writes the pin and confirms:
+
+```text
+Pinned typescript to 5.3.3 (npm)
+Backup: ~/.config/macup/backups/applist_pin_2026-06-19_14-22-08.yaml
+```
+
+The pin lands in your [applist.yaml](/docs/guides/configuration) under
+`pins.<plugin>.<name>`:
+
+```yaml
+pins:
+  npm:
+    typescript: "5.3.3"
+```
+
+Every pin edit first copies the prior `applist.yaml` to a timestamped backup.
+See [Safe updates](/docs/guides/safe-updates) for restoring one.
+
+## How the cap behaves on update
+
+When the latest version is higher than the pin, `update` holds the package back
+and reports it:
+
+```text
+Pinned (skipping): typescript@5.3.3
+```
+
+When the latest version is at or below the pin, the package upgrades up to the
+cap. A pin only engages when the plugin reports a latest version. With no known
+latest, the pin stays inert and the package upgrades.
+
+<Callout type="info">
+Pins are keyed by plugin id, not subtype. A `brew` pin applies to both formulas
+and casks.
+</Callout>
+
+## Version comparison
+
+npm and pnpm report standard semver, so macup compares the latest version and
+the pin numerically. The cap behaves as you expect.
+
+brew and App Store versions are often not semver (date strings, build IDs). On
+those a pin is permissive: when either version is not valid semver, macup treats
+them as equal and the package upgrades. A malformed pin does not trap you out of
+updates.
+
+See [Selective updates](/docs/concepts/selective-updates) for how pins sit
+alongside tracking and skips.
+
+## Unpin it
+
+`unpin` takes the name only.
+
+```bash
+# Lift the cap and let typescript move freely again
+macup npm unpin typescript
+```
+
+```text
+Unpinned typescript (npm)
+```
+
+## See also
+
+- [Selective updates](/docs/concepts/selective-updates) explains how pins, skips, and tracking combine.
+- [Config schema](/docs/reference/config-schema) documents the `pins` key and every other applist field.
+- [Safe updates](/docs/guides/safe-updates) covers the backup each pin edit writes.

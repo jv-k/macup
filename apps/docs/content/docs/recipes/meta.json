@@ -1,0 +1,14 @@
+{
+  "title": "Recipes",
+  "pages": [
+    "index",
+    "pin-a-package",
+    "upgrade-one-backend-only",
+    "back-up-before-a-risky-upgrade",
+    "track-without-installing",
+    "reproduce-a-machine",
+    "json-into-jq",
+    "use-macup-in-ci",
+    "disable-the-status-bar"
+  ]
+}

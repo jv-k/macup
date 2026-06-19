@@ -23,5 +23,9 @@ rules.
   code.
 - Before a PR run `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. Lint and
   format are biome. Tests are vitest. A behavior change needs a test.
+- An architecturally significant decision (one that constrains future work, is hard to
+  reverse, or would draw a later "why is it like this?") earns an ADR under `docs/adr/`.
+  The test and procedure are in ADR 0001: copy `0000-template.md`, fill it, add the index
+  row in `docs/adr/README.md`. `pnpm adr:check` gates structure and index sync in CI.
 - Write prose in the de-slop style. Avoid filler verbs and marketing adjectives, and do
   not open a clause with an em-dash.

@@ -13,7 +13,7 @@ Xcode, and `softwareupdate`, so there is no Linux or Windows build.
 macup needs macOS and Node 20 or newer. Install it as a global package, or run
 it once with `npx`.
 
-<Tabs items={['npm', 'pnpm', 'npx', 'bun']}>
+<Tabs items={['npm', 'pnpm', 'npx', 'binary']}>
 
 <Tab value="npm">
 
@@ -40,10 +40,16 @@ npx macup
 
 </Tab>
 
-<Tab value="bun">
+<Tab value="binary">
+
+Releases attach standalone binaries that run without Node. Download the one for
+your CPU (`macup-darwin-arm64` or `macup-darwin-x64`) from the
+[releases page](https://github.com/jv-k/macup/releases), verify it against the
+attached `checksums.txt`, then:
 
 ```bash
-bun add -g macup
+chmod +x macup-darwin-arm64
+mv macup-darwin-arm64 /usr/local/bin/macup
 ```
 
 </Tab>

@@ -429,4 +429,32 @@ Phase 5, polish:
 - No new doc that restates `apps/cli/plugins/README.md` or the coding standards; link
   to them. Plugin-authoring docs are a separate audience (Homebrew's audience split)
   and should point at the existing source of truth rather than duplicate it.
-```
+
+## 13. Post-implementation notes (2026-07-13)
+
+Deviations and findings from the implementation review. This plan doubles as the
+design record for the change; the work is docs-only and the IA decisions live in
+sections 4 through 9.
+
+- Env vars (section 7): the reference documents `XDG_DATA_HOME` (read by
+  `--install-completions`), not `XDG_CACHE_HOME` as this plan guessed. The CLI
+  never reads `XDG_CACHE_HOME`.
+- Per-flag env-var mappings (section 7): checked every shipped flag; none has an
+  env-var equivalent today, so the mapping column would render empty everywhere.
+  Deferred until the first real mapping exists rather than shipping dead
+  plumbing.
+- Aliases in headings (section 7): shipped as an "Also as" column on the
+  generated global-flags page, driven by the CLI's own bare-word rewrite list.
+- Flag matrix (section 7): rows and columns derive from `macup/meta`, with the
+  top-level `outdated` command included, rather than a hard-coded list in the
+  generator.
+- Install tabs (section 9): the fourth tab is the compiled release binary, as
+  specified. Binaries attach to GitHub releases via `release.yml`; none is
+  published yet, matching the tap's pipeline-ready-but-not-live status.
+- Phase 5 was largely shipped before this plan ran: `app/llms.txt` derives its
+  index from the page tree (the new nav is mirrored automatically) and the docs
+  page header already has a copy-markdown button over the `llms.mdx` endpoint.
+  Search is the default Fumadocs dialog wired to the existing `/api/search`
+  route. An "Open in Claude" link remains unadopted.
+- Out of plan: the de-slop gate (pre-commit and CI) gained `*.mdx` coverage so
+  the new MDX content is linted like the rest of the prose.

@@ -57,9 +57,10 @@ tree — new code should match, not invent.
   New failure modes add a `MacupError` subclass (e.g.
   `ErrPluginUnavailable`, `ErrInvalidConfig`, `ErrBackupNotFound`)
   rather than throwing a bare `Error`.
-- **TTY-awareness**: interactive wizard runs only when `process.stdout`
-  is a TTY; piped / non-TTY invocations fall back to `--help`. Never
-  prompt under pipes.
+- **TTY-awareness**: interactive wizard runs only when `process.stdin`
+  is a TTY; piped / non-TTY invocations print the logo plus a one-line
+  hint and return (see `src/wizard-runner.ts`). Never prompt under
+  pipes.
 - **Errors to stderr, normal output to stdout** so users can pipe
   `list --json` cleanly.
 - **`NO_COLOR` / piping** must strip ANSI — the UI layer already
@@ -186,7 +187,7 @@ Rules:
 
 - **Conventional Commits**, scoped: `<type>(<scope>): <subject>`.
 - Types in use: `feat`, `fix`, `refactor`, `test`, `chore`, `docs`,
-  `perf`.
+  `perf`, `ci`, `style`.
 - Scopes match the project's area labels: `cli`, `tui`, `config`,
   `plugins`, `bundles`, `testing`, `docs`, `ci`, `helpsystem`.
 - Imperative mood, lowercase subject, no trailing period, ≤ 70 chars.

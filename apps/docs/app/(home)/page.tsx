@@ -102,14 +102,18 @@ export default function HomePage() {
         ))}
       </div>
 
-      <Image
-        src="/screenshot.png"
-        alt="macup --help"
-        width={760}
-        height={460}
-        priority
-        className="w-full max-w-3xl rounded-xl border border-fd-border shadow-lg"
-      />
+      {/* Neutral card frame so the dark terminal capture sits on the theme's
+          own surface in both light and dark mode instead of glaring. */}
+      <div className="w-full max-w-3xl rounded-xl border border-fd-border bg-fd-card p-3 shadow-lg sm:p-4">
+        <Image
+          src="/screenshot.png"
+          alt="macup --help"
+          width={760}
+          height={460}
+          priority
+          className="w-full rounded-lg"
+        />
+      </div>
     </main>
   );
 }

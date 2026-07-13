@@ -1,13 +1,18 @@
 // macup/meta — serializable documentation metadata.
 //
 // The single aggregation point for the docs site's generated reference.
-// It projects the SAME data the CLI dispatches and completes on — the
-// plugin registry, the completion command/flag tables, the config
-// schema, and the version — into a plain, JSON-serializable object, so
-// the generated reference cannot drift from the shipped CLI. Exported
-// via the package's "./meta" entry (dist/meta.mjs) and consumed by
+// Where the CLI has a live data structure — the plugin registry, the
+// completion command/flag tables, the config schema, the outdated arg
+// defs, the bare-word alias list, the version — this module projects it
+// directly, so those parts of the reference cannot drift. Exit codes
+// and env-var reads have no such structure (they are scattered control
+// flow); their tables below are hand-maintained mirrors and CAN drift —
+// update them when the mirrored source changes. Exported via the
+// package's "./meta" entry (dist/meta.mjs) and consumed by
 // apps/docs/scripts/generate-reference.ts.
 
+import { FLAG_COMMAND_ALIASES } from './cli/argv';
+import { OUTDATED_ARGS } from './commands/outdated';
 import { commandsFor, flagsForCommand } from './completions/shared';
 import { ApplistKeySchema } from './config/schema';
 import { BUILTIN_PLUGINS } from './plugins/registry';
@@ -45,6 +50,8 @@ export interface PluginDoc {
 export interface GlobalFlagDoc {
   flag: string;
   alias?: string;
+  /** Bare command spelling (`macup version`), when argv rewrites it. */
+  bareForm?: string;
   description: string;
 }
 
@@ -67,6 +74,8 @@ export interface EnvVarDoc {
 export interface DocsMetadata {
   version: string;
   plugins: PluginDoc[];
+  /** Cross-plugin commands dispatched at the top level (`macup outdated`). */
+  topLevelCommands: CommandDoc[];
   globalFlags: GlobalFlagDoc[];
   config: ConfigFieldDoc[];
   exitCodes: ExitCodeDoc[];
@@ -113,8 +122,9 @@ const GLOBAL_FLAGS: GlobalFlagDoc[] = [
   { flag: '--logo', description: 'Print the macup logo splash.' },
 ];
 
-// The stable process exit codes, mirroring src/cli.ts (0 on success, 130 on
-// SIGINT, 1 otherwise). Kept here so the reference page cannot drift.
+// The stable process exit codes. A hand-maintained mirror of the exit
+// paths in src/cli.ts (0 on success, 130 on SIGINT, 1 otherwise) —
+// update alongside any change there.
 const EXIT_CODES: ExitCodeDoc[] = [
   { code: 0, meaning: 'Success, including `--help` and `--version`.' },
   {
@@ -129,13 +139,14 @@ const EXIT_CODES: ExitCodeDoc[] = [
 ];
 
 // Environment variables macup reads, with the prose used for the reference.
-// Mirrors the reads in src/ui/terminal-caps.ts, src/runtime.ts, and the config
-// path resolution; centralized here so the guides can link instead of repeat.
+// A hand-maintained mirror of the reads in src/ui/terminal-caps.ts,
+// src/runtime.ts, and the config path resolution — update alongside any
+// change there. Centralized so the guides can link instead of repeat.
 const ENV_VARS: EnvVarDoc[] = [
   {
     name: 'MACUP_STATUS_BAR',
     description:
-      'Set to `off` to disable the pinned status bar. `force` is a no-op now that the bar is on by default on capable TTYs.',
+      'Set to `off` to disable the pinned status bar, or `force` to keep it on even when `$TERM` is empty or `dumb`.',
   },
   { name: 'NO_COLOR', description: 'When set to any value, disables colored output.' },
   { name: 'TERM', description: 'An empty value or `dumb` disables the status bar.' },
@@ -194,11 +205,27 @@ function pluginDoc(plugin: Plugin): PluginDoc {
   };
 }
 
+// Bare spelling for flags argv rewrites (`macup version` → `--version`),
+// derived from the same list cli.ts rewrites with.
+function bareFormFor(flag: string): string | undefined {
+  const word = flag.replace(/^--/, '');
+  return (FLAG_COMMAND_ALIASES as readonly string[]).includes(word) ? `macup ${word}` : undefined;
+}
+
 export function docsMetadata(): DocsMetadata {
   return {
     version: getVersion(),
     plugins: BUILTIN_PLUGINS.map(pluginDoc),
-    globalFlags: GLOBAL_FLAGS,
+    topLevelCommands: [
+      {
+        name: 'outdated',
+        flags: Object.entries(OUTDATED_ARGS).map(([name, def]) => ({
+          flag: `--${name}`,
+          description: FLAG_DESCRIPTIONS[`--${name}`] ?? def.description,
+        })),
+      },
+    ],
+    globalFlags: GLOBAL_FLAGS.map((f) => ({ ...f, bareForm: bareFormFor(f.flag) })),
     config: [
       ...ApplistKeySchema.options.map((key) => ({
         key,

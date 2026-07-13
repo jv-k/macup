@@ -45,6 +45,20 @@ describe('docsMetadata', () => {
     );
   });
 
+  it('documents the top-level outdated command with --json', () => {
+    const outdated = docsMetadata().topLevelCommands.find((c) => c.name === 'outdated');
+    expect(outdated?.flags.map((f) => f.flag)).toContain('--json');
+    for (const f of outdated?.flags ?? []) {
+      expect(f.description, f.flag).not.toBe('');
+    }
+  });
+
+  it('surfaces the bare command spelling on rewritten global flags', () => {
+    const flags = docsMetadata().globalFlags;
+    expect(flags.find((f) => f.flag === '--version')?.bareForm).toBe('macup version');
+    expect(flags.find((f) => f.flag === '--help')?.bareForm).toBeUndefined();
+  });
+
   it('reports a semver-shaped version', () => {
     expect(docsMetadata().version).toMatch(/\d+\.\d+\.\d+/);
   });

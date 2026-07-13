@@ -13,7 +13,9 @@
 // Both are pure transforms over argv, exported so cli.ts and any future
 // in-process tests can drive them deterministically without spawning.
 
-const FLAG_COMMAND_ALIASES = [
+// Exported for macup/meta, which surfaces the bare form (`macup version`)
+// beside each flag in the generated global-flags reference.
+export const FLAG_COMMAND_ALIASES = [
   'version',
   'config',
   'cleanup',

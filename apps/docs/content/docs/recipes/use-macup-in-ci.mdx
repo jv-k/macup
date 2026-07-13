@@ -45,17 +45,10 @@ stays meaningful on a partial runner.
 
 ## Exit codes
 
-Codes are stable at the coarse level. Branch on these, not on a subprocess's own
-status.
-
-| Code | Meaning                                          |
-| ---- | ------------------------------------------------ |
-| 0    | Success, including `--help` and `--version`.     |
-| 1    | Failure: any error, unknown top-level flag, or usage error. |
-| 130  | Interrupted with Ctrl-C (SIGINT).                |
-
-A failing subprocess does not propagate its own exit code. The runner throws a
-generic error and macup exits `1`. The
+Codes are stable at the coarse level: `0` success, `1` any failure, `130`
+interrupted. Branch on these, not on a subprocess's own status: a failing
+subprocess does not propagate its own exit code. The runner throws a generic
+error and macup exits `1`. The
 [exit codes reference](/docs/reference/exit-codes) is the canonical list.
 
 ## Turn off the status bar
@@ -68,8 +61,8 @@ runners that misbehave:
 MACUP_STATUS_BAR=off macup all update
 ```
 
-`MACUP_STATUS_BAR=off` disables the bar regardless of terminal. An empty or
-`dumb` `$TERM` disables it too. The
+[Disable the status bar](/docs/recipes/disable-the-status-bar) covers the
+variable in full, and the
 [environment variables reference](/docs/reference/environment-variables) lists
 every variable macup reads.
 

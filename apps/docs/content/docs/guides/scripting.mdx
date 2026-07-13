@@ -78,20 +78,15 @@ Flag spellings are exact: `--json`, `--all`, `--only-outdated` (hyphenated, not
 
 ## Exit codes
 
-Codes are stable at the coarse level:
-
-| Code | Meaning                                                  |
-| ---- | -------------------------------------------------------- |
-| 0    | Success (including `--help` and `--version`).            |
-| 1    | Failure: any error, unknown top-level flag, or usage error. |
-| 130  | Interrupted with Ctrl-C (SIGINT).                        |
+Codes are stable at the coarse level: `0` success, `1` any failure, `130`
+interrupted. The [exit codes reference](/docs/reference/exit-codes) is the
+canonical list.
 
 On SIGINT, macup cancels in-flight subprocesses, then exits `130`.
 
 A failing subprocess does **not** propagate its own exit code. The runner
 throws a generic error whose message includes the subprocess code, and macup
-exits `1`. Do not read the subprocess's exit status from macup's. The
-[exit codes reference](/docs/reference/exit-codes) is the canonical list.
+exits `1`. Do not read the subprocess's exit status from macup's.
 
 ## Non-TTY behavior
 
@@ -119,9 +114,9 @@ your terminal or CI runner misbehaves:
 MACUP_STATUS_BAR=off macup all update
 ```
 
-`MACUP_STATUS_BAR=off` disables the bar regardless of terminal. An empty or
-`dumb` `$TERM` disables it too. `MACUP_STATUS_BAR=force` is a no-op now that the
-bar is on by default on capable TTYs. The
+[Disable the status bar](/docs/recipes/disable-the-status-bar) covers the
+variable, the `$TERM` values that disable the bar on their own, and what turning
+it off does and does not change. The
 [environment variables reference](/docs/reference/environment-variables) lists
 every variable macup reads.
 

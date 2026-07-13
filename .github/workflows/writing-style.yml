@@ -22,7 +22,10 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v8.2.0
       - name: Run deslopper on changed Markdown
+        # The deslopper git pin lives in one place: the deslop:lint script in
+        # package.json. Extract it so a version bump is a one-file change.
         run: |
+          pin=$(jq -r '.scripts["deslop:lint"]' package.json | grep -oE '[0-9a-f]{40}')
           files=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- '*.md' '*.markdown' '*.mdx')
           [ -z "$files" ] && exit 0
-          uvx --from git+https://github.com/jv-k/deslopper@cd56f1ac2bacb19e53681670c26e231cc07f0d12 deslopper lint --format github $files
+          uvx --from "git+https://github.com/jv-k/deslopper@$pin" deslopper lint --format github $files

@@ -43,8 +43,9 @@ config. If yours sets a richer `$TERM` and the output looks scrambled, set
 
 <Callout type="info">
 
-`MACUP_STATUS_BAR=force` is a no-op. The bar is on by default, so there is
-nothing left to force. The value stays accepted for backward compatibility.
+`MACUP_STATUS_BAR=force` does the opposite: it keeps the bar on even when
+`$TERM` is empty or `dumb`. On a capable terminal it changes nothing, since
+the bar is already on by default.
 
 </Callout>
 

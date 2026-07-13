@@ -6,8 +6,8 @@
 // so we default the bar ON wherever a real TTY is detected. The opt-outs
 // below cover the few environments where DECSTBM is known to misbehave:
 // truly dumb terminals (no $TERM or `dumb`) and explicit user override
-// via `MACUP_STATUS_BAR=off`. `MACUP_STATUS_BAR=force` is a no-op now
-// that the bar is on by default — kept for backward compat.
+// via `MACUP_STATUS_BAR=off`. `MACUP_STATUS_BAR=force` is checked first,
+// so it turns the bar on even under an empty or `dumb` $TERM.
 
 export interface TerminalCapsEnv {
   readonly env: Readonly<Record<string, string | undefined>>;

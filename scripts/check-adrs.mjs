@@ -30,7 +30,8 @@ const fail = (file, msg) => errors.push(`${file}: ${msg}`);
 
 const read = (file) => readFileSync(join(ADR_DIR, file), 'utf8');
 
-// Parse one ADR file. Records errors and returns its facts (or null when unparseable).
+// Parse one ADR file. Records errors via fail() and always returns a facts
+// object; fields it could not parse are null.
 function parseAdr(file) {
   const num = file.slice(0, 4);
   const lines = read(file).split('\n');
@@ -52,7 +53,7 @@ function parseAdr(file) {
       "missing status line (expected '> Status: <status> · Date: <date> · Deciders: <names>')",
     );
   } else {
-    const m = statusLine.match(/^> Status:\s*(.+?)\s*·\s*Date:\s*(.+?)\s*(?:·.*)?$/);
+    const m = statusLine.match(/^> Status:\s*(.+?)\s*·\s*Date:\s*(.+?)\s*·\s*Deciders:\s*\S.*$/);
     if (!m) {
       fail(file, "status line must be '> Status: <status> · Date: <date> · Deciders: <names>'");
     } else {
@@ -120,6 +121,9 @@ for (const line of indexLines) {
     continue;
   }
   const [, num, link, title, statusCell] = m;
+  if (rows.has(num)) {
+    fail(INDEX, `index lists ADR ${num} more than once`);
+  }
   rows.set(num, { link, title: title.trim(), status: statusCell.trim() });
   if (!entries.includes(link)) {
     fail(INDEX, `index row ${num} links to '${link}', which does not exist`);

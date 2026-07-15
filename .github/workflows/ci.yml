@@ -20,6 +20,17 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
 
+  adr:
+    name: ADR guardrail
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Pure-node corpus check (no deps): structure, numbering, and README index sync.
+      - run: node scripts/check-adrs.mjs
+
   test:
     name: Test
     runs-on: macos-latest

@@ -29,6 +29,10 @@ Spec the unit, then add one plugin file plus one `BUILTIN_PLUGINS` line in `apps
 
 Adding a package manager is a one-file plus one-line change: a new `apps/cli/plugins/<id>.ts` and its registration. No edits to dispatch, help, completions, or conformance.
 
+## Decisions
+
+A choice that constrains future work, is hard to reverse, or would later make someone ask "why is it like this?" earns an ADR. That test and the procedure live in ADR 0001. Copy `docs/adr/0000-template.md` to the next number, fill Context, Decision, Alternatives, and Consequences, set the status and date, then add the index row in `docs/adr/README.md`. Run `pnpm adr:check`: it gates structure, sequential numbering, and index sync, and CI runs it on every push. It cannot tell when an ADR is missing, so that call is yours.
+
 ## Don't
 
 - Don't bypass `ExecRunner` (`apps/cli/src/exec/run.ts`) with direct `execa` or `child_process`. It carries dry-run, logging, and redaction, and the hermetic tests depend on it.

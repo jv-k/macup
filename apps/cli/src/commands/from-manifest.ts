@@ -128,7 +128,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
         json: {
           type: 'boolean',
-          description: 'Output as JSON (PackageStatus[]).',
+          description: 'Output as JSON: PackageStatus[], or { error, packages } if a query fails.',
         },
       },
       async run({ args }) {
@@ -147,12 +147,30 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const showJson = Boolean(args.json);
         const showAll = Boolean(args.all);
 
+        // Capture query-failure warnings the plugin emits via ctx.log.warn
+        // (e.g. pnpm's "global bin dir not in PATH") so --json can carry an
+        // `error` field instead of an empty list — an errored query is
+        // otherwise indistinguishable from a genuinely empty one (A-2/#51).
+        // The wrapped warn still delegates, so default mode keeps printing
+        // the warning line.
+        const queryWarnings: string[] = [];
+        const listCtx: PluginContext = {
+          ...makeCtx(deps),
+          log: {
+            ...deps.log,
+            warn: (m: string) => {
+              queryWarnings.push(m);
+              deps.log.warn(m);
+            },
+          },
+        };
+
         let statuses = await withSpinner(
           deps,
           `Fetching ${manifest.displayName} packages...`,
           async () => {
-            await plugin.check(makeCtx(deps));
-            return plugin.list(makeCtx(deps), {
+            await plugin.check(listCtx);
+            return plugin.list(listCtx, {
               subtype,
               onlyOutdated: Boolean(args['only-outdated']),
             });
@@ -194,7 +212,14 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         }
 
         if (showJson) {
-          console.log(JSON.stringify(statuses, null, 2));
+          // On a query failure, emit an object with an `error` field instead
+          // of a bare array, so a consumer can tell "errored" from "empty"
+          // (#51). The success path keeps the documented PackageStatus[] shape.
+          const payload =
+            queryWarnings.length > 0
+              ? { error: queryWarnings.join('; '), packages: statuses }
+              : statuses;
+          console.log(JSON.stringify(payload, null, 2));
         } else {
           console.log(renderList(manifest.displayName, statuses, Boolean(args['only-outdated'])));
         }

@@ -87,6 +87,63 @@ function captureStdout(): { lines: string[]; restore: () => void } {
   return { lines, restore: () => spy.mockRestore() };
 }
 
+// The two tests below cover what the helpers above deliberately avoid:
+// build() hardcodes suppressBar, and --all skips the tracked-set filter. Both
+// bugs live in exactly those paths, which is why the suite passed while
+// `list --json` could still emit non-JSON on stdout.
+function buildInteractive(plugin: Plugin, tracked: readonly string[] = []) {
+  return commandsFromManifest(plugin, {
+    exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake'] }),
+    log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    getStore: async () => ({ list: () => [...tracked] }) as unknown as ConfigStore,
+    bar: new StatusBar(),
+    // The real default on a terminal. build() sets true and hides the bug.
+    suppressBar: false,
+    signal: new AbortController().signal,
+  });
+}
+
+describe('list --json keeps stdout machine-readable', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('emits no spinner chatter on stdout when attached to a TTY', async () => {
+    // withSpinner only engages on a TTY, so CI would never catch this.
+    const isTty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    const subCmds = buildInteractive(healthyPlugin()).subCommands as SubCommandsDef;
+    const out = captureStdout();
+    try {
+      await runCommand(subCmds.list as CommandDef, { rawArgs: ['--all', '--json'] });
+    } finally {
+      out.restore();
+      if (isTty) Object.defineProperty(process.stdout, 'isTTY', isTty);
+    }
+
+    expect(() => JSON.parse(out.lines.join('\n'))).not.toThrow();
+    expect(out.lines.join('\n')).not.toMatch(/done\./);
+  });
+
+  it('routes the no-tracked-packages notice to stderr, not stdout', async () => {
+    // No --all and an empty tracked set: the notice fires ahead of the JSON.
+    const subCmds = buildInteractive(healthyPlugin(), []).subCommands as SubCommandsDef;
+    const out = captureStdout();
+    const errLines: string[] = [];
+    const errSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation((m?: unknown) => void errLines.push(String(m)));
+    try {
+      await runCommand(subCmds.list as CommandDef, { rawArgs: ['--json'] });
+    } finally {
+      out.restore();
+      errSpy.mockRestore();
+    }
+
+    expect(() => JSON.parse(out.lines.join('\n'))).not.toThrow();
+    expect(out.lines.join('\n')).not.toMatch(/No tracked packages/);
+    expect(errLines.join('\n')).toMatch(/No tracked packages/);
+  });
+});
+
 describe('list --json distinguishes empty from errored (#51)', () => {
   afterEach(() => vi.restoreAllMocks());
 

@@ -165,8 +165,11 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           },
         };
 
+        // --json owns stdout, and the bar's "... done." lands there on a TTY,
+        // so a piped-to-jq run would break on an interactive terminal but pass
+        // in CI. suppressBar is the existing seam for exactly this.
         let statuses = await withSpinner(
-          deps,
+          showJson ? { ...deps, suppressBar: true } : deps,
           `Fetching ${manifest.displayName} packages...`,
           async () => {
             await plugin.check(listCtx);
@@ -203,11 +206,15 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           if (tracked.size > 0) {
             statuses = statuses.filter((s) => tracked.has(s.ref.name));
           } else {
-            console.log(
-              log.warning(
-                `No tracked packages. Showing all installed. Add with: macup ${manifest.id} add <name...>`,
-              ),
+            // Advice for a human, not part of the payload. On stdout it would
+            // precede the JSON and break the parse, so --json routes it to
+            // stderr rather than dropping it: piped output stays valid and the
+            // hint still reaches a watching terminal.
+            const notice = log.warning(
+              `No tracked packages. Showing all installed. Add with: macup ${manifest.id} add <name...>`,
             );
+            if (showJson) console.error(notice);
+            else console.log(notice);
           }
         }
 

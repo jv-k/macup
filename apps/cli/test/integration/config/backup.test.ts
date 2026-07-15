@@ -59,6 +59,31 @@ describe('BackupStore — list', () => {
     expect(list[0]?.operation).toBe('install');
     expect(list[0]?.timestamp).toBe('2024-03-15_14-30-22');
   });
+
+  it('lists hyphenated operation labels (e.g. sync-tracked)', async () => {
+    await seedBackups(['applist_sync-tracked_2024-03-15_14-30-22.yaml']);
+    const s = new BackupStore({ applistPath, backupDir });
+    const list = await s.list();
+    expect(list).toHaveLength(1);
+    expect(list[0]?.operation).toBe('sync-tracked');
+  });
+
+  it('lists both same-second collision backups, later suffix first (C-1)', async () => {
+    await seedBackups([
+      'applist_add_2024-03-15_14-30-22.yaml', // first that second (base)
+      'applist_add_2024-03-15_14-30-22_2.yaml', // second that second
+      'applist_add_2024-03-15_14-30-22_3.yaml', // third that second
+    ]);
+    const s = new BackupStore({ applistPath, backupDir });
+    const list = await s.list();
+    expect(list.map((e) => e.filename)).toEqual([
+      'applist_add_2024-03-15_14-30-22_3.yaml',
+      'applist_add_2024-03-15_14-30-22_2.yaml',
+      'applist_add_2024-03-15_14-30-22.yaml',
+    ]);
+    // latest() picks the last-written collision, not a filesystem-order fluke.
+    expect((await s.latest())?.filename).toBe('applist_add_2024-03-15_14-30-22_3.yaml');
+  });
 });
 
 describe('BackupStore — restore', () => {

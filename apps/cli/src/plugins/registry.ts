@@ -30,22 +30,31 @@ export function buildRegistry(plugins: readonly Plugin[], deps: RegistryDeps): P
 }
 
 /**
- * Minimal `which`-style check: does `binary` exist as an executable on
- * any $PATH entry? Used as the default onPath for the registry; tests
- * can override by passing a custom onPath.
+ * Minimal `which`-style lookup: the first $PATH entry where `binary`
+ * exists as an executable, or undefined. `--doctor` uses the resolved
+ * path in its plugin report lines.
  */
-export function isOnPath(binary: string, env: NodeJS.ProcessEnv = process.env): boolean {
+export function pathTo(binary: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
   const pathValue = env.PATH ?? '';
   const paths = pathValue.split(delimiter).filter(Boolean);
   for (const dir of paths) {
     try {
-      accessSync(join(dir, binary), constants.X_OK);
-      return true;
+      const candidate = join(dir, binary);
+      accessSync(candidate, constants.X_OK);
+      return candidate;
     } catch {
       // keep searching
     }
   }
-  return false;
+  return undefined;
+}
+
+/**
+ * Boolean form of pathTo. Used as the default onPath for the registry;
+ * tests can override by passing a custom onPath.
+ */
+export function isOnPath(binary: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  return pathTo(binary, env) !== undefined;
 }
 
 /**

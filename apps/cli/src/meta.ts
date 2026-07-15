@@ -121,6 +121,12 @@ const GLOBAL_FLAGS: GlobalFlagDoc[] = [
   },
   { flag: '--cleanup', description: 'Delete all config backup files (with confirmation).' },
   { flag: '--restore', description: 'Interactively pick and restore a config backup.' },
+  { flag: '--undo', description: 'Revert the applist to the most recent backup, diff first.' },
+  {
+    flag: '--doctor',
+    description:
+      'Run a self-diagnostic report: environment, config, plugin probes, data integrity, shell integration. Add `--json` for machine-readable output. Exits 1 on errors; warnings never fail.',
+  },
   { flag: '--logo', description: 'Print the macup logo splash.' },
 ];
 

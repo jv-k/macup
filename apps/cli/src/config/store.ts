@@ -1,10 +1,10 @@
-import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Document, Scalar, YAMLMap, YAMLSeq, parseDocument } from 'yaml';
 import { ErrInvalidConfig } from '../errors';
 import type { SelectionPolicy } from '../plugins/selection';
-import { type ApplistKey, ApplistSchema } from './schema';
+import { uniqueBackupPath } from './backup';
+import { type ApplistKey, ApplistSchema, INITIAL_SCHEMA_VERSION, SCHEMA_VERSION } from './schema';
 
 export interface ConfigStorePaths {
   readonly applistPath: string;
@@ -44,14 +44,6 @@ export async function atomicWriteFile(filePath: string, contents: string): Promi
   const tmpPath = `${filePath}.tmp`;
   await writeFile(tmpPath, contents, 'utf8');
   await rename(tmpPath, filePath);
-}
-
-function timestamp(now: Date): string {
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return (
-    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
-    `_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
-  );
 }
 
 // Maps the historical flat keys used pre-1.x to the dotted paths used today.
@@ -102,6 +94,19 @@ function migrateInPlace(doc: Document): boolean {
   }
 
   return migrated;
+}
+
+// Insert `version: <version>` at the top of the map when absent, so the
+// field leads the file the way readers expect. Mutates in memory only; the
+// caller decides whether that reaches disk. The version to stamp differs by
+// caller: a legacy version-less file being read is its introduction version
+// (INITIAL_SCHEMA_VERSION), while a brand-new file macup creates is the
+// current SCHEMA_VERSION. Returns whether it changed anything.
+function stampVersion(doc: Document, version: number): boolean {
+  if (!(doc.contents instanceof YAMLMap)) return false;
+  if (doc.contents.has('version')) return false;
+  doc.contents.items.unshift(doc.createPair('version', version));
+  return true;
 }
 
 function pathFor(key: ApplistKey): readonly string[] {
@@ -172,6 +177,17 @@ export class ConfigStore {
     this.originalText = text;
     this.doc = parseDocument(text);
 
+    // Stamp the schema version before migrating so a legacy-key migration
+    // persists a versioned file in the same write. A version-less file on
+    // disk is a legacy file, so it earns the INTRODUCTION version, not the
+    // current one — never silently relabel an old-shape file as a newer
+    // schema. On a file that only lacks `version` (nothing else to migrate)
+    // this is an in-memory change that does NOT force a rewrite — the field
+    // lands the next time the user mutates config, keeping read-only
+    // commands side-effect free. The no-change guard is baselined below
+    // AFTER this stamp, so save() sees a version-only file as unchanged.
+    stampVersion(this.doc, INITIAL_SCHEMA_VERSION);
+
     let result: LoadResult = { migrated: false };
     if (migrateInPlace(this.doc)) {
       const backupPath = await this.persistMigration();
@@ -198,6 +214,16 @@ export class ConfigStore {
         : '';
       throw new ErrInvalidConfig(this.paths.applistPath, parsed.error.message + suffix);
     }
+
+    // A file declaring a higher version was written by a newer macup whose
+    // shape this build may not understand. Refuse rather than silently
+    // misread it — that's the whole point of the version field.
+    if (parsed.data.version > SCHEMA_VERSION) {
+      throw new ErrInvalidConfig(
+        this.paths.applistPath,
+        `schema version ${parsed.data.version} is newer than this macup supports (${SCHEMA_VERSION}) — upgrade macup`,
+      );
+    }
     return result;
   }
 
@@ -208,7 +234,7 @@ export class ConfigStore {
     await mkdir(this.paths.backupDir, { recursive: true });
     let backupPath: string | undefined;
     if (this.fileExisted) {
-      backupPath = this.uniqueBackupPath('applist_migration');
+      backupPath = this.uniqueBackupPath('migration');
       await copyFile(this.paths.applistPath, backupPath);
     }
     await atomicWriteFile(this.paths.applistPath, newText);
@@ -222,17 +248,11 @@ export class ConfigStore {
     return this.doc;
   }
 
-  // Collision-proof backup path. Backup names use second-resolution
-  // timestamps, so two same-operation saves within one second would
-  // otherwise overwrite each other and silently lose a backup (C-1).
-  // Append an incrementing suffix when the candidate already exists.
-  private uniqueBackupPath(prefix: string): string {
-    const stamp = timestamp(this.now());
-    let candidate = join(this.paths.backupDir, `${prefix}_${stamp}.yaml`);
-    for (let n = 2; existsSync(candidate); n++) {
-      candidate = join(this.paths.backupDir, `${prefix}_${stamp}_${n}.yaml`);
-    }
-    return candidate;
+  // Collision-proof backup path (C-1), delegated to the shared helper in
+  // ./backup so mutation backups and pre-undo snapshots name files
+  // identically. `operation` is the bare label (e.g. 'add', 'migration').
+  private uniqueBackupPath(operation: string): string {
+    return uniqueBackupPath(this.paths.backupDir, operation, this.now());
   }
 
   list(key: ApplistKey): readonly string[] {
@@ -359,6 +379,15 @@ export class ConfigStore {
 
   async save(operation: string): Promise<SaveResult> {
     const doc = this.requireDoc();
+    // Stamp version here too, not only in load(): a brand-new config has
+    // no YAMLMap to stamp at load time (the doc gains contents only when
+    // the first key is added), so this is where a first-run file earns its
+    // version field. On a loaded file it's a no-op — load() already
+    // stamped and baselined originalText with the field, so the no-change
+    // guard below still sees a version-only file as unchanged. A file that
+    // reaches save() without a version is one macup is creating now, so it
+    // gets the current SCHEMA_VERSION.
+    stampVersion(doc, SCHEMA_VERSION);
     const newText = doc.toString();
     if (newText === this.originalText) {
       return { changed: false };
@@ -368,7 +397,7 @@ export class ConfigStore {
     // block writing the new config.
     let backupPath: string | undefined;
     if (this.fileExisted) {
-      backupPath = this.uniqueBackupPath(`applist_${operation}`);
+      backupPath = this.uniqueBackupPath(operation);
       await copyFile(this.paths.applistPath, backupPath);
     }
     await atomicWriteFile(this.paths.applistPath, newText);

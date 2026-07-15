@@ -14,6 +14,7 @@ export function generateFishCompletions(plugins: readonly Plugin[]): string {
     'complete -c macup -n "__fish_use_subcommand" -l config -d "Show config status"',
     'complete -c macup -n "__fish_use_subcommand" -l cleanup -d "Delete backup files"',
     'complete -c macup -n "__fish_use_subcommand" -l restore -d "Restore from backup"',
+    'complete -c macup -n "__fish_use_subcommand" -l undo -d "Revert to the most recent backup"',
     'complete -c macup -n "__fish_use_subcommand" -l logo -d "Show Apple logo"',
     '',
     '# Plugin subcommands',

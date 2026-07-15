@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ApplistSchema } from '../../../src/config/schema';
+import { ApplistSchema, SCHEMA_VERSION } from '../../../src/config/schema';
 
 describe('ApplistSchema', () => {
   it('accepts an empty object, defaulting all arrays and maps', () => {
     const result = ApplistSchema.parse({});
     expect(result).toEqual({
+      version: SCHEMA_VERSION,
       appstore: [],
       npm: [],
       pnpm: [],
@@ -14,8 +15,22 @@ describe('ApplistSchema', () => {
     });
   });
 
+  it('defaults version on a file that predates the field (read as v1)', () => {
+    expect(ApplistSchema.parse({ npm: ['typescript'] }).version).toBe(SCHEMA_VERSION);
+  });
+
+  it('preserves an explicit version', () => {
+    expect(ApplistSchema.parse({ version: 1, npm: [] }).version).toBe(1);
+  });
+
+  it('rejects a non-integer or non-positive version', () => {
+    expect(() => ApplistSchema.parse({ version: 0 })).toThrow();
+    expect(() => ApplistSchema.parse({ version: 1.5 })).toThrow();
+  });
+
   it('round-trips a full applist with packages, pins, and skip entries', () => {
     const input = {
+      version: SCHEMA_VERSION,
       appstore: ['Xcode'],
       npm: ['typescript'],
       pnpm: ['prettier'],

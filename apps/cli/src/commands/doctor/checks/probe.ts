@@ -33,10 +33,13 @@ export async function probeList(
   opts: ListOptions,
 ): Promise<ProbeOutcome> {
   // Per-probe controller chained to the process-wide signal so both a
-  // SIGINT and the probe timeout cancel the underlying subprocess.
+  // SIGINT and the probe timeout cancel the underlying subprocess. If the
+  // signal already fired before we got here, the listener would never run
+  // — so propagate the existing abort immediately.
   const controller = new AbortController();
   const onAbort = () => controller.abort();
-  deps.signal.addEventListener('abort', onAbort, { once: true });
+  if (deps.signal.aborted) controller.abort();
+  else deps.signal.addEventListener('abort', onAbort, { once: true });
   const ctx = { exec: deps.exec, log: deps.log, signal: controller.signal };
 
   let timer: NodeJS.Timeout | undefined;

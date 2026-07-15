@@ -24,14 +24,17 @@ function checkConfigDir(deps: CheckDeps): CheckResult {
     return { level: 'ok', label: 'Config dir', detail: `${dir} — not created yet` };
   }
   try {
-    accessSync(dir, constants.W_OK);
+    // A directory needs execute as well as write to create/replace entries
+    // inside it; W_OK alone can call a dir writable when macup still can't
+    // write the applist. Check both.
+    accessSync(dir, constants.W_OK | constants.X_OK);
     return { level: 'ok', label: 'Config dir', detail: `${dir} — writable` };
   } catch {
     return {
       level: 'error',
       label: 'Config dir',
       detail: `${dir} — not writable`,
-      hint: `run: chmod u+w ${dir}`,
+      hint: `run: chmod u+wx ${dir}`,
     };
   }
 }

@@ -122,3 +122,25 @@ describe('doctor — plugins deep probe', () => {
     expect(exitCodeFor(buildReport('1', [section]))).toBe(1);
   });
 });
+
+describe('doctor — probe cancellation', () => {
+  it('propagates an already-aborted signal to the probe controller', async () => {
+    const controller = new AbortController();
+    controller.abort(); // aborted before the probe even starts
+    const exec = new FixtureExecRunner({
+      fixtures: [
+        { cmd: 'demo', args: ['--version'], result: { stdout: 'demo 1', stderr: '', exitCode: 0 } },
+      ],
+      onPath: ['demo'],
+    });
+    // list() observes the context signal it was handed; if the abort didn't
+    // propagate, ctx.signal.aborted would be false and this would resolve ok.
+    let sawAbort = false;
+    const plugin = fakePlugin('demo', ['demo'], async (ctx) => {
+      sawAbort = ctx.signal.aborted;
+      return [];
+    });
+    await checkPlugins(makeDeps({ exec, plugins: [plugin], signal: controller.signal }));
+    expect(sawAbort).toBe(true);
+  });
+});

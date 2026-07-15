@@ -80,15 +80,19 @@ export class DoctorAction implements FlagAction {
       description:
         'Run a self-diagnostic report: environment, config, plugin probes, data integrity, shell integration.',
     },
-    json: {
-      type: 'boolean' as const,
-      description: 'With --doctor: emit the report as JSON.',
-    },
   };
 
   matches(args: ParsedArgs): boolean {
     return args.doctor === true;
   }
 
-  run = runDoctor;
+  // `--json` is deliberately NOT a registered root arg. Registering it
+  // would shadow subcommand `--json` (e.g. `macup outdated --json`) and
+  // make bare `macup --json` a "known" flag that skips the unknown-flag
+  // guard and silently opens the wizard. Instead read it from argv here;
+  // citty accepts the unrecognised `--json` on the root command
+  // permissively, and this action only runs when `--doctor` is present.
+  run(args: ParsedArgs, deps: CliDeps): Promise<void> {
+    return runDoctor({ ...args, json: process.argv.includes('--json') }, deps);
+  }
 }

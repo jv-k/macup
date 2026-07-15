@@ -241,6 +241,63 @@ export function wrapText(text: string, width: number): string[] {
   return out;
 }
 
+export interface ColumnRow {
+  /** Left column. May carry ANSI — it's measured with visualWidth and never wrapped. */
+  label: string;
+  /** Right column. MUST be plain text — it gets word-wrapped, so ANSI would corrupt widths. */
+  desc: string;
+}
+
+/**
+ * Render `{label, desc}` rows as an aligned two-column block sized to
+ * `width`. The label column is the widest label plus `gap`, capped at 40%
+ * of the width so one long label can't starve the descriptions; a label
+ * wider than that cap takes its own line with the description hang-indented
+ * beneath. Descriptions wrap to the remaining width and continuation lines
+ * align under the first. Used by `--help` so it stays aligned from 40 to
+ * 120 columns and falls back cleanly to 80 when piped. `descStyle` colors
+ * the (plain, already-wrapped) description; labels are pre-styled by the
+ * caller.
+ */
+export function formatColumns(
+  rows: readonly ColumnRow[],
+  opts: {
+    width?: number;
+    gap?: number;
+    indent?: number;
+    descStyle?: (s: string) => string;
+  } = {},
+): string {
+  const width = opts.width ?? 80;
+  const gap = opts.gap ?? 2;
+  const indent = opts.indent ?? 2;
+  const descStyle = opts.descStyle ?? ((s: string) => s);
+
+  const maxLabel = Math.max(0, ...rows.map((r) => visualWidth(r.label)));
+  const cap = Math.max(1, Math.floor(width * 0.4));
+  const labelCol = Math.min(maxLabel, cap);
+  const descWidth = Math.max(8, width - indent - labelCol - gap);
+  const lead = ' '.repeat(indent);
+  const hang = ' '.repeat(indent + labelCol + gap);
+
+  const out: string[] = [];
+  for (const row of rows) {
+    const descLines = wrapText(row.desc, descWidth);
+    const labelWidth = visualWidth(row.label);
+    if (labelWidth > labelCol) {
+      // Label overflows its column: give it a line, hang-indent the desc.
+      out.push(`${lead}${row.label}`);
+      for (const line of descLines) out.push(`${hang}${descStyle(line)}`);
+    } else {
+      const spacer = ' '.repeat(labelCol - labelWidth + gap);
+      out.push(`${lead}${row.label}${spacer}${descStyle(descLines[0] ?? '')}`);
+      for (let i = 1; i < descLines.length; i++)
+        out.push(`${hang}${descStyle(descLines[i] ?? '')}`);
+    }
+  }
+  return out.join('\n');
+}
+
 /**
  * Compact splash for --version and --help. Layout:
  *

@@ -128,7 +128,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
         json: {
           type: 'boolean',
-          description: 'Output as JSON (PackageStatus[]).',
+          description: 'Output as JSON: PackageStatus[], or { error, packages } if a query fails.',
         },
       },
       async run({ args }) {
@@ -147,12 +147,33 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const showJson = Boolean(args.json);
         const showAll = Boolean(args.all);
 
+        // Capture query-failure warnings the plugin emits via ctx.log.warn
+        // (e.g. pnpm's "global bin dir not in PATH") so --json can carry an
+        // `error` field instead of an empty list — an errored query is
+        // otherwise indistinguishable from a genuinely empty one (A-2/#51).
+        // The wrapped warn still delegates, so default mode keeps printing
+        // the warning line.
+        const queryWarnings: string[] = [];
+        const listCtx: PluginContext = {
+          ...makeCtx(deps),
+          log: {
+            ...deps.log,
+            warn: (m: string) => {
+              queryWarnings.push(m);
+              deps.log.warn(m);
+            },
+          },
+        };
+
+        // --json owns stdout, and the bar's "... done." lands there on a TTY,
+        // so a piped-to-jq run would break on an interactive terminal but pass
+        // in CI. suppressBar is the existing seam for exactly this.
         let statuses = await withSpinner(
-          deps,
+          showJson ? { ...deps, suppressBar: true } : deps,
           `Fetching ${manifest.displayName} packages...`,
           async () => {
-            await plugin.check(makeCtx(deps));
-            return plugin.list(makeCtx(deps), {
+            await plugin.check(listCtx);
+            return plugin.list(listCtx, {
               subtype,
               onlyOutdated: Boolean(args['only-outdated']),
             });
@@ -185,16 +206,27 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           if (tracked.size > 0) {
             statuses = statuses.filter((s) => tracked.has(s.ref.name));
           } else {
-            console.log(
-              log.warning(
-                `No tracked packages. Showing all installed. Add with: macup ${manifest.id} add <name...>`,
-              ),
+            // Advice for a human, not part of the payload. On stdout it would
+            // precede the JSON and break the parse, so --json routes it to
+            // stderr rather than dropping it: piped output stays valid and the
+            // hint still reaches a watching terminal.
+            const notice = log.warning(
+              `No tracked packages. Showing all installed. Add with: macup ${manifest.id} add <name...>`,
             );
+            if (showJson) console.error(notice);
+            else console.log(notice);
           }
         }
 
         if (showJson) {
-          console.log(JSON.stringify(statuses, null, 2));
+          // On a query failure, emit an object with an `error` field instead
+          // of a bare array, so a consumer can tell "errored" from "empty"
+          // (#51). The success path keeps the documented PackageStatus[] shape.
+          const payload =
+            queryWarnings.length > 0
+              ? { error: queryWarnings.join('; '), packages: statuses }
+              : statuses;
+          console.log(JSON.stringify(payload, null, 2));
         } else {
           console.log(renderList(manifest.displayName, statuses, Boolean(args['only-outdated'])));
         }

@@ -54,12 +54,19 @@ describe('formatColumns', () => {
     expect(wrapped.length).toBeGreaterThan(0);
   });
 
-  it('keeps lines within the target width (aside from unbreakable long words)', () => {
-    const out = formatColumns(rows, { width: 60 });
-    for (const line of out.split('\n')) {
-      // Allow a little slack only for a single word longer than the desc column.
+  it('keeps normal-content lines within the target width', () => {
+    // These rows contain no token longer than the description column.
+    for (const line of formatColumns(rows, { width: 60 }).split('\n')) {
       expect(visualWidth(line)).toBeLessThanOrEqual(60);
     }
+  });
+
+  it('emits an unbreakable word longer than the column rather than dropping it', () => {
+    // wrapText intentionally does not break mid-word, so a token longer than
+    // the description column overflows the line instead of being lost.
+    const longWord = 'x'.repeat(80);
+    const out = formatColumns([{ label: 'long', desc: longWord }], { width: 60 });
+    expect(out).toContain(longWord);
   });
 
   it('measures ANSI-styled labels by their visible width', () => {

@@ -276,7 +276,10 @@ export function formatColumns(
   const maxLabel = Math.max(0, ...rows.map((r) => visualWidth(r.label)));
   const cap = Math.max(1, Math.floor(width * 0.4));
   const labelCol = Math.min(maxLabel, cap);
-  const descWidth = Math.max(8, width - indent - labelCol - gap);
+  // Fill the remaining width; floor at 1 so wrapText still makes progress on
+  // an absurdly narrow terminal. No oversized minimum here — forcing e.g. 8
+  // would push lines past `width` and break the sized-to-width contract.
+  const descWidth = Math.max(1, width - indent - labelCol - gap);
   const lead = ' '.repeat(indent);
   const hang = ' '.repeat(indent + labelCol + gap);
 

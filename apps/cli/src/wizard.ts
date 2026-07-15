@@ -60,7 +60,8 @@ export interface WizardDeps {
   /**
    * "Search & add": prompt for a query, search the backend, and return the
    * package names the user chose to track — or null to nav back. Required
-   * when the target's plugin exposes `search`.
+   * only when the search-add action is offered, i.e. when the plugin exposes
+   * `search` AND can track additions (add capability + a configKey).
    */
   readonly searchAndPick?: (target: Target) => Promise<readonly string[] | null>;
   /** Reads current tracked names for the given target. Required when sync-tracked is offered. */

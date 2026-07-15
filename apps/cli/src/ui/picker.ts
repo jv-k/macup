@@ -39,6 +39,18 @@ export interface PickerOptions<Value> {
   output?: Writable;
 }
 
+// Forwards only the streams the caller actually set, so clack keeps its
+// own process.stdin/stdout defaults when they're absent.
+function streamOpts(opts: {
+  input?: Readable;
+  output?: Writable;
+}): { input?: Readable; output?: Writable } {
+  return {
+    ...(opts.input ? { input: opts.input } : {}),
+    ...(opts.output ? { output: opts.output } : {}),
+  };
+}
+
 const opt = (
   option: PickerOption<unknown>,
   state: 'inactive' | 'active' | 'selected' | 'active-selected' | 'submitted' | 'cancelled',
@@ -206,8 +218,7 @@ export async function pageableAutocompleteMultiselect<Value>(
     multiple: true,
     initialValue: opts.initialValues ? [...opts.initialValues] : undefined,
     pageStep: () => layout.pageItems,
-    ...(opts.input ? { input: opts.input } : {}),
-    ...(opts.output ? { output: opts.output } : {}),
+    ...streamOpts(opts),
     validate(value) {
       if (required && (value === undefined || (Array.isArray(value) && value.length === 0))) {
         return `Please select at least one option.\n${pc.reset(
@@ -235,19 +246,19 @@ export async function pageableAutocompleteMultiselect<Value>(
 
       // Cancellation / submission render: collapse to the picked rows
       // (or strikethrough on cancel), matching clack's stock behavior.
-      if (this.state === 'submit') {
-        const selected = this.selectedValues.map(toOption);
+      if (this.state === 'submit' || this.state === 'cancel') {
+        const picked = this.selectedValues.map(toOption);
+        const rows = picked
+          .map((o) => opt(o, this.state === 'submit' ? 'submitted' : 'cancelled'))
+          .join(pc.dim(', '));
+        if (this.state === 'submit') {
+          return `${titleLine}${pc.gray(S_BAR)}  ${picked.length > 0 ? rows : pc.dim('(none)')}`;
+        }
+        // Cancelling with nothing picked leaves no row to strike through,
+        // so the trailing bar would frame an empty line.
         return `${titleLine}${pc.gray(S_BAR)}  ${
-          selected.length > 0
-            ? selected.map((o) => opt(o, 'submitted')).join(pc.dim(', '))
-            : pc.dim('(none)')
+          picked.length > 0 ? `${rows}\n${pc.gray(S_BAR)}` : ''
         }`;
-      }
-      if (this.state === 'cancel') {
-        const selected = this.selectedValues.map(toOption);
-        return `${titleLine}${pc.gray(S_BAR)}  ${
-          selected.length > 0 ? selected.map((o) => opt(o, 'cancelled')).join(pc.dim(', ')) : ''
-        }${selected.length > 0 ? `\n${pc.gray(S_BAR)}` : ''}`;
       }
 
       // Active render: filter input + visible grid of options.
@@ -301,8 +312,7 @@ export async function pageableSelect<Value>(
     multiple: false,
     initialValue: opts.initialValue !== undefined ? [opts.initialValue] : undefined,
     pageStep: () => layout.pageItems,
-    ...(opts.input ? { input: opts.input } : {}),
-    ...(opts.output ? { output: opts.output } : {}),
+    ...streamOpts(opts),
     render(this: PageableAutocompletePrompt<PickerOption<Value>>) {
       layout = gridLayout(this.filteredOptions, rowsPerCol, process.stdout.columns ?? 80);
 

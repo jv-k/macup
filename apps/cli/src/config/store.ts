@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { type Document, Scalar, YAMLMap, YAMLSeq, parseDocument } from 'yaml';
 import { ErrInvalidConfig } from '../errors';
 import type { SelectionPolicy } from '../plugins/selection';
-import { uniqueBackupPath } from './backup';
+import { BACKUP_FILE_RE, uniqueBackupPath } from './backup';
 import {
   type ApplistKey,
   ApplistSchema,
@@ -270,7 +270,10 @@ export class ConfigStore {
   // copies. Only offered when a backup actually exists.
   private async recoveryHint(): Promise<string> {
     try {
-      const files = (await readdir(this.paths.backupDir)).filter((f) => f.endsWith('.yaml'));
+      // Match on what `macup restore` can actually offer — the same
+      // pattern BackupStore lists by. Counting every *.yaml would promise
+      // a rollback to files restore never shows.
+      const files = (await readdir(this.paths.backupDir)).filter((f) => BACKUP_FILE_RE.test(f));
       if (files.length === 0) return '';
       return `\n\nA backup of this file exists (${files.length} in ${this.paths.backupDir}).\nRun \`macup restore\` to roll back to a working version.`;
     } catch {

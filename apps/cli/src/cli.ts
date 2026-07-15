@@ -125,8 +125,12 @@ function withErrorBoundary<A extends ArgsDef>(cmd: CommandDef<A>): CommandDef<A>
         return await run(ctx);
       } catch (err) {
         if (err instanceof MacupError) {
+          // Set-and-return, not process.exit(): exit() can truncate a
+          // piped stdout mid-flush, which would be a poor trade on the
+          // one path whose whole job is getting a message to the user.
           console.error(`error: ${err.message}`);
-          process.exit(err.exitCode);
+          process.exitCode = err.exitCode;
+          return;
         }
         throw err;
       }

@@ -19,7 +19,7 @@ import type { EventEmitter } from 'node:events';
 import { Readable, Writable } from 'node:stream';
 import { isCancel as promptsIsCancel } from '@clack/prompts';
 import { describe, expect, it } from 'vitest';
-import { pageableAutocompleteMultiselect } from '../../src/ui/picker';
+import { pageableAutocompleteMultiselect, pageableSelect } from '../../src/ui/picker';
 
 // clack drives the prompt off readline 'keypress' events on `input` and
 // needs a TTY-shaped stream. Emitting 'keypress' directly is exactly
@@ -67,6 +67,26 @@ function startPicker(input: MockReadable, output: MockWritable, initialValues?: 
     output,
   });
 }
+
+// pageableSelect carried the identical cast, and would have handed its
+// first caller `undefined` the same way. It has no caller yet, so this is
+// the only thing keeping the fix honest.
+describe('regression: the single-select picker resolves a value too', () => {
+  it('returns the focused value, not undefined', async () => {
+    const input = new MockReadable();
+    const promise = pageableSelect<string>({
+      message: 'Pick one',
+      options: OPTIONS,
+      input,
+      output: new MockWritable(),
+    });
+
+    press(input, 'down'); // focus iterm2
+    press(input, 'return');
+
+    expect(await promise).toBe('iterm2');
+  });
+});
 
 // The picker subclasses `@clack/core`'s AutocompletePrompt while the
 // callers test cancellation with `isCancel` from `@clack/prompts`. Core's

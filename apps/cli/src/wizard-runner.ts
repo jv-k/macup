@@ -300,10 +300,18 @@ async function applySyncTracked(
 // user deliberately hitting Esc.
 export const PICKER_FAILED = Symbol('picker-failed');
 
+// Both boundaries below report the same way: name what broke and where the
+// user lands, then the cause. Never swallow the cause — a bug that unwinds
+// silently is a bug nobody reports.
+function reportPickerFailure(what: string, unwindsTo: string, err: unknown): void {
+  console.error(`\n${logui.error(`The ${what} failed — ${unwindsTo}.`)}`);
+  console.error(logui.traceError(err instanceof Error ? err.message : String(err)));
+}
+
 /**
- * Error boundary around the interactive pickers. A throw inside a prompt
- * used to escape runWizard → runMain and kill the whole session with a
- * raw stack trace, losing the user's place (and, for a TTY prompt, often
+ * Error boundary around the action submenu. A throw inside a prompt used
+ * to escape runWizard → runMain and kill the whole session with a raw
+ * stack trace, losing the user's place (and, for a TTY prompt, often
  * leaving the terminal mid-render). An unexpected prompt failure is a
  * bug, but it should cost the user one submenu, not the session — so it
  * is reported and unwound to the plugin picker.
@@ -316,9 +324,25 @@ export async function pickActionSafely(
     return await pickAction(wizardDeps, target);
   } catch (err) {
     const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
-    console.error(`\nerror: the ${label} menu failed unexpectedly — returning to the plugin list.`);
-    console.error(`  ↳ ${err instanceof Error ? err.message : String(err)}`);
+    reportPickerFailure(`${label} menu`, 'returning to the plugin list', err);
     return PICKER_FAILED;
+  }
+}
+
+/**
+ * The same boundary for the outer picker. It runs the same prompt module
+ * over the same clack coupling, so guarding only the submenu would leave
+ * the identical crash live one screen earlier. There's nowhere further
+ * back to unwind to, so this ends the wizard — but on our terms, with the
+ * cause reported and a failing exit code, rather than a raw trace.
+ */
+async function pickTargetSafely(wizardDeps: WizardDeps): Promise<Target | null> {
+  try {
+    return await pickTarget(wizardDeps);
+  } catch (err) {
+    reportPickerFailure('plugin list', 'leaving the wizard', err);
+    process.exitCode = 1;
+    return null;
   }
 }
 
@@ -349,7 +373,7 @@ export async function runWizard(
   //   outer: pickTarget → choose category (or Esc to exit)
   //   inner: pickAction → choose action, execute, repeat (Esc → outer)
   while (true) {
-    const target = await pickTarget({
+    const target = await pickTargetSafely({
       plugins: deps.registry,
       selectTarget: async (groups) => {
         // Single-pick `select` with disabled "header" rows for category

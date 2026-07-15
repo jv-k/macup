@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ConfigStore } from '../../src/config/store';
+import { ErrInvalidConfig } from '../../src/errors';
 
 let workDir: string;
 let applistPath: string;
@@ -43,6 +44,13 @@ async function loadCorrupt(): Promise<Error> {
 }
 
 describe('regression: an invalid config names the offending key', () => {
+  it('fails as ErrInvalidConfig with a failing exit code', async () => {
+    const err = await loadCorrupt();
+
+    expect(err).toBeInstanceOf(ErrInvalidConfig);
+    expect((err as ErrInvalidConfig).exitCode).toBe(1);
+  });
+
   it('reports the YAML path, not a JSON dump of zod issues', async () => {
     const err = await loadCorrupt();
 

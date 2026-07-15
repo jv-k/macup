@@ -44,7 +44,21 @@ describe('regression: save refuses to write an invalid config', () => {
     // Exactly what the broken picker handed the store.
     s.add('brew.casks', [undefined as unknown as string]);
 
-    await expect(s.save('sync-tracked')).rejects.toBeInstanceOf(ErrInvalidConfig);
+    const err = await s.save('sync-tracked').then(
+      () => {
+        throw new Error('expected save() to reject');
+      },
+      (e: Error) => e,
+    );
+
+    expect(err).toBeInstanceOf(ErrInvalidConfig);
+    expect((err as ErrInvalidConfig).exitCode).toBe(1);
+    // Appended after the two seeded casks, and still `undefined` here —
+    // it only becomes the YAML `null` of the load-side error once written,
+    // which is the write this refuses.
+    expect(err.message).toContain(
+      'brew.casks[2]: Invalid input: expected string, received undefined',
+    );
   });
 
   it('leaves the on-disk list intact when the save is refused', async () => {

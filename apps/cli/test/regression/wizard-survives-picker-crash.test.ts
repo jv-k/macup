@@ -88,6 +88,15 @@ describe('regression: a crashing picker unwinds instead of killing the wizard', 
     expect(printed).toContain('arr.map is not a function');
   });
 
+  it('reports the plugin id even when the target has no subtype', async () => {
+    await pickActionSafely(
+      { ...deps({ pickTrackedSet: async () => Promise.reject(new Error('boom')) }) },
+      { pluginId: 'npm' },
+    );
+
+    expect(errorSpy.mock.calls.flat().join('\n')).toContain('npm');
+  });
+
   it('still passes a normal result straight through', async () => {
     const result = await pickActionSafely(
       deps({ pickTrackedSet: async () => ['warp', 'docker'] }),

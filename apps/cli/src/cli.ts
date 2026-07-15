@@ -35,6 +35,7 @@ import { LogoAction } from './commands/logo';
 import { buildOutdatedCommand } from './commands/outdated';
 import { PluginsAction } from './commands/plugins';
 import { RestoreAction } from './commands/restore';
+import { UndoAction } from './commands/undo';
 import { MacupError } from './errors';
 import { BUILTIN_PLUGINS } from './plugins/registry';
 import * as logui from './ui/log';
@@ -89,6 +90,7 @@ const flagActions: readonly FlagAction[] = [
   new ConfigAction(),
   new CleanupAction(),
   new RestoreAction(),
+  new UndoAction(),
   new DoctorAction(),
 ];
 

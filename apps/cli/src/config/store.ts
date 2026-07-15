@@ -1,9 +1,9 @@
-import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Document, Scalar, YAMLMap, YAMLSeq, parseDocument } from 'yaml';
 import { ErrInvalidConfig } from '../errors';
 import type { SelectionPolicy } from '../plugins/selection';
+import { uniqueBackupPath } from './backup';
 import { type ApplistKey, ApplistSchema, INITIAL_SCHEMA_VERSION, SCHEMA_VERSION } from './schema';
 
 export interface ConfigStorePaths {
@@ -44,14 +44,6 @@ export async function atomicWriteFile(filePath: string, contents: string): Promi
   const tmpPath = `${filePath}.tmp`;
   await writeFile(tmpPath, contents, 'utf8');
   await rename(tmpPath, filePath);
-}
-
-function timestamp(now: Date): string {
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return (
-    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
-    `_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
-  );
 }
 
 // Maps the historical flat keys used pre-1.x to the dotted paths used today.
@@ -242,7 +234,7 @@ export class ConfigStore {
     await mkdir(this.paths.backupDir, { recursive: true });
     let backupPath: string | undefined;
     if (this.fileExisted) {
-      backupPath = this.uniqueBackupPath('applist_migration');
+      backupPath = this.uniqueBackupPath('migration');
       await copyFile(this.paths.applistPath, backupPath);
     }
     await atomicWriteFile(this.paths.applistPath, newText);
@@ -256,17 +248,11 @@ export class ConfigStore {
     return this.doc;
   }
 
-  // Collision-proof backup path. Backup names use second-resolution
-  // timestamps, so two same-operation saves within one second would
-  // otherwise overwrite each other and silently lose a backup (C-1).
-  // Append an incrementing suffix when the candidate already exists.
-  private uniqueBackupPath(prefix: string): string {
-    const stamp = timestamp(this.now());
-    let candidate = join(this.paths.backupDir, `${prefix}_${stamp}.yaml`);
-    for (let n = 2; existsSync(candidate); n++) {
-      candidate = join(this.paths.backupDir, `${prefix}_${stamp}_${n}.yaml`);
-    }
-    return candidate;
+  // Collision-proof backup path (C-1), delegated to the shared helper in
+  // ./backup so mutation backups and pre-undo snapshots name files
+  // identically. `operation` is the bare label (e.g. 'add', 'migration').
+  private uniqueBackupPath(operation: string): string {
+    return uniqueBackupPath(this.paths.backupDir, operation, this.now());
   }
 
   list(key: ApplistKey): readonly string[] {
@@ -411,7 +397,7 @@ export class ConfigStore {
     // block writing the new config.
     let backupPath: string | undefined;
     if (this.fileExisted) {
-      backupPath = this.uniqueBackupPath(`applist_${operation}`);
+      backupPath = this.uniqueBackupPath(operation);
       await copyFile(this.paths.applistPath, backupPath);
     }
     await atomicWriteFile(this.paths.applistPath, newText);

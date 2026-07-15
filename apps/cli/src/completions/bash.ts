@@ -3,7 +3,7 @@ import { commandsFor, flagsForCommand } from './shared';
 
 export function generateBashCompletions(plugins: readonly Plugin[]): string {
   const ids = plugins.map((p) => p.manifest.id);
-  const globalFlags = '--help --version --config --cleanup --restore --logo --completions';
+  const globalFlags = '--help --version --config --cleanup --restore --undo --logo --completions';
 
   const pluginCases = plugins
     .map(

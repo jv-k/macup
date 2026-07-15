@@ -12,6 +12,7 @@
 // apps/docs/scripts/generate-reference.ts.
 
 import { FLAG_COMMAND_ALIASES } from './cli/argv';
+import { CHECK_ARGS } from './commands/check';
 import { OUTDATED_ARGS } from './commands/outdated';
 import { SUBTYPE_COMMANDS, commandsFor, flagsForCommand } from './completions/shared';
 import { ApplistKeySchema } from './config/schema';
@@ -233,6 +234,20 @@ export function docsMetadata(): DocsMetadata {
           flag: `--${name}`,
           description: FLAG_DESCRIPTIONS[`--${name}`] ?? def.description,
         })),
+      },
+      {
+        name: 'check',
+        flags: Object.entries(CHECK_ARGS).map(([name, def]) => ({
+          flag: `--${name}`,
+          description: FLAG_DESCRIPTIONS[`--${name}`] ?? def.description,
+        })),
+      },
+      {
+        // `init` takes a positional (<shell>), not flags. Empty flags
+        // keeps it out of the docs flag matrix (flagless rows drop);
+        // INIT_ARGS.shell.description stays the prose source of truth.
+        name: 'init',
+        flags: [],
       },
     ],
     globalFlags: GLOBAL_FLAGS.map((f) => ({ ...f, bareForm: bareFormFor(f.flag) })),

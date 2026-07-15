@@ -95,4 +95,13 @@ describe('macup check — exit code and summary (#9)', () => {
     expect(process.exitCode).toBe(savedExitCode);
     expect(logSpy).toHaveBeenCalledWith('everything up to date');
   });
+
+  it('exits 1 and reports the failure when a plugin cannot be checked', async () => {
+    // npm IS on PATH (check() passes) but no fixture covers `npm list` — so
+    // list() throws a real, non-ErrPluginUnavailable error. A CI gate must
+    // not report green when it couldn't actually verify a backend.
+    await runCheck(new FixtureExecRunner({ fixtures: [], onPath: ['npm'] }));
+    expect(process.exitCode).toBe(1);
+    expect(logSpy).toHaveBeenCalledWith('npm check failed');
+  });
 });

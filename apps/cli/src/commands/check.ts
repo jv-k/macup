@@ -1,11 +1,15 @@
 // `macup check` — health-check for shell prompts, cron, and CI gates.
 //
-// Exit 0 when nothing is outdated, 1 when anything is. Reuses the
-// outdated aggregation (buildOutdatedReport) rather than re-walking the
-// registry, so both commands always agree on what "outdated" means.
-// Output is a single plain line on stdout (no header, no spinner, no
-// ANSI) so `eval`/`$(...)` consumers — the `macup init` snippets — can
-// capture it verbatim. `--quiet` suppresses even that line.
+// Exit 0 only when everything is verified up to date; 1 when anything is
+// outdated OR a plugin couldn't be checked at all. A benign missing
+// backend (`ErrPluginUnavailable`) is ignored — you can't be outdated on a
+// tool you don't have — but a plugin whose check/list actually FAILED is
+// surfaced and fails the exit, so a CI gate never reports a clean bill of
+// health it couldn't verify. Reuses the outdated aggregation
+// (buildOutdatedReport) so check and outdated agree on "outdated".
+// Output is a single plain line on stdout (no header, spinner, or ANSI) so
+// `$(...)` consumers — the `macup init` snippets — capture it verbatim.
+// `--quiet` suppresses even that line.
 
 import { defineCommand } from 'citty';
 import type { CliDeps } from '../cli/types';
@@ -20,24 +24,34 @@ export const CHECK_ARGS = {
   },
 } as const;
 
+/** True when any plugin's check/list failed for a non-benign reason. */
+export function hasCheckFailure(report: OutdatedReport): boolean {
+  return report.plugins.some((p) => p.checkFailed);
+}
+
 /**
- * One-line summary: `3 brew, 1 npm outdated`, or `everything up to date`.
- * Unavailable plugins (missing binary) are omitted — a backend you don't
- * have can't be outdated, and a health check must not fail on it.
+ * One-line summary. Reports outdated counts (`3 brew, 1 npm outdated`) and
+ * any plugins that couldn't be checked (`npm check failed`), combined when
+ * both occur. `everything up to date` only when there's nothing of either.
  */
 export function formatCheckSummary(report: OutdatedReport): string {
-  if (report.totalOutdated === 0) return 'everything up to date';
-  const parts = report.plugins
+  const outdated = report.plugins
     .filter((p) => p.outdated.length > 0)
     .map((p) => `${p.outdated.length} ${p.pluginId}`);
-  return `${parts.join(', ')} outdated`;
+  const failed = report.plugins.filter((p) => p.checkFailed).map((p) => p.pluginId);
+
+  const segments: string[] = [];
+  if (outdated.length > 0) segments.push(`${outdated.join(', ')} outdated`);
+  if (failed.length > 0) segments.push(`${failed.join(', ')} check failed`);
+  return segments.length > 0 ? segments.join('; ') : 'everything up to date';
 }
 
 export function buildCheckCommand(deps: CliDeps) {
   return defineCommand({
     meta: {
       name: 'check',
-      description: 'Exit 0 when everything is up to date, 1 when anything is outdated.',
+      description:
+        'Exit 0 when everything is up to date, 1 when anything is outdated or uncheckable.',
     },
     args: CHECK_ARGS,
     async run({ args }) {
@@ -49,7 +63,7 @@ export function buildCheckCommand(deps: CliDeps) {
           signal: deps.signal,
         }),
       });
-      if (report.totalOutdated > 0) process.exitCode = 1;
+      if (report.totalOutdated > 0 || hasCheckFailure(report)) process.exitCode = 1;
       if (!args.quiet) console.log(formatCheckSummary(report));
     },
   });

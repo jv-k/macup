@@ -1,6 +1,7 @@
 import { spinner } from '@clack/prompts';
 import { defineCommand } from 'citty';
 import type { CliDeps } from '../cli/types';
+import { ErrPluginUnavailable } from '../errors';
 import type { PackageStatus, Plugin, PluginContext } from '../plugins/types';
 
 export interface OutdatedPluginSummary {
@@ -10,6 +11,14 @@ export interface OutdatedPluginSummary {
   available: boolean;
   /** Short reason string when `available` is false. */
   reason?: string;
+  /**
+   * True when `available` is false for an UNEXPECTED reason — the plugin's
+   * check/list threw something other than `ErrPluginUnavailable`. A benign
+   * missing backend (`ErrPluginUnavailable`) leaves this false; a real
+   * failure to determine state sets it, so callers like `macup check` can
+   * refuse to report a clean bill of health they couldn't actually verify.
+   */
+  checkFailed: boolean;
   /** Outdated packages reported by the plugin (empty when up-to-date). */
   outdated: readonly PackageStatus[];
 }
@@ -65,6 +74,7 @@ export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<Out
           pluginId: plugin.manifest.id,
           displayName: plugin.manifest.displayName,
           available: true,
+          checkFailed: false,
           outdated,
         };
       } catch (err) {
@@ -73,6 +83,7 @@ export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<Out
           displayName: plugin.manifest.displayName,
           available: false,
           reason: err instanceof Error ? err.message : String(err),
+          checkFailed: !(err instanceof ErrPluginUnavailable),
           outdated: [],
         };
       } finally {

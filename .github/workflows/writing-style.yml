@@ -5,6 +5,10 @@ name: Writing style
 # Warn-tier findings (the word lists, bold bullet leads) annotate the PR but do not block.
 # Only changed files are linted so the legacy prose backlog does not fail the check. Run
 # `pnpm deslop:lint <paths>` locally to reproduce.
+#
+# Release PRs (base=main) are exempt: the diff against main is the whole accumulated
+# develop delta, so it re-lints prose each feature PR already cleared on its own diff.
+# The develop-facing PR is the enforcement point; this one only reports.
 
 on:
   pull_request:
@@ -28,6 +32,10 @@ jobs:
         # config's excluded dirs (passing files explicitly bypasses the
         # deslopper.config.json excludes).
         run: |
+          if [ "${{ github.base_ref }}" = "main" ]; then
+            echo "Release PR (base=main): prose already linted on develop-facing PRs. Skipping."
+            exit 0
+          fi
           pin=$(jq -r '.scripts["deslop:lint"]' package.json | grep -oE '[0-9a-f]{40}')
           files=$(git diff --name-only --diff-filter=ACMR "origin/${{ github.base_ref }}...HEAD" -- '*.md' '*.markdown' '*.mdx' \
             | grep -Ev '(^|/)(node_modules|\.sandcastle|\.github/chatmodes|docs/superpowers|\.worktrees)/' || true)

@@ -120,3 +120,34 @@ describe('brew plugin — update', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('brew plugin — search', () => {
+  function ctxWith(args: string[], stdout: string): PluginContext {
+    return {
+      exec: new FixtureExecRunner({
+        fixtures: [{ cmd: 'brew', args, result: { stdout, stderr: '', exitCode: 0 } }],
+        onPath: ['brew'],
+      }),
+      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      signal: new AbortController().signal,
+    };
+  }
+
+  it('scopes to --formula for the formulas subtype and returns names', async () => {
+    const ctx = ctxWith(['search', '--formula', 'node'], 'node\nnode@18\nnodenv\n');
+    const results = await brewPlugin.search?.(ctx, 'node', { subtype: 'formulas' });
+    expect(results).toEqual([{ name: 'node' }, { name: 'node@18' }, { name: 'nodenv' }]);
+  });
+
+  it('scopes to --cask for the casks subtype', async () => {
+    const ctx = ctxWith(['search', '--cask', 'firefox'], 'firefox\nfirefox@developer-edition\n');
+    const results = await brewPlugin.search?.(ctx, 'firefox', { subtype: 'casks' });
+    expect(results?.map((r) => r.name)).toEqual(['firefox', 'firefox@developer-edition']);
+  });
+
+  it('drops ==> section headers and de-dupes if the scope flag is ignored', async () => {
+    const ctx = ctxWith(['search', 'node'], '==> Formulae\nnode\nnodenv\n==> Casks\nnode\n');
+    const results = await brewPlugin.search?.(ctx, 'node');
+    expect(results).toEqual([{ name: 'node' }, { name: 'nodenv' }]);
+  });
+});

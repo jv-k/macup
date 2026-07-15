@@ -246,6 +246,35 @@ describe('pickAction — option gating', () => {
     expect(offered).toContain('update');
   });
 
+  it('offers search-add only when the plugin exposes a search method', async () => {
+    const searchable: Plugin = { ...mkPlugin('brew'), search: async () => [] };
+    let offered: WizardActionOption[] = [];
+    await pickAction(
+      {
+        plugins: [searchable],
+        selectTarget: async () => null,
+        selectAction: async (_t, opts) => {
+          offered = opts.map((o) => o.value);
+          return null;
+        },
+      },
+      { pluginId: 'brew' },
+    );
+    expect(offered).toContain('search-add');
+    // Not offered on the plain brew fixture (no search method).
+    let plain: WizardActionOption[] = [];
+    await pickAction(
+      emptyDeps({
+        selectAction: async (_t, opts) => {
+          plain = opts.map((o) => o.value);
+          return null;
+        },
+      }),
+      { pluginId: 'brew' },
+    );
+    expect(plain).not.toContain('search-add');
+  });
+
   it('returns null when the user cancels the action prompt', async () => {
     const result = await pickAction(emptyDeps(), { pluginId: 'brew' });
     expect(result).toBeNull();
@@ -396,5 +425,67 @@ describe('pickAction — sync-tracked diff', () => {
     );
     expect(actionCalls).toBe(2);
     expect(result).toBeNull();
+  });
+});
+
+describe('pickAction — search-add', () => {
+  const searchable: Plugin = { ...mkPlugin('brew'), search: async () => [] };
+
+  it('returns kind:sync-tracked with the picked names as pure adds', async () => {
+    let searchedTarget: unknown;
+    const result = await pickAction(
+      {
+        plugins: [searchable],
+        selectTarget: async () => null,
+        selectAction: async () => 'search-add',
+        searchAndPick: async (t) => {
+          searchedTarget = t;
+          return ['prettier', 'eslint'];
+        },
+      },
+      { pluginId: 'brew' },
+    );
+    expect(searchedTarget).toEqual({ pluginId: 'brew' });
+    expect(result).toEqual<ActionResult>({
+      kind: 'sync-tracked',
+      target: { pluginId: 'brew' },
+      adds: ['prettier', 'eslint'],
+      removes: [],
+    });
+  });
+
+  it('re-prompts the action when the picker is cancelled or empty', async () => {
+    for (const picked of [null, [] as string[]]) {
+      let actionCalls = 0;
+      const result = await pickAction(
+        {
+          plugins: [searchable],
+          selectTarget: async () => null,
+          selectAction: async () => {
+            actionCalls++;
+            return actionCalls === 1 ? 'search-add' : null;
+          },
+          searchAndPick: async () => picked,
+        },
+        { pluginId: 'brew' },
+      );
+      expect(actionCalls).toBe(2);
+      expect(result).toBeNull();
+    }
+  });
+
+  it('errors when search-add is chosen without a searchAndPick handler', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const result = await pickAction(
+      {
+        plugins: [searchable],
+        selectTarget: async () => null,
+        selectAction: async () => 'search-add',
+      },
+      { pluginId: 'brew' },
+    );
+    expect(result).toBeNull();
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
   });
 });

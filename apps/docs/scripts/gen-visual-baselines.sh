@@ -19,7 +19,7 @@ trap 'rm -rf "${TMP}"' EXIT
 # Clean copy: no host node_modules (wrong arch) or build output.
 rsync -a \
   --exclude=node_modules --exclude=.git --exclude=.next --exclude=.source \
-  --exclude=.turbo --exclude=dist --exclude='.sandcastle/worktrees' \
+  --exclude=.turbo --exclude=dist \
   "${ROOT}"/ "${TMP}"/
 
 docker run --rm -v "${TMP}":/work -w /work "${IMAGE}" bash -lc '

@@ -3,7 +3,7 @@
 macup is a plugin-based CLI for updating macOS dev packages (Homebrew, npm, pnpm, App
 Store, Xcode, system updates). It is TypeScript, ESM, pnpm, Node >= 20, and darwin-only.
 Read [CLAUDE.md](CLAUDE.md) first: it is the map to where every fact lives. Read
-[.sandcastle/CODING_STANDARDS.md](.sandcastle/CODING_STANDARDS.md) for the code rules.
+[docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) for the code rules.
 This file covers how a change moves from intent to a merged commit.
 
 ## Spec-to-code workflow

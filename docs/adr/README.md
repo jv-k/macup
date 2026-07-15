@@ -51,6 +51,7 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0021](0021-config-path-resolution.md) | Config path resolution with XDG and legacy migration | accepted |
 | [0022](0022-durable-comment-preserving-config-writes.md) | Durable, comment-preserving config writes | accepted |
 | [0023](0023-semver-first-version-comparison.md) | Semver-first version comparison with a permissive fallback | accepted |
-| [0024](0024-sandcastle-agent-orchestration.md) | Sandcastle for multi-agent implementation | accepted |
+| [0024](0024-sandcastle-agent-orchestration.md) | Sandcastle for multi-agent implementation | superseded by ADR-0027 |
 | [0025](0025-release-pr-ci-gate-scope.md) | Release PRs exempt from whole-history CI gates | accepted |
 | [0026](0026-adopt-js-tui-stack.md) | Adopt the playbook's JS TUI utility stack | accepted |
+| [0027](0027-retire-sandcastle-orchestration.md) | Retire the Sandcastle orchestration | accepted |

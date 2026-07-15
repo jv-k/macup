@@ -1,6 +1,6 @@
 # ADR 0024: Sandcastle for multi-agent implementation
 
-> Status: accepted · Date: 2026-06-19 · Deciders: John Valai
+> Status: superseded by ADR-0027 · Date: 2026-06-19 · Deciders: John Valai
 
 ## Context
 

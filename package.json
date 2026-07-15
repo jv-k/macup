@@ -15,16 +15,14 @@
     "adr:check": "node scripts/check-adrs.mjs",
     "shellcheck": "git ls-files '*.sh' | xargs shellcheck --severity=warning",
     "deslop:lint": "uvx --from git+https://github.com/jv-k/deslopper@038e6b5170b4d5d97eff143a17475181d73aea99 deslopper lint",
-    "sandcastle": "npx tsx .sandcastle/main.mts",
     "prepare": "simple-git-hooks || true"
   },
   "devDependencies": {
-    "@ai-hero/sandcastle": "^0.5.1",
     "@biomejs/biome": "^1.9.4",
     "simple-git-hooks": "^2.13.1",
     "turbo": "^2.3.0"
   },
   "simple-git-hooks": {
-    "pre-commit": "FILES=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.markdown' '*.mdx' | grep -Ev '(^|/)(node_modules|\\.sandcastle|\\.github/chatmodes|docs/superpowers|\\.worktrees)/' || true); [ -z \"$FILES\" ] && exit 0; echo \"$FILES\" | xargs env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm deslop:lint"
+    "pre-commit": "FILES=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.markdown' '*.mdx' | grep -Ev '(^|/)(node_modules|\\.github/chatmodes|docs/superpowers|\\.worktrees)/' || true); [ -z \"$FILES\" ] && exit 0; echo \"$FILES\" | xargs env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm deslop:lint"
   }
 }

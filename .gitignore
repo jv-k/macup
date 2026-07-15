@@ -3,9 +3,6 @@ node_modules
 dist/
 coverage/
 .DS_Store
-.sandcastle/.env
-.sandcastle/logs/
-.sandcastle/worktrees/
 img/tmp/
 .turbo/
 # prepack copies (created by apps/cli prepack, removed by postpack)

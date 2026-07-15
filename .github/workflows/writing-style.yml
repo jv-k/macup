@@ -38,6 +38,6 @@ jobs:
           fi
           pin=$(jq -r '.scripts["deslop:lint"]' package.json | grep -oE '[0-9a-f]{40}')
           files=$(git diff --name-only --diff-filter=ACMR "origin/${{ github.base_ref }}...HEAD" -- '*.md' '*.markdown' '*.mdx' \
-            | grep -Ev '(^|/)(node_modules|\.sandcastle|\.github/chatmodes|docs/superpowers|\.worktrees)/' || true)
+            | grep -Ev '(^|/)(node_modules|\.github/chatmodes|docs/superpowers|\.worktrees)/' || true)
           [ -z "$files" ] && exit 0
           uvx --from "git+https://github.com/jv-k/deslopper@$pin" deslopper lint --format github $files

@@ -1,27 +1,23 @@
 # Coding Standards
 
-<!-- Loaded by the reviewer and implementer agents via
-     @.sandcastle/CODING_STANDARDS.md. Derived by analysing apps/cli/src/*,
-     apps/cli/test/*, biome.json, tsconfig.json, package.json, and recent git
-     history. -->
-
 macup is a TypeScript/ESM CLI targeting Node ≥ 20 (and a `bun build
 --compile` single-binary path). It lives in `apps/cli/` of a pnpm +
 Turborepo monorepo; the `src/` and `test/` paths below are relative to
 that package. Standards below reflect the conventions already in the
-tree — new code should match, not invent.
+tree. New code should match, not invent.
 
 ## Style
 
 ### TypeScript
 
 - **Strict mode, ESM, `target: es2022`.** No `any` without a comment
-  naming the specific third-party gap. No `@ts-ignore` — use
+  naming the specific third-party gap. No `@ts-ignore`. Use
   `@ts-expect-error` with a reason.
 - **Imports:**
   - Node builtins use the `node:` prefix (`import fs from 'node:fs'`).
   - Relative imports end in `.js` when the project convention requires
-    it (match surrounding files — consistency with `tsc`/`tsup` output).
+    it (match surrounding files, for consistency with `tsc`/`tsup`
+    output).
   - No deep imports into `node_modules` subpaths that aren't part of a
     package's declared `exports`.
 - **Naming:**
@@ -33,14 +29,14 @@ tree — new code should match, not invent.
     `UPPER_SNAKE_CASE`.
   - CLI flag names: `--kebab-case`.
   - Applist / YAML config keys: `snake_case` (`brew_formulas`,
-    `npm_apps`) — matches the existing schema shape.
+    `npm_apps`), matching the existing schema shape.
 - **Subprocess:** every shell-out goes through `src/exec/run.ts`. Do
-  NOT `import execa` directly in feature code — the wrapper is where
+  NOT `import execa` directly in feature code. The wrapper is where
   `--dry-run`, `--log`, and redaction live.
 - **YAML:** use the `yaml` package's `Document` + `keepSourceTokens`
   for any mutation of `applist.yaml`. Comment preservation is a shipped
-  guarantee (see §5.2 of PRD); plain `YAML.parse` → `YAML.stringify`
-  drops comments and is a regression.
+  guarantee (see section 5.2 of the PRD); plain `YAML.parse` →
+  `YAML.stringify` drops comments and is a regression.
 - **Schema:** every external input (applist, bundle file, plugin
   manifest) is validated through a zod schema. Never `JSON.parse` →
   cast.
@@ -50,10 +46,10 @@ tree — new code should match, not invent.
 
 ### CLI / UX discipline
 
-- **User output** goes through the helpers in `src/ui/` — not raw
+- **User output** goes through the helpers in `src/ui/`, not raw
   `console.log`. Prompts use `@clack/prompts`; plain output uses the
   project's log helpers.
-- **Exit codes** come from `MacupError#exitCode` (see [src/errors.ts]).
+- **Exit codes** come from `MacupError#exitCode` (see `src/errors.ts`).
   New failure modes add a `MacupError` subclass (e.g.
   `ErrPluginUnavailable`, `ErrInvalidConfig`, `ErrBackupNotFound`)
   rather than throwing a bare `Error`.
@@ -63,7 +59,7 @@ tree — new code should match, not invent.
   pipes.
 - **Errors to stderr, normal output to stdout** so users can pipe
   `list --json` cleanly.
-- **`NO_COLOR` / piping** must strip ANSI — the UI layer already
+- **`NO_COLOR` / piping** must strip ANSI. The UI layer already
   handles this; new output paths must not bypass it.
 - **`--dry-run` is first-class.** Every filesystem / git / network /
   package-manager call must be gated by the dry-run check. No
@@ -89,17 +85,17 @@ tree — new code should match, not invent.
 
 Tests are organised by concern under `test/`:
 
-- `test/unit/` — pure logic: schema validation, selection classifier,
-  comparators, applist mutation.
-- `test/integration/` — plugin behaviour against fixture recordings in
-  `test/fixtures/`. No live subprocess calls.
-- `test/regression/` — one test per historical bug (especially
+- `test/unit/` holds pure logic: schema validation, selection
+  classifier, comparators, applist mutation.
+- `test/integration/` drives plugin behaviour against fixture recordings
+  in `test/fixtures/`. No live subprocess calls.
+- `test/regression/` holds one test per historical bug (especially
   completions / zsh edge cases).
-- `test/unit/plugins/conformance.test.ts` — a parameterised suite that
+- `test/unit/plugins/conformance.test.ts` is a parameterised suite that
   runs the plugin contract against every built-in. New plugins must pass it.
-- `test/completions/`, `test/config/` — completion-output and config
-  load/backup behaviour.
-- `test/e2e/` — end-to-end runs of `macup` via the built bundle.
+- `test/completions/` and `test/config/` cover completion-output and
+  config load/backup behaviour.
+- `test/e2e/` runs `macup` end-to-end via the built bundle.
 
 ### Rules
 
@@ -137,7 +133,8 @@ src/plugins/         plugin contract + registry (backends live in plugins/)
   selection.ts       pin/skip resolver (pure)
   defaults.ts        default applist seed
 plugins/             one file per backend (sibling of src/, not under it)
-  brew.ts / npm.ts / pnpm.ts / appstore.ts / mas.ts / xcode.ts / system.ts
+  brew.ts / npm.ts / pnpm.ts / pip.ts / appstore.ts / mas.ts / xcode.ts /
+  system.ts
   all.ts             composite with per-plugin error isolation
 src/config/          applist.yaml schema, XDG paths, backup/restore
 src/exec/            subprocess wrapper (run.ts) — central shell-out path
@@ -149,9 +146,9 @@ Rules:
 
 - **`src/cli.ts` dispatches; it does not implement.** New behaviour
   goes into a command module or a plugin; the entrypoint just routes.
-- **Adding a package manager = one new file in `src/plugins/` + one
-  line in `src/plugins/registry.ts`.** No edits to dispatch, help,
-  completions, or conformance tests.
+- **Adding a package manager = one new file in `plugins/` + one line in
+  `src/plugins/registry.ts`'s `BUILTIN_PLUGINS`.** No edits to dispatch,
+  help, completions, or conformance tests.
 - **Config precedence is invariant:** CLI > env > file > default.
   Enforced by `src/config/` load ordering. Don't reorder. Don't add a
   fifth tier.
@@ -168,7 +165,7 @@ Rules:
   human-readable message + `exitCode`.
 - Plugin manifests drive completions, help text, and the wizard's
   option lists. Never hard-code a plugin list outside the registry.
-- Dry-run is plumbed through the exec wrapper — if a new step touches
+- Dry-run is plumbed through the exec wrapper. If a new step touches
   state and doesn't go through `src/exec/run.ts`, it must honour dry-run
   explicitly.
 
@@ -176,7 +173,7 @@ Rules:
 
 - Runtime deps land in `dependencies`; dev-only tools land in
   `devDependencies`. Adding a new runtime dep must be justified in the
-  commit body — startup footprint is a watched metric, and the
+  commit body: startup footprint is a watched metric, and the
   `bun build --compile` single-binary path dislikes surprises.
 - `pnpm` is the package manager (pinned via `packageManager` in
   `package.json`). Never mix in `npm install` / `yarn` invocations.
@@ -186,15 +183,15 @@ Rules:
 ### Title
 
 - **Conventional Commits**, scoped: `<type>(<scope>): <subject>`.
-- Types in use: `feat`, `fix`, `refactor`, `test`, `chore`, `docs`,
-  `perf`, `ci`, `style`.
-- Scopes match the project's area labels: `cli`, `tui`, `config`,
-  `plugins`, `bundles`, `testing`, `docs`, `ci`, `helpsystem`.
+- Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
+  `build`, `ci`, `chore`, `revert`, enforced per landed commit by
+  `.github/workflows/commits.yml`. Release PRs (`develop` → `main`) may
+  also title themselves `release:` (see ADR 0025).
+- Scope is conventional, not enforced. Use the area label without its
+  prefix (`cli`, `tui`, `config`, `plugins`, `bundles`, `testing`,
+  `docs`, `ci`, `helpsystem`) or the module you touched (`wizard`, `ui`,
+  `exec`, `adr`, `repo`).
 - Imperative mood, lowercase subject, no trailing period, ≤ 70 chars.
-- Agent-authored commits use `sandcastle-<area>` /
-  `sandcastle-review-<area>` / `sandcastle-merge` scopes so history is
-  greppable. Human-authored PR titles do NOT include the `sandcastle`
-  marker — that is commit-level metadata only.
 
 ### Body
 
@@ -215,7 +212,7 @@ Closes #<issue>.   (or "Refs #<issue>." for partial)
   diff.
 - When you hit a subtle bug during the work (e.g. YAML comment drift,
   ESM resolution surprise, zsh completion edge case), document it in
-  the body — future archaeologists look there.
+  the body. Future archaeologists look there.
 - Reference the issue. PRs without a linked issue need a justifying
   paragraph.
 
@@ -223,7 +220,7 @@ Closes #<issue>.   (or "Refs #<issue>." for partial)
 
 - No `--no-verify`. Hooks exist for a reason.
 - Non-release work uses `feat/*`, `fix/*`, `refactor/*`, or `chore/*`
-  branches. Agent-authored branches use `sandcastle/issue-<n>-<slug>`.
+  branches, opened against `develop`.
 - Keep the PR scoped. If you touch unrelated code while fixing a bug,
   split it into its own PR.
 
@@ -231,34 +228,36 @@ Closes #<issue>.   (or "Refs #<issue>." for partial)
 
 ### Labels
 
-macup's label taxonomy (not ver-bump's). Pick **exactly one type** +
-any applicable area and triage labels.
+Pick **exactly one type** + any applicable area and triage labels.
 
 **Type** (one, required):
 
-- `bug` — something isn't working
-- `type:feature` — new functionality
-- `type:refactor` — code restructuring, no behaviour change
-- `type:perf` — performance improvement
-- `type:chore` — maintenance, tooling, hygiene
-- `documentation` — README / inline docs / CHANGELOG
-- `question` — user question, not an action item
-- `invalid` / `duplicate` / `wontfix` — closers
+- `bug`: something isn't working
+- `type:feature`: new functionality
+- `type:refactor`: code restructuring, no behaviour change
+- `type:perf`: performance improvement
+- `type:chore`: maintenance, tooling, hygiene
+- `documentation`: README / inline docs / CHANGELOG
+- `question`: user question, not an action item
+- `invalid` / `duplicate` / `wontfix`: closers
 
 **Area** (zero or more):
 
 - `area:cli`, `area:tui`, `area:config`, `area:plugins`,
   `area:bundles`, `area:testing`, `area:ci`, `area:docs`,
-  `area:helpsystem`
+  `area:helpsystem`, `area:distribution`, `area:release`
 
 **Priority:**
 
 - `priority:high` / `priority:medium` / `priority:low`
 
-**Sandcastle gating:**
+**Status / triage:**
 
-- `ready-for-agent` — Planner will pick this up.
-- `epic` — tracking issue; Planner **must not** select these.
+- `status:needs-triage`: maintainer needs to evaluate this.
+- `status:needs-info`: waiting on the reporter.
+- `status:ready-for-agent`: fully specified, ready for an AFK agent.
+- `status:ready-for-human`: requires human implementation.
+- `epic`: tracking issue. The work happens in its children, not here.
 
 ### Issue title
 
@@ -272,7 +271,7 @@ any applicable area and triage labels.
   version, `macup --version` output, a minimal reproducer.
 - **Features:** lead with the user-facing problem, then the proposed
   shape. Reference the PRD section this fits into (e.g. `Refs
-  docs/PRD.md §5.8`). Mention alternatives considered.
+  docs/PRD.md section 5.8`). Mention alternatives considered.
 - Paste output inside fenced blocks; strip ANSI or note that colour is
   relevant.
 

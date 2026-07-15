@@ -8,12 +8,6 @@
   },
   "files": {
     "include": ["**/*.md", "**/*.markdown", "**/*.mdx"],
-    "exclude": [
-      ".sandcastle/**",
-      ".github/chatmodes/**",
-      "docs/superpowers/**",
-      ".worktrees/**",
-      "node_modules/**"
-    ]
+    "exclude": [".github/chatmodes/**", "docs/superpowers/**", ".worktrees/**", "node_modules/**"]
   }
 }

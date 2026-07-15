@@ -16,7 +16,7 @@ The house stack is the playbook's [JS TUI utility stack](https://github.com/jv-k
 
 Each fact lives in one place. Read it there rather than trusting a copy.
 
-- Coding standards: `.sandcastle/CODING_STANDARDS.md`
+- Coding standards: `docs/CODING_STANDARDS.md`
 - Contracts: `apps/cli/src/plugins/types.ts` (the `Plugin` interface) and `apps/cli/src/config/schema.ts` (the zod applist schema)
 - Chokepoint: `apps/cli/src/plugins/registry.ts` (the closed `BUILTIN_PLUGINS` set, OS + PATH filtering)
 - Plugin authoring: `apps/cli/plugins/README.md`
@@ -40,7 +40,7 @@ A choice that constrains future work, is hard to reverse, or would later make so
 - Don't bypass `ExecRunner` (`apps/cli/src/exec/run.ts`) with direct `execa` or `child_process`. It carries dry-run, logging, and redaction, and the hermetic tests depend on it.
 - Don't hand-edit `apps/cli/dist/` or generated shell completions. Rebuild them.
 - Plugins throw `ErrPluginUnavailable` from `check()`, not a bare `Error`. The composite `all` plugin catches that to skip a missing backend.
-- Don't add a doc that restates `apps/cli/plugins/README.md` or `.sandcastle/CODING_STANDARDS.md`. Point at it.
+- Don't add a doc that restates `apps/cli/plugins/README.md` or `docs/CODING_STANDARDS.md`. Point at it.
 - darwin-only. The 1.0 built-ins are `supportedOS: ['darwin']`.
 
 Keep this file short. When it goes stale it makes the agent build the wrong thing.

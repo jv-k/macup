@@ -19,7 +19,7 @@
 //   - src/commands/<name>.ts   — each FlagAction + per-plugin subcommand factory
 //   - src/wizard-runner.ts     — interactive default action
 
-import type { ArgsDef } from 'citty';
+import type { ArgsDef, CommandDef } from 'citty';
 import { defineCommand, runMain } from 'citty';
 import { extractVerbosityFlags, findUnknownTopLevelFlags, rewriteFlagAliases } from './cli/argv';
 import { bootstrap } from './cli/bootstrap';
@@ -108,11 +108,54 @@ for (const plugin of deps.registry) {
   });
 }
 
+// citty's runMain catches whatever escapes a command and hands it to
+// consola, which prints the message followed by an internal stack trace.
+// For a MacupError — a condition we diagnosed and worded FOR the user,
+// like an invalid applist — that trace buries the advice under noise and
+// reads like a crash. citty's own CLIError (the escape hatch runMain
+// checks for) isn't exported, so the boundary goes here instead: catch
+// MacupError at each command's edge, print just the message, and set the
+// exit code. Anything else still escapes with its trace intact.
+function withErrorBoundary<A extends ArgsDef>(cmd: CommandDef<A>): CommandDef<A> {
+  const wrapped: CommandDef<A> = { ...cmd };
+  const run = cmd.run;
+  if (typeof run === 'function') {
+    wrapped.run = async (ctx) => {
+      try {
+        return await run(ctx);
+      } catch (err) {
+        if (err instanceof MacupError) {
+          console.error(`error: ${err.message}`);
+          process.exit(err.exitCode);
+        }
+        throw err;
+      }
+    };
+  }
+  // Subcommands run via citty's own dispatch, not the parent's run(), so
+  // the boundary has to reach every node of the tree.
+  const subs = cmd.subCommands;
+  if (subs && typeof subs === 'object') {
+    const wrappedSubs: Record<string, CommandDef> = {};
+    for (const [name, sub] of Object.entries(subs)) {
+      wrappedSubs[name] = withErrorBoundary(sub as CommandDef);
+    }
+    wrapped.subCommands = wrappedSubs;
+  }
+  return wrapped;
+}
+
+// Only the tree citty dispatches gets the boundary. The wizard runs these
+// same commands via its own runCommand() call and reports failures inline
+// so the session survives — routing it through a boundary that exits the
+// process would turn one failed action into a lost session.
 const topLevelSubCommands = {
-  ...pluginSubCommands,
-  outdated: buildOutdatedCommand(deps),
-  check: buildCheckCommand(deps),
-  init: buildInitCommand(),
+  ...Object.fromEntries(
+    Object.entries(pluginSubCommands).map(([name, cmd]) => [name, withErrorBoundary(cmd)]),
+  ),
+  outdated: withErrorBoundary(buildOutdatedCommand(deps)),
+  check: withErrorBoundary(buildCheckCommand(deps)),
+  init: withErrorBoundary(buildInitCommand()),
 };
 
 // Startup: warn for plugins that can't load (missing binaries on the

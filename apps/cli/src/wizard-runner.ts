@@ -20,7 +20,7 @@ import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
 import { pageableAutocompleteMultiselect } from './ui/picker';
 import { getVersion } from './version';
-import { type ActionResult, type Target, pickAction, pickTarget } from './wizard';
+import { type ActionResult, type Target, type WizardDeps, pickAction, pickTarget } from './wizard';
 
 // Cap clack's autocompleteMultiselect window to a sensible fraction of
 // the terminal height so the user can still see the prompt header and
@@ -296,6 +296,32 @@ async function applySyncTracked(
   console.log(`\n${logui.header('TRACKED')} ${parts.join(' ')}`);
 }
 
+// Sentinel for "a prompt threw" — distinct from `null`, which is the
+// user deliberately hitting Esc.
+export const PICKER_FAILED = Symbol('picker-failed');
+
+/**
+ * Error boundary around the interactive pickers. A throw inside a prompt
+ * used to escape runWizard → runMain and kill the whole session with a
+ * raw stack trace, losing the user's place (and, for a TTY prompt, often
+ * leaving the terminal mid-render). An unexpected prompt failure is a
+ * bug, but it should cost the user one submenu, not the session — so it
+ * is reported and unwound to the plugin picker.
+ */
+export async function pickActionSafely(
+  wizardDeps: WizardDeps,
+  target: Target,
+): Promise<ActionResult | null | typeof PICKER_FAILED> {
+  try {
+    return await pickAction(wizardDeps, target);
+  } catch (err) {
+    const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
+    console.error(`\nerror: the ${label} menu failed unexpectedly — returning to the plugin list.`);
+    console.error(`  ↳ ${err instanceof Error ? err.message : String(err)}`);
+    return PICKER_FAILED;
+  }
+}
+
 export async function runWizard(
   deps: CliDeps,
   pluginSubCommands: Record<string, CommandDef>,
@@ -363,7 +389,7 @@ export async function runWizard(
 
     // Inner loop: keep showing the submenu until the user hits Esc.
     while (true) {
-      const result: ActionResult | null = await pickAction(
+      const result: ActionResult | null | typeof PICKER_FAILED = await pickActionSafely(
         {
           plugins: deps.registry,
           selectTarget: async () => null, // unused at the action stage
@@ -447,6 +473,9 @@ export async function runWizard(
         target,
       );
 
+      // A failed picker unwinds to the plugin list, same as Esc — but the
+      // reason was already reported, so don't swallow it silently.
+      if (result === PICKER_FAILED) break;
       if (!result) break; // Esc at submenu → back to pickTarget.
 
       if (result.kind === 'sync-tracked') {

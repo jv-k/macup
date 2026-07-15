@@ -53,3 +53,22 @@ export const ApplistSchema = z.object({
 });
 
 export type Applist = z.infer<typeof ApplistSchema>;
+
+// Renders a zod path as the dotted/indexed form the user actually sees in
+// applist.yaml: ['brew','casks',0] -> `brew.casks[0]`.
+function formatPath(path: ReadonlyArray<PropertyKey>): string {
+  if (path.length === 0) return '(root)';
+  return path.reduce<string>((acc, seg) => {
+    if (typeof seg === 'number') return `${acc}[${seg}]`;
+    return acc === '' ? String(seg) : `${acc}.${String(seg)}`;
+  }, '');
+}
+
+/**
+ * One human-readable line per problem. `ZodError.message` is a JSON dump
+ * of every issue — accurate, but it buries the one thing the user needs
+ * (which line of their YAML is wrong) in ~10 lines of machine output.
+ */
+export function formatApplistIssues(error: z.ZodError): string {
+  return error.issues.map((issue) => `${formatPath(issue.path)}: ${issue.message}`).join('\n');
+}

@@ -218,9 +218,9 @@ describe('ConfigStore — legacy layout migration', () => {
     // migration backup so the user can recover their original file.
     await seed('npm_apps: not-a-list\n');
     const s = new ConfigStore({ applistPath, backupDir });
-    await expect(s.load()).rejects.toThrow(
-      /auto-migration ran; original saved to .*applist_migration_/,
-    );
+    // Matches the intent, not the exact prose: the path is what the user
+    // needs, so pin that rather than the sentence wrapped around it.
+    await expect(s.load()).rejects.toThrow(/auto-migration ran.*applist_migration_/);
   });
 
   it('migrates flat keys to nested layout on load and writes a migration backup', async () => {

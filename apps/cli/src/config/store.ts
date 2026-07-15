@@ -1,10 +1,16 @@
-import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Document, Scalar, YAMLMap, YAMLSeq, parseDocument } from 'yaml';
 import { ErrInvalidConfig } from '../errors';
 import type { SelectionPolicy } from '../plugins/selection';
-import { uniqueBackupPath } from './backup';
-import { type ApplistKey, ApplistSchema, INITIAL_SCHEMA_VERSION, SCHEMA_VERSION } from './schema';
+import { BACKUP_FILE_RE, uniqueBackupPath } from './backup';
+import {
+  type ApplistKey,
+  ApplistSchema,
+  INITIAL_SCHEMA_VERSION,
+  SCHEMA_VERSION,
+  formatApplistIssues,
+} from './schema';
 
 export interface ConfigStorePaths {
   readonly applistPath: string;
@@ -210,9 +216,12 @@ export class ConfigStore {
       // rewritten and is now invalid. Surface the backup path so the user
       // can recover, even if they didn't know a migration was happening.
       const suffix = result.migrationBackupPath
-        ? ` (auto-migration ran; original saved to ${result.migrationBackupPath})`
+        ? `\n\nAn auto-migration ran; your original was saved to ${result.migrationBackupPath}`
         : '';
-      throw new ErrInvalidConfig(this.paths.applistPath, parsed.error.message + suffix);
+      throw new ErrInvalidConfig(
+        this.paths.applistPath,
+        `${formatApplistIssues(parsed.error)}${suffix}${await this.recoveryHint()}`,
+      );
     }
 
     // A file declaring a higher version was written by a newer macup whose
@@ -253,6 +262,24 @@ export class ConfigStore {
   // identically. `operation` is the bare label (e.g. 'add', 'migration').
   private uniqueBackupPath(operation: string): string {
     return uniqueBackupPath(this.paths.backupDir, operation, this.now());
+  }
+
+  // An invalid config is nearly always recoverable — every mutation takes
+  // a backup first — but the raw validation error never said so, leaving
+  // the user staring at a zod dump next to a directory full of good
+  // copies. Only offered when a backup actually exists.
+  private async recoveryHint(): Promise<string> {
+    try {
+      // Match on what `macup restore` can actually offer — the same
+      // pattern BackupStore lists by. Counting every *.yaml would promise
+      // a rollback to files restore never shows.
+      const files = (await readdir(this.paths.backupDir)).filter((f) => BACKUP_FILE_RE.test(f));
+      if (files.length === 0) return '';
+      return `\n\nA backup of this file exists (${files.length} in ${this.paths.backupDir}).\nRun \`macup restore\` to roll back to a working version.`;
+    } catch {
+      // No backup dir at all — nothing to suggest.
+      return '';
+    }
   }
 
   list(key: ApplistKey): readonly string[] {
@@ -391,6 +418,22 @@ export class ConfigStore {
     const newText = doc.toString();
     if (newText === this.originalText) {
       return { changed: false };
+    }
+    // Validate on the way OUT, not just on the way in. load() rejects a
+    // bad file, but nothing stopped a bad in-memory mutation from being
+    // written — so a caller that staged a non-string name (e.g. an
+    // `undefined` from a mis-typed prompt result) serialized it to a YAML
+    // null, silently replaced the user's list, and only surfaced on the
+    // NEXT load, once the good data was already overwritten. Refusing here
+    // keeps the file on disk intact and blames the mutation, not the file.
+    const parsed = ApplistSchema.safeParse(doc.toJS() ?? {});
+    if (!parsed.success) {
+      throw new ErrInvalidConfig(
+        this.paths.applistPath,
+        `refusing to write an invalid config (${operation}) — your file on disk is unchanged:\n${formatApplistIssues(
+          parsed.error,
+        )}`,
+      );
     }
     await mkdir(this.paths.backupDir, { recursive: true });
     // First-run save has nothing to back up — copyFile would ENOENT and

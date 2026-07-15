@@ -20,7 +20,7 @@ export interface BackupEntry {
 // Trailing `(?:_\d+)?` matches the collision suffix uniqueBackupPath adds
 // when two same-operation backups land in the same second (C-1), so those
 // extra files still list and restore instead of silently disappearing.
-const BACKUP_FILE_RE =
+export const BACKUP_FILE_RE =
   /^applist_([A-Za-z0-9-]+)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:_\d+)?\.yaml$/;
 
 /** Second-resolution `YYYY-MM-DD_HH-MM-SS` stamp used in backup filenames. */

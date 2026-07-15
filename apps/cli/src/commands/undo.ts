@@ -35,8 +35,9 @@ export async function runUndo(deps: UndoDeps): Promise<BackupEntry | null> {
   const current = (await deps.readCurrent()) ?? '';
   const backupText = await readFile(target.path, 'utf8');
 
-  // Reverting to a byte-identical backup would just churn the file and
-  // stack a redundant safety snapshot. Nothing to do.
+  // Reverting to a backup with no meaningful difference (hasDiff ignores a
+  // lone trailing-newline change) would just churn the file and stack a
+  // redundant safety snapshot. Nothing to do.
   if (!hasDiff(current, backupText)) {
     deps.print(`Config already matches the most recent backup (${target.filename}).`);
     return null;

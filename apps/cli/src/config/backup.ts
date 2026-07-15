@@ -15,11 +15,13 @@ export interface BackupEntry {
   readonly timestamp: string;
 }
 
+// Operation labels can contain hyphens (e.g. `sync-tracked`); the segment
+// separator is `_`, so hyphens in the operation don't confuse the split.
 // Trailing `(?:_\d+)?` matches the collision suffix uniqueBackupPath adds
 // when two same-operation backups land in the same second (C-1), so those
 // extra files still list and restore instead of silently disappearing.
 const BACKUP_FILE_RE =
-  /^applist_([A-Za-z0-9]+)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:_\d+)?\.yaml$/;
+  /^applist_([A-Za-z0-9-]+)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:_\d+)?\.yaml$/;
 
 /** Second-resolution `YYYY-MM-DD_HH-MM-SS` stamp used in backup filenames. */
 export function backupTimestamp(now: Date): string {
@@ -80,7 +82,15 @@ export class BackupStore {
       const entry = entryFor(this.paths.backupDir, filename);
       if (entry) parsed.push(entry);
     }
-    parsed.sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0));
+    // Newest first. The timestamp is second-resolution, so same-second
+    // collisions (the `_N` suffix) tie; break the tie on the full filename
+    // descending, which orders `_3` > `_2` > base — i.e. the later-written
+    // collision first — deterministically, instead of leaving it to
+    // readdir order.
+    parsed.sort((a, b) => {
+      if (a.timestamp !== b.timestamp) return a.timestamp < b.timestamp ? 1 : -1;
+      return a.filename < b.filename ? 1 : a.filename > b.filename ? -1 : 0;
+    });
     return parsed;
   }
 

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { parse } from 'yaml';
 import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
 import type { PathResolution } from '../config/paths';
-import { ApplistSchema } from '../config/schema';
+import { ApplistSchema, SCHEMA_VERSION } from '../config/schema';
 
 export interface ConfigReport {
   applistPath: string;
@@ -11,6 +11,8 @@ export interface ConfigReport {
   exists: boolean;
   schemaValid: boolean;
   schemaError?: string;
+  /** Declared or defaulted schema version; undefined when the file is absent or invalid. */
+  schemaVersion?: number;
   pinsCount: number;
   skipCount: number;
   backupDir: string;
@@ -45,8 +47,16 @@ export async function buildConfigReport(paths: PathResolution): Promise<ConfigRe
       report.schemaError = result.error.issues
         .map((i) => `${i.path.join('.')}: ${i.message}`)
         .join('; ');
+    } else if (result.data.version > SCHEMA_VERSION) {
+      // Mirror the store's load-time rejection: a newer-than-supported
+      // version is not something this build can safely read, so `--config`
+      // must not call it valid.
+      report.schemaValid = false;
+      report.schemaVersion = result.data.version;
+      report.schemaError = `schema version ${result.data.version} is newer than this macup supports (${SCHEMA_VERSION}) — upgrade macup`;
     } else {
       report.schemaValid = true;
+      report.schemaVersion = result.data.version;
       report.pinsCount = Object.values(result.data.pins).reduce(
         (acc, pluginPins) => acc + Object.keys(pluginPins).length,
         0,
@@ -69,7 +79,7 @@ export function formatConfigReport(report: ConfigReport): string {
     `applist:     ${report.applistPath}`,
     `source:      ${report.source}`,
     `exists:      ${report.exists ? 'yes' : 'no (will be created on first write)'}`,
-    `schema:      ${report.schemaValid ? 'valid' : `INVALID — ${report.schemaError ?? 'unknown'}`}`,
+    `schema:      ${report.schemaValid ? `valid${report.schemaVersion ? ` (v${report.schemaVersion})` : ''}` : `INVALID — ${report.schemaError ?? 'unknown'}`}`,
     `pins:        ${report.pinsCount}`,
     `skip:        ${report.skipCount}`,
     `backups dir: ${report.backupDir}`,

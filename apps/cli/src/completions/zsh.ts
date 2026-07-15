@@ -48,6 +48,7 @@ _macup() {
     '--plugins[List built-in plugins and availability]' \\
     '--cleanup[Delete backup files]' \\
     '--restore[Restore from backup]' \\
+    '--undo[Revert to the most recent backup]' \\
     '--logo[Show Apple logo]' \\
     '--completions=-[Emit completions (omit value to auto-detect)]::shell:(zsh bash fish)' \\
     '1:plugin:->plugin' \\

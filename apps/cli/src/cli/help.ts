@@ -83,6 +83,7 @@ export function showCustomHelp(deps: CliDeps): void {
   console.log(`  ${s.bold('config'.padEnd(cmdPad))} Show config path, schema, pins/skip counts`);
   console.log(`  ${s.bold('cleanup'.padEnd(cmdPad))} Delete all backup files`);
   console.log(`  ${s.bold('restore'.padEnd(cmdPad))} Restore config from a backup`);
+  console.log(`  ${s.bold('undo'.padEnd(cmdPad))} Revert to the most recent backup (diff first)`);
   console.log(`  ${s.bold('logo'.padEnd(cmdPad))} Print the Apple logo`);
   console.log(`  ${s.bold('plugins'.padEnd(cmdPad))} List built-in plugins and their availability`);
   console.log(

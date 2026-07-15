@@ -398,47 +398,55 @@ Bundles are a **layer above plugins**: they resolve per-plugin package lists and
 
 ## 8. Roadmap
 
-### 8.1 Shipped (v1.0.0)
+The [v1.0.0 milestone](https://github.com/jv-k/macup/milestone/1) tracks the release
+gate. Everything after it carries the `roadmap:post-1.0` label and lives on the
+[macup project board](https://github.com/users/jv-k/projects/11); this section lists
+the headline arcs, not the full backlog.
+
+### 8.1 Built (v1.0.0 tagged; release gated)
 
 - TypeScript rewrite, plugin architecture
 - 7 built-in plugins (brew, npm, pnpm, appstore, xcode, system, all)
 - Pins + skip lists, backup/restore, XDG paths, wizard, completions
-- CI pipeline active; release pipeline scaffolded
+- `--dry-run` on `install`/`update` (#4); `--json` on `list`/`outdated` (#8)
+- Streaming progress: `StreamingExecRunner` routes user-action subprocess chunks into a pinned `StatusBar` box pane on TTY-capable emulators; `--verbose` tees them to scrollback; `--debug` swaps in `TracingExecRunner` for full annotated traces
+- CI pipeline active; release pipeline scaffolded but gated off (nothing is published to npm or Homebrew yet)
 
-### 8.2 Near-term (v1.0.x, polish)
+### 8.2 Near-term: v1.0.0 release gate, then v1.0.x polish
 
-Tracked in [GitHub issues](https://github.com/jv-k/macos-updatetool/issues):
+The release gate ([v1.0.0 milestone](https://github.com/jv-k/macup/milestone/1)):
 
-- **#4** Dry run mode: `--dry-run` on `install`/`update` shipped: it prints `[dry-run] <cmd>` and runs nothing.
-- **#5** Tracked vs installed distinction in UI
+- **#42** `--doctor` self-diagnostic (absorbs #11 `macup info`)
+- **#24** Shell integration (`eval "$(macup init <shell>)"` with a prompt outdated-check)
+
+**#22** then activates the release pipeline (create the tap, set secrets, publish):
+the step that makes macup installable.
+
+v1.0.x polish:
+
+- **#5** Tracked marker in `list --all` + wizard multiselect (re-scoped; tracked-by-default listing already shipped)
 - **#6** Rollback / undo command
-- **#7** Config schema version field
-- **#22** Activate release pipeline (Phase 8: create tap, set secrets, cut v1.0.1)
+- **#7** Config schema `version:` field
 
 ### 8.3 Mid-term (v1.1, scriptability + bundles)
 
-- **Bundles**: the headline v1.1 feature (see section 5.8)
-- **Streaming progress**: shipped. `StreamingExecRunner` routes user-action subprocess chunks into a pinned `StatusBar`'s box pane on TTY-capable emulators; `--verbose` tees them to scrollback; `--debug` swaps in `TracingExecRunner` for full annotated traces.
-- **#8** `--json` for all commands (`outdated` already shipped; remaining gaps tracked under this issue)
-- **#9** `macup check` for shell prompts / cron
-- **#11** `macup info` system info dashboard
+- **Bundles**: the headline v1.1 feature (see section 5.8), tracked as epic #32, split into #27, #28, #29, #30, and #31
+- **#9** `macup check` for shell prompts / cron (feeds #24's prompt integration)
 - **#12** Changelog / diff view before updates
 - **#16** File logging (`--log`, `MACUP_LOG`): distinct from `--verbose`; persists traces to disk for post-hoc inspection
 
 ### 8.4 Long-term (v1.2+, ecosystem)
 
 - **#10** Python/pip plugin
-- **#19, #20, #21** cargo, go plugins
+- **#20, #21** cargo, go plugins
 - **#14** `macup init`: generate applist from current system
 - **#18** `macup schedule`: launchd integration
-- **#24** Shell integration (`eval "$(macup init zsh)"`)
-- **MCP server**: expose macup as an AI-accessible tool server
+- **#38** MCP server: expose macup as an AI-accessible tool server
 
 ### 8.5 Speculative (post-1.2)
 
-- **Package search** in wizard's `add` flow
+- **#37** Package search (`brew search` / `npm search`) in the wizard's `add` flow
 - **Third-party plugin ecosystem** (`macup-plugin-*` npm packages)
-- **`brew search` / `npm search` integration** in wizard
 
 ---
 

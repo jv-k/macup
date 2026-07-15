@@ -1,3 +1,4 @@
+import type { Readable, Writable } from 'node:stream';
 import {
   S_BAR,
   S_BAR_END,
@@ -30,6 +31,12 @@ export interface PickerOptions<Value> {
   required?: boolean;
   /** Visible-window size; also used as the page-step for PgUp/PgDn. */
   maxItems?: number;
+  /**
+   * Streams to drive the prompt with. Default to the real terminal;
+   * tests pass mocks to exercise the prompt without a TTY.
+   */
+  input?: Readable;
+  output?: Writable;
 }
 
 const opt = (
@@ -186,6 +193,12 @@ export async function pageableAutocompleteMultiselect<Value>(
   // time PgUp/PgDn fires, this is populated.
   let layout: GridLayout = { cols: 1, rowsPerCol, pageItems: rowsPerCol };
 
+  // clack tracks selection as VALUES, not options (see the submit render
+  // and the return below), so rendering a picked row's label means
+  // resolving the value back to its option.
+  const byValue = new Map(opts.options.map((o) => [o.value, o]));
+  const toOption = (value: Value): PickerOption<Value> => byValue.get(value) ?? { value };
+
   const prompt: PageableAutocompletePrompt<PickerOption<Value>> = new PageableAutocompletePrompt<
     PickerOption<Value>
   >({
@@ -193,6 +206,8 @@ export async function pageableAutocompleteMultiselect<Value>(
     multiple: true,
     initialValue: opts.initialValues ? [...opts.initialValues] : undefined,
     pageStep: () => layout.pageItems,
+    ...(opts.input ? { input: opts.input } : {}),
+    ...(opts.output ? { output: opts.output } : {}),
     validate(value) {
       if (required && (value === undefined || (Array.isArray(value) && value.length === 0))) {
         return `Please select at least one option.\n${pc.reset(
@@ -221,7 +236,7 @@ export async function pageableAutocompleteMultiselect<Value>(
       // Cancellation / submission render: collapse to the picked rows
       // (or strikethrough on cancel), matching clack's stock behavior.
       if (this.state === 'submit') {
-        const selected = (this.value as PickerOption<Value>[] | undefined) ?? [];
+        const selected = this.selectedValues.map(toOption);
         return `${titleLine}${pc.gray(S_BAR)}  ${
           selected.length > 0
             ? selected.map((o) => opt(o, 'submitted')).join(pc.dim(', '))
@@ -229,7 +244,7 @@ export async function pageableAutocompleteMultiselect<Value>(
         }`;
       }
       if (this.state === 'cancel') {
-        const selected = (this.value as PickerOption<Value>[] | undefined) ?? [];
+        const selected = this.selectedValues.map(toOption);
         return `${titleLine}${pc.gray(S_BAR)}  ${
           selected.length > 0 ? selected.map((o) => opt(o, 'cancelled')).join(pc.dim(', ')) : ''
         }${selected.length > 0 ? `\n${pc.gray(S_BAR)}` : ''}`;
@@ -261,8 +276,11 @@ export async function pageableAutocompleteMultiselect<Value>(
 
   const resolved = await prompt.prompt();
   if (clackIsCancel(resolved)) return resolved;
-  const arr = (resolved as PickerOption<Value>[] | undefined) ?? [];
-  return arr.map((o) => o.value);
+  // `multiple: true` resolves to the selected VALUES, not the option
+  // objects — AutocompletePrompt extends Prompt<T['value'] | T['value'][]>
+  // and submit assigns from `selectedValues`. Reading `.value` off these
+  // yields undefined, which the ConfigStore then writes as a YAML null.
+  return (resolved as Value[] | undefined) ?? [];
 }
 
 /**
@@ -283,6 +301,8 @@ export async function pageableSelect<Value>(
     multiple: false,
     initialValue: opts.initialValue !== undefined ? [opts.initialValue] : undefined,
     pageStep: () => layout.pageItems,
+    ...(opts.input ? { input: opts.input } : {}),
+    ...(opts.output ? { output: opts.output } : {}),
     render(this: PageableAutocompletePrompt<PickerOption<Value>>) {
       layout = gridLayout(this.filteredOptions, rowsPerCol, process.stdout.columns ?? 80);
 
@@ -319,8 +339,9 @@ export async function pageableSelect<Value>(
 
   const resolved = await prompt.prompt();
   if (clackIsCancel(resolved)) return resolved;
-  const arr = resolved as PickerOption<Value>[] | undefined;
-  return (arr?.[0]?.value ?? undefined) as Value;
+  // `multiple: false` resolves to a single VALUE (clack normalises
+  // `selectedValues[0]`), not an option object.
+  return resolved as Value;
 }
 
 function getStepSymbol(state: string): string {

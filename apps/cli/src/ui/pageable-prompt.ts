@@ -22,6 +22,15 @@ export interface PageableAutocompleteOptions<T extends OptionLike> extends Autoc
 }
 
 /**
+ * Subclassing AutocompletePrompt means we import `@clack/core` directly
+ * while also using `@clack/prompts`. `@clack/prompts` pins core to an
+ * EXACT version, so any other range here resolves a SECOND copy of core
+ * — and core's cancel sentinel is `Symbol('clack:cancel')`, a unique
+ * symbol per copy. `isCancel()` from `@clack/prompts` then silently
+ * returns false for a cancel raised by our prompt, and the cancel
+ * sentinel leaks downstream as if it were a real answer. Keep the
+ * `@clack/core` dependency pinned to whatever `@clack/prompts` pins.
+ *
  * AutocompletePrompt with multi-row PgUp/PgDn navigation. Clack 1.2's
  * action set is hardcoded (up/down/left/right/space/enter/cancel), so
  * page navigation isn't a first-class action — but each up/down step

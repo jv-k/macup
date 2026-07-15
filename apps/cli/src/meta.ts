@@ -182,6 +182,7 @@ const CONFIG_DESCRIPTIONS: Record<string, string> = {
   appstore: 'Mac App Store app names tracked for updates.',
   npm: 'Global npm package names tracked for updates.',
   pnpm: 'Global pnpm package names tracked for updates.',
+  pip: 'Global pip (pip3) package names tracked for updates.',
   'brew.formulas': 'Homebrew formula names tracked for updates.',
   'brew.casks': 'Homebrew cask names tracked for updates.',
 };

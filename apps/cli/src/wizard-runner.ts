@@ -11,7 +11,7 @@
 // promptTrackedSetPicker, applySyncTracked) sit together instead of
 // scattered through a 988-line file.
 
-import { isCancel, note, select, spinner } from '@clack/prompts';
+import { isCancel, note, select, spinner, text } from '@clack/prompts';
 import { type CommandDef, runCommand } from 'citty';
 import pc from 'picocolors';
 import type { CliDeps } from './cli/types';
@@ -175,6 +175,75 @@ async function promptTrackedSetPicker(
     message: pickerMessage(`Tracked packages for ${label}`, summary, deps.color),
     options,
     initialValues: [...trackedNames],
+    maxItems: pickerMaxItems(total),
+    required: false,
+  });
+  return isCancel(choice) ? null : (choice as readonly string[]);
+}
+
+// "Search & add" picker. Prompts for a query, runs the plugin's search
+// against the backend registry, and returns the names the user chose to
+// track (or null to nav back). Only offered when the plugin exposes
+// `search`; the pick flows through the same ConfigStore add path as
+// Add/Remove.
+async function promptSearchAndPick(
+  target: Target,
+  deps: CliDeps,
+): Promise<readonly string[] | null> {
+  const plugin = deps.registry.find((p) => p.manifest.id === target.pluginId);
+  if (!plugin?.search) {
+    console.error(`error: plugin "${target.pluginId}" does not support search`);
+    return null;
+  }
+  const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
+
+  const query = await text({
+    message: `Search ${label} for a package`,
+    placeholder: 'e.g. prettier',
+    validate: (v) => (!v || v.trim().length === 0 ? 'Enter a search term.' : undefined),
+  });
+  if (isCancel(query) || typeof query !== 'string') return null;
+
+  const ctx: PluginContext = { exec: deps.exec, log: deps.log, signal: deps.signal };
+  const s = spinner();
+  s.start(`Searching ${label} for “${query.trim()}”…`);
+  let results: Awaited<ReturnType<NonNullable<typeof plugin.search>>>;
+  try {
+    await plugin.check(ctx);
+    results = await plugin.search(ctx, query.trim(), { subtype: target.subtype });
+  } catch (err) {
+    s.stop(`Search failed for ${label}.`);
+    console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+  s.stop(`Searched ${label}.`);
+
+  if (results.length === 0) {
+    console.log(logui.info(`No ${label} packages matched “${query.trim()}”.`));
+    return null;
+  }
+
+  const store = await deps.getStore();
+  const configKey = plugin.manifest.configKeyFor
+    ? plugin.manifest.configKeyFor(target.subtype)
+    : plugin.manifest.configKeys[0];
+  const tracked = new Set(configKey ? store.list(configKey) : []);
+
+  const total = results.length;
+  const choice = await pageableAutocompleteMultiselect<string>({
+    message: pickerMessage(
+      `Results for “${query.trim()}”`,
+      `${total} ${total === 1 ? 'match' : 'matches'}`,
+      deps.color,
+    ),
+    options: results.map((r) => {
+      const tags: string[] = [];
+      if (tracked.has(r.name)) tags.push('tracked');
+      if (r.description) tags.push(r.description);
+      const opt: { label: string; value: string; hint?: string } = { label: r.name, value: r.name };
+      if (tags.length > 0) opt.hint = tags.join(' · ');
+      return opt;
+    }),
     maxItems: pickerMaxItems(total),
     required: false,
   });
@@ -373,6 +442,7 @@ export async function runWizard(
             return store.list(key);
           },
           pickTrackedSet: async (t) => promptTrackedSetPicker(t, deps),
+          searchAndPick: async (t) => promptSearchAndPick(t, deps),
         },
         target,
       );

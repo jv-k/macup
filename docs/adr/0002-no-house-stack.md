@@ -1,6 +1,6 @@
 # ADR 0002: The playbook house stack does not apply to macup
 
-> Status: superseded by ADR-0025 · Date: 2026-06-17 · Deciders: John Valai
+> Status: superseded by ADR-0026 · Date: 2026-06-17 · Deciders: John Valai
 
 ## Context
 

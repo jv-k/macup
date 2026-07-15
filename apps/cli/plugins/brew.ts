@@ -6,6 +6,8 @@ import type {
   PackageStatus,
   Plugin,
   PluginContext,
+  SearchOptions,
+  SearchResult,
 } from '../src/plugins/types';
 
 interface OutdatedFormula {
@@ -175,6 +177,26 @@ const brew: Plugin = {
     opts: MutateOptions,
   ): Promise<void> {
     await runAll(ctx, refs, 'upgrade', opts);
+  },
+
+  async search(ctx: PluginContext, query: string, opts?: SearchOptions): Promise<SearchResult[]> {
+    // Scope to a subtype so the output is a flat name list. Unscoped
+    // `brew search` interleaves `==> Formulae` / `==> Casks` headers; the
+    // filter below drops those defensively in case the flag is ignored.
+    const args = ['search'];
+    if (opts?.subtype === 'casks') args.push('--cask');
+    else if (opts?.subtype === 'formulas') args.push('--formula');
+    args.push(query);
+    const { stdout } = await ctx.exec.run('brew', args, { signal: ctx.signal, kind: 'query' });
+    const seen = new Set<string>();
+    const results: SearchResult[] = [];
+    for (const raw of stdout.split('\n')) {
+      const name = raw.trim();
+      if (!name || name.startsWith('==>') || seen.has(name)) continue;
+      seen.add(name);
+      results.push({ name });
+    }
+    return results;
   },
 };
 

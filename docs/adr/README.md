@@ -9,7 +9,7 @@ the code.
 The rule for recording decisions is ADR 0001. A decision earns an ADR when it constrains future
 work, is hard to reverse, or is the kind of thing a new contributor would otherwise have to ask
 "why is it like this?". ADRs 0003 through 0008 and 0010 through 0024 backfill decisions that were
-already implicit in docs/PRD.md and the code; 0009 records the Phase 2 monorepo conversion. Where
+already implicit in docs/PRD.md and the code. 0009 records the Phase 2 monorepo conversion. Where
 the original rationale was never written down, the ADR says so and marks the point open rather than
 inventing a reason.
 
@@ -29,7 +29,7 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | --- | --- | --- |
 | [0000](0000-template.md) | Template | n/a |
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions as ADRs | accepted |
-| [0002](0002-no-house-stack.md) | The playbook house stack does not apply to macup | superseded by ADR-0025 |
+| [0002](0002-no-house-stack.md) | The playbook house stack does not apply to macup | superseded by ADR-0026 |
 | [0003](0003-plugin-as-host-architecture.md) | Plugin-as-host architecture | accepted |
 | [0004](0004-yaml-config-source-of-truth.md) | YAML manifest as the source of truth, validated by Zod | accepted |
 | [0005](0005-raw-decstbm-status-bar.md) | Raw DECSTBM status bar instead of a TUI library | accepted |
@@ -52,4 +52,5 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0022](0022-durable-comment-preserving-config-writes.md) | Durable, comment-preserving config writes | accepted |
 | [0023](0023-semver-first-version-comparison.md) | Semver-first version comparison with a permissive fallback | accepted |
 | [0024](0024-sandcastle-agent-orchestration.md) | Sandcastle for multi-agent implementation | accepted |
-| [0025](0025-adopt-js-tui-stack.md) | Adopt the playbook's JS TUI utility stack | accepted |
+| [0025](0025-release-pr-ci-gate-scope.md) | Release PRs exempt from whole-history CI gates | accepted |
+| [0026](0026-adopt-js-tui-stack.md) | Adopt the playbook's JS TUI utility stack | accepted |

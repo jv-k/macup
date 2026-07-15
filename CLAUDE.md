@@ -10,7 +10,7 @@ A plugin-based CLI for keeping macOS dev packages current across Homebrew, npm, 
 
 TypeScript (ESM, `target: es2022`), pnpm@10.33.1, Node >= 20, darwin-only. Tooling: biome (lint + format), vitest (test), tsup (bundle), turbo (task runner), shellcheck (completions). A `bun build --compile` single-binary path also ships.
 
-The house stack is the playbook's [JS TUI utility stack](https://github.com/jv-k/engineering-playbook/blob/main/stacks/js-tui.md), adopted in ADR 0025. It is the default for a choice not yet made. Record any divergence from it as an ADR here, which wins over the menu entry.
+The house stack is the playbook's [JS TUI utility stack](https://github.com/jv-k/engineering-playbook/blob/main/stacks/js-tui.md), adopted in ADR 0026. It is the default for a choice not yet made. Record any divergence from it as an ADR here, which wins over the menu entry.
 
 ## Source of truth
 

@@ -22,6 +22,8 @@ function trackedFor(applist: Applist, key: ApplistKey): readonly string[] {
       return applist.npm;
     case 'pnpm':
       return applist.pnpm;
+    case 'pip':
+      return applist.pip;
     case 'brew.formulas':
       return applist.brew.formulas;
     case 'brew.casks':

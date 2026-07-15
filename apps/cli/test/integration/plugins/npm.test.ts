@@ -97,3 +97,46 @@ describe('npm plugin — update', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('npm plugin — search', () => {
+  function ctxWith(stdout: string): PluginContext {
+    return {
+      exec: new FixtureExecRunner({
+        fixtures: [
+          {
+            cmd: 'npm',
+            args: ['search', '--json', 'prettier'],
+            result: { stdout, stderr: '', exitCode: 0 },
+          },
+        ],
+        onPath: ['npm'],
+      }),
+      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      signal: new AbortController().signal,
+    };
+  }
+
+  it('parses `npm search --json` into name + description results', async () => {
+    const ctx = ctxWith(
+      JSON.stringify([
+        { name: 'prettier', description: 'Prettier is an opinionated code formatter' },
+        { name: 'prettier-eslint', description: 'Formats with prettier then eslint' },
+      ]),
+    );
+    const results = await npmPlugin.search?.(ctx, 'prettier');
+    expect(results).toEqual([
+      { name: 'prettier', description: 'Prettier is an opinionated code formatter' },
+      { name: 'prettier-eslint', description: 'Formats with prettier then eslint' },
+    ]);
+  });
+
+  it('returns [] on empty or non-array output rather than throwing', async () => {
+    expect(await npmPlugin.search?.(ctxWith(''), 'prettier')).toEqual([]);
+    expect(await npmPlugin.search?.(ctxWith('not json'), 'prettier')).toEqual([]);
+  });
+
+  it('drops entries without a name', async () => {
+    const ctx = ctxWith(JSON.stringify([{ description: 'no name here' }, { name: 'ok' }]));
+    expect(await npmPlugin.search?.(ctx, 'prettier')).toEqual([{ name: 'ok' }]);
+  });
+});

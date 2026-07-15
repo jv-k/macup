@@ -6,6 +6,7 @@ import type {
   PackageStatus,
   Plugin,
   PluginContext,
+  SearchResult,
 } from '../src/plugins/types';
 
 interface NpmListResponse {
@@ -118,6 +119,23 @@ const npm: Plugin = {
     opts: MutateOptions,
   ): Promise<void> {
     await runAll(ctx, refs, 'update', opts);
+  },
+
+  async search(ctx: PluginContext, query: string): Promise<SearchResult[]> {
+    const { stdout } = await ctx.exec.run('npm', ['search', '--json', query], {
+      signal: ctx.signal,
+      kind: 'query',
+    });
+    const parsed = safeParseJson<Array<{ name?: string; description?: string }>>(stdout);
+    if (!Array.isArray(parsed)) return [];
+    const results: SearchResult[] = [];
+    for (const hit of parsed) {
+      if (!hit || typeof hit.name !== 'string') continue;
+      results.push(
+        hit.description ? { name: hit.name, description: hit.description } : { name: hit.name },
+      );
+    }
+    return results;
   },
 };
 

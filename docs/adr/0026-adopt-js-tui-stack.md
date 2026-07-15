@@ -1,4 +1,4 @@
-# ADR 0025: Adopt the playbook's JS TUI utility stack
+# ADR 0026: Adopt the playbook's JS TUI utility stack
 
 > Status: accepted · Date: 2026-07-15 · Deciders: John Valai
 

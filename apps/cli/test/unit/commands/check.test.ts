@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { formatCheckSummary } from '../../../src/commands/check';
 import type { OutdatedReport } from '../../../src/commands/outdated';
 
-function report(perPlugin: Array<{ id: string; count: number; available?: boolean }>): OutdatedReport {
+function report(
+  perPlugin: Array<{ id: string; count: number; available?: boolean }>,
+): OutdatedReport {
   const plugins = perPlugin.map(({ id, count, available }) => ({
     pluginId: id,
     displayName: id.toUpperCase(),

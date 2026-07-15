@@ -21,7 +21,6 @@ permissions:
 env:
   NODE_VERSION: '20'
   BUN_VERSION: '1.1.x'
-  PNPM_VERSION: '10'
 
 jobs:
   # ── 1. Re-verify against the tagged ref ───────────────────────────
@@ -34,8 +33,6 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name || inputs.tag }}
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -57,8 +54,6 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name || inputs.tag }}
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -97,8 +92,6 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name || inputs.tag }}
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -143,8 +136,6 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name || inputs.tag }}
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}

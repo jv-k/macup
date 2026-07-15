@@ -28,6 +28,7 @@ import type { FlagAction } from './cli/types';
 import { CleanupAction } from './commands/cleanup';
 import { CompletionsAction } from './commands/completions';
 import { ConfigAction } from './commands/config';
+import { DoctorAction } from './commands/doctor';
 import { commandsFromManifest } from './commands/from-manifest';
 import { InstallCompletionsAction } from './commands/install-completions';
 import { LogoAction } from './commands/logo';
@@ -88,6 +89,7 @@ const flagActions: readonly FlagAction[] = [
   new ConfigAction(),
   new CleanupAction(),
   new RestoreAction(),
+  new DoctorAction(),
 ];
 
 const pluginSubCommands: Record<string, ReturnType<typeof commandsFromManifest>> = {};

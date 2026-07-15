@@ -78,6 +78,28 @@ describe('pip plugin — list()', () => {
     expect(statuses.map((s) => s.ref.name)).toEqual(['requests']);
   });
 
+  it('surfaces a non-zero `pip3 list` exit instead of reporting an empty set', async () => {
+    const broken: FixtureEntry[] = [
+      {
+        cmd: 'pip3',
+        args: ['list', '--format=json'],
+        result: { stdout: '', stderr: 'no module named pip', exitCode: 1 },
+      },
+    ];
+    await expect(pipPlugin.list(ctx(broken), {})).rejects.toThrow(/no module named pip/);
+  });
+
+  it('throws on non-array JSON rather than crashing downstream', async () => {
+    const weird: FixtureEntry[] = [
+      {
+        cmd: 'pip3',
+        args: ['list', '--format=json'],
+        result: { stdout: '{"unexpected":"object"}', stderr: '', exitCode: 0 },
+      },
+    ];
+    await expect(pipPlugin.list(ctx(weird), {})).rejects.toThrow(/non-array JSON/);
+  });
+
   it('returns [] cleanly when pip reports nothing installed', async () => {
     const empty: FixtureEntry[] = [
       {

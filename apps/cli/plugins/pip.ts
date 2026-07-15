@@ -24,24 +24,47 @@ interface PipOutdatedEntry {
 // setups provide. (A future enhancement could probe for `pip` too.)
 const PIP = 'pip3';
 
-function safeParseJson<T>(text: string): T | undefined {
-  const trimmed = text.trim();
-  if (!trimmed) return undefined;
-  try {
-    return JSON.parse(trimmed) as T;
-  } catch {
-    return undefined;
+// Parse the stdout of a `pip … --format=json` call into an array, or throw a
+// diagnostic if pip failed or the payload isn't the JSON array we expect.
+// Unlike `npm outdated` (which exits 1 to signal drift), pip's list commands
+// exit 0 on success, so a non-zero code is a real failure worth surfacing.
+function parseJsonArray<T>(
+  label: string,
+  result: { stdout: string; stderr: string; exitCode: number },
+): T[] {
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `${label} exited ${result.exitCode}: ${result.stderr.trim() || result.stdout.trim()}`,
+    );
   }
+  const trimmed = result.stdout.trim();
+  if (!trimmed) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(`${label} produced unparseable JSON`);
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error(`${label} produced non-array JSON`);
+  }
+  return parsed as T[];
 }
 
 async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<PackageStatus[]> {
-  const listResult = await ctx.exec.run(PIP, ['list', '--format=json']);
-  const installed = safeParseJson<PipListEntry[]>(listResult.stdout) ?? [];
+  const listResult = await ctx.exec.run(PIP, ['list', '--format=json'], {
+    signal: ctx.signal,
+    kind: 'query',
+  });
+  const installed = parseJsonArray<PipListEntry>(`${PIP} list`, listResult);
 
   // `pip list --outdated` hits the index and can be slow, but it's the only
   // way to learn latest versions; parse it into a name → latest map.
-  const outdatedResult = await ctx.exec.run(PIP, ['list', '--outdated', '--format=json']);
-  const outdatedRaw = safeParseJson<PipOutdatedEntry[]>(outdatedResult.stdout) ?? [];
+  const outdatedResult = await ctx.exec.run(PIP, ['list', '--outdated', '--format=json'], {
+    signal: ctx.signal,
+    kind: 'query',
+  });
+  const outdatedRaw = parseJsonArray<PipOutdatedEntry>(`${PIP} list --outdated`, outdatedResult);
   const latest = new Map<string, string>();
   for (const o of outdatedRaw) {
     if (o.latest_version !== undefined) latest.set(o.name, o.latest_version);

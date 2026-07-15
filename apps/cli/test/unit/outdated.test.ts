@@ -116,6 +116,7 @@ describe('formatOutdatedReport', () => {
       pluginId: id,
       displayName: id.toUpperCase(),
       available: true,
+      checkFailed: false,
       outdated: names.map((name) => ({
         ref: { kind: id, name },
         installed: true,
@@ -177,6 +178,7 @@ describe('formatOutdatedReport', () => {
           displayName: 'Mac App Store',
           available: false,
           reason: '`mas` was not found on PATH',
+          checkFailed: false,
           outdated: [],
         },
       ],

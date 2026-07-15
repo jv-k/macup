@@ -78,6 +78,12 @@ export function showCustomHelp(deps: CliDeps): void {
   console.log(
     `  ${s.bold('outdated'.padEnd(cmdPad))} Show outdated packages across every plugin in one pane  ${s.dim('[--json]')}`,
   );
+  console.log(
+    `  ${s.bold('check'.padEnd(cmdPad))} Exit 0 if everything is current, 1 if anything is outdated  ${s.dim('[--quiet]')}`,
+  );
+  console.log(
+    `  ${s.bold('init <shell>'.padEnd(cmdPad))} Emit shell integration (zsh|bash|fish) to eval from your rc file`,
+  );
   console.log(`  ${s.bold('version'.padEnd(cmdPad))} Show version with logo`);
   console.log(`  ${s.bold('help'.padEnd(cmdPad))} Show this help screen`);
   console.log(`  ${s.bold('config'.padEnd(cmdPad))} Show config path, schema, pins/skip counts`);

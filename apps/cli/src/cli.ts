@@ -25,11 +25,13 @@ import { extractVerbosityFlags, findUnknownTopLevelFlags, rewriteFlagAliases } f
 import { bootstrap } from './cli/bootstrap';
 import { printVersionSplash, showCustomHelp } from './cli/help';
 import type { FlagAction } from './cli/types';
+import { buildCheckCommand } from './commands/check';
 import { CleanupAction } from './commands/cleanup';
 import { CompletionsAction } from './commands/completions';
 import { ConfigAction } from './commands/config';
 import { DoctorAction } from './commands/doctor';
 import { commandsFromManifest } from './commands/from-manifest';
+import { buildInitCommand } from './commands/init';
 import { InstallCompletionsAction } from './commands/install-completions';
 import { LogoAction } from './commands/logo';
 import { buildOutdatedCommand } from './commands/outdated';
@@ -109,6 +111,8 @@ for (const plugin of deps.registry) {
 const topLevelSubCommands = {
   ...pluginSubCommands,
   outdated: buildOutdatedCommand(deps),
+  check: buildCheckCommand(deps),
+  init: buildInitCommand(),
 };
 
 // Startup: warn for plugins that can't load (missing binaries on the

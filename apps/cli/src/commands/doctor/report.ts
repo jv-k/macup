@@ -100,7 +100,9 @@ export function renderText(report: DoctorReport): string {
   }
   const { ok, warnings, errors } = report.summary;
   lines.push('');
-  lines.push(`SUMMARY: ${ok} ok, ${warnings} warning${warnings === 1 ? '' : 's'}, ${errors} error${errors === 1 ? '' : 's'}`);
+  lines.push(
+    `SUMMARY: ${ok} ok, ${warnings} warning${warnings === 1 ? '' : 's'}, ${errors} error${errors === 1 ? '' : 's'}`,
+  );
   return lines.join('\n');
 }
 

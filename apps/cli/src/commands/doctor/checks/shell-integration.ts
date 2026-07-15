@@ -18,7 +18,12 @@ export async function check(deps: CheckDeps): Promise<Section> {
     return {
       title,
       results: [
-        { level: 'warn', label: 'Completions', detail, hint: `supported: ${SUPPORTED_SHELLS.join(', ')}` },
+        {
+          level: 'warn',
+          label: 'Completions',
+          detail,
+          hint: `supported: ${SUPPORTED_SHELLS.join(', ')}`,
+        },
       ],
     };
   }

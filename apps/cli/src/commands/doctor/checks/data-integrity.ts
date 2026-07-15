@@ -153,7 +153,9 @@ export async function check(deps: CheckDeps): Promise<Section> {
   if (applist === 'missing') {
     return {
       title,
-      results: [{ level: 'ok', label: 'Tracked packages', detail: 'no applist yet — nothing to verify' }],
+      results: [
+        { level: 'ok', label: 'Tracked packages', detail: 'no applist yet — nothing to verify' },
+      ],
     };
   }
   if (applist === 'invalid') {

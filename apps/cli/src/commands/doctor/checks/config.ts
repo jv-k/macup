@@ -4,7 +4,7 @@
 // buildConfigReport from the --config command so the two surfaces can't
 // drift on what "valid" means.
 
-import { accessSync, constants, existsSync } from 'node:fs';
+import { constants, accessSync, existsSync } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildConfigReport } from '../../config';

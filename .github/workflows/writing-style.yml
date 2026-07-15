@@ -24,8 +24,12 @@ jobs:
       - name: Run deslopper on changed Markdown
         # The deslopper git pin lives in one place: the deslop:lint script in
         # package.json. Extract it so a version bump is a one-file change.
+        # Mirror the pre-commit hook's filters: skip deleted files and the
+        # config's excluded dirs (passing files explicitly bypasses the
+        # deslopper.config.json excludes).
         run: |
           pin=$(jq -r '.scripts["deslop:lint"]' package.json | grep -oE '[0-9a-f]{40}')
-          files=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- '*.md' '*.markdown' '*.mdx')
+          files=$(git diff --name-only --diff-filter=ACMR "origin/${{ github.base_ref }}...HEAD" -- '*.md' '*.markdown' '*.mdx' \
+            | grep -Ev '(^|/)(node_modules|\.sandcastle|\.github/chatmodes|docs/superpowers|\.worktrees)/' || true)
           [ -z "$files" ] && exit 0
           uvx --from "git+https://github.com/jv-k/deslopper@$pin" deslopper lint --format github $files

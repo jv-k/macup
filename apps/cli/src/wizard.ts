@@ -19,7 +19,13 @@ export type ActionResult =
       readonly removes: readonly string[];
     };
 
-export type WizardActionOption = 'list' | 'update' | 'update-selected' | 'sync-tracked' | 'install';
+export type WizardActionOption =
+  | 'list'
+  | 'update'
+  | 'update-selected'
+  | 'sync-tracked'
+  | 'search-add'
+  | 'install';
 
 export interface WizardDeps {
   readonly plugins: readonly Plugin[];
@@ -51,6 +57,12 @@ export interface WizardDeps {
    * (any subset of installed ∪ tracked), or null to nav back.
    */
   readonly pickTrackedSet?: (target: Target) => Promise<readonly string[] | null>;
+  /**
+   * "Search & add": prompt for a query, search the backend, and return the
+   * package names the user chose to track — or null to nav back. Required
+   * when the target's plugin exposes `search`.
+   */
+  readonly searchAndPick?: (target: Target) => Promise<readonly string[] | null>;
   /** Reads current tracked names for the given target. Required when sync-tracked is offered. */
   readonly currentTracked?: (target: Target) => Promise<readonly string[]>;
   /** Fetches outdated rows for "Update selected". Required alongside pickOutdated. */
@@ -132,6 +144,7 @@ const ACTION_LABELS: Record<WizardActionOption, string> = {
   list: 'List tracked',
   update: 'Update tracked',
   'sync-tracked': 'Add/Remove',
+  'search-add': 'Search & add',
   'update-selected': 'Update selectively',
   install: 'Install tracked',
 };
@@ -143,6 +156,8 @@ function actionsFor(plugin: Plugin): WizardActionOption[] {
   if (cap.list) opts.push('list');
   if (cap.update) opts.push('update');
   if (cap.add && cap.remove && hasConfigKey) opts.push('sync-tracked');
+  // Search-add needs somewhere to record the pick and a backend to query.
+  if (cap.add && hasConfigKey && typeof plugin.search === 'function') opts.push('search-add');
   if (cap.update && cap.outdated) opts.push('update-selected');
   if (cap.install) opts.push('install');
   return opts;
@@ -191,6 +206,18 @@ export async function pickAction(deps: WizardDeps, target: Target): Promise<Acti
       const picked = await deps.pickOutdated(target, rows);
       if (picked === null || picked.length === 0) continue;
       return { kind: 'dispatch', target, command: 'update', packages: picked };
+    }
+
+    if (choice === 'search-add') {
+      if (!deps.searchAndPick) {
+        console.error('error: wizard cannot run "Search & add" without a searchAndPick handler');
+        return null;
+      }
+      const picked = await deps.searchAndPick(target);
+      if (picked === null || picked.length === 0) continue; // cancelled / nothing chosen
+      // Reuse the sync-tracked apply path: the picks are pure adds. The
+      // ConfigStore dedups anything already tracked.
+      return { kind: 'sync-tracked', target, adds: picked, removes: [] };
     }
 
     // 'sync-tracked'

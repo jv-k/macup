@@ -114,10 +114,29 @@ export interface MutateOptions {
   readonly dryRun?: boolean;
 }
 
+export interface SearchOptions {
+  /** Scope the search to one subtype (e.g. 'formulas' | 'casks' for brew). */
+  readonly subtype?: string;
+}
+
+/** One hit from a plugin's package search (the wizard's add flow). */
+export interface SearchResult {
+  readonly name: string;
+  /** Short blurb when the backend provides one (npm does; brew search doesn't). */
+  readonly description?: string;
+}
+
 export interface Plugin {
   readonly manifest: PluginManifest;
   check(ctx: PluginContext): Promise<void>;
   list(ctx: PluginContext, opts: ListOptions): Promise<PackageStatus[]>;
   install?(ctx: PluginContext, refs: readonly PackageRef[], opts: MutateOptions): Promise<void>;
   update?(ctx: PluginContext, refs: readonly PackageRef[], opts: MutateOptions): Promise<void>;
+  /**
+   * Optional: search the backend's registry for packages matching `query`.
+   * Powers the wizard's "Search & add" flow so a user who can't recall an
+   * exact name can pick from results. Presence of this method is the
+   * capability signal — there is no separate capabilities flag.
+   */
+  search?(ctx: PluginContext, query: string, opts?: SearchOptions): Promise<SearchResult[]>;
 }

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { type Document, Scalar, YAMLMap, YAMLSeq, parseDocument } from 'yaml';
 import { ErrInvalidConfig } from '../errors';
 import type { SelectionPolicy } from '../plugins/selection';
-import { type ApplistKey, ApplistSchema } from './schema';
+import { type ApplistKey, ApplistSchema, SCHEMA_VERSION } from './schema';
 
 export interface ConfigStorePaths {
   readonly applistPath: string;
@@ -104,6 +104,17 @@ function migrateInPlace(doc: Document): boolean {
   return migrated;
 }
 
+// Insert `version: SCHEMA_VERSION` at the top of the map when absent, so
+// the field leads the file the way readers expect. Mutates in memory
+// only; the caller decides whether that reaches disk. Returns whether it
+// changed anything.
+function stampVersion(doc: Document): boolean {
+  if (!(doc.contents instanceof YAMLMap)) return false;
+  if (doc.contents.has('version')) return false;
+  doc.contents.items.unshift(doc.createPair('version', SCHEMA_VERSION));
+  return true;
+}
+
 function pathFor(key: ApplistKey): readonly string[] {
   return key.split('.');
 }
@@ -172,6 +183,15 @@ export class ConfigStore {
     this.originalText = text;
     this.doc = parseDocument(text);
 
+    // Stamp the schema version before migrating so a legacy-key migration
+    // persists a versioned file in the same write. On a file that only
+    // lacks `version` (nothing else to migrate), this is an in-memory
+    // change that does NOT force a rewrite — the field lands the next time
+    // the user actually mutates config, keeping read-only commands
+    // side-effect free. The load-time no-change guard is baselined below
+    // AFTER this stamp, so save() sees a version-only file as unchanged.
+    stampVersion(this.doc);
+
     let result: LoadResult = { migrated: false };
     if (migrateInPlace(this.doc)) {
       const backupPath = await this.persistMigration();
@@ -197,6 +217,16 @@ export class ConfigStore {
         ? ` (auto-migration ran; original saved to ${result.migrationBackupPath})`
         : '';
       throw new ErrInvalidConfig(this.paths.applistPath, parsed.error.message + suffix);
+    }
+
+    // A file declaring a higher version was written by a newer macup whose
+    // shape this build may not understand. Refuse rather than silently
+    // misread it — that's the whole point of the version field.
+    if (parsed.data.version > SCHEMA_VERSION) {
+      throw new ErrInvalidConfig(
+        this.paths.applistPath,
+        `schema version ${parsed.data.version} is newer than this macup supports (${SCHEMA_VERSION}) — upgrade macup`,
+      );
     }
     return result;
   }
@@ -359,6 +389,13 @@ export class ConfigStore {
 
   async save(operation: string): Promise<SaveResult> {
     const doc = this.requireDoc();
+    // Stamp version here too, not only in load(): a brand-new config has
+    // no YAMLMap to stamp at load time (the doc gains contents only when
+    // the first key is added), so this is where a first-run file earns its
+    // version field. On a loaded file it's a no-op — load() already
+    // stamped and baselined originalText with the field, so the no-change
+    // guard below still sees a version-only file as unchanged.
+    stampVersion(doc);
     const newText = doc.toString();
     if (newText === this.originalText) {
       return { changed: false };

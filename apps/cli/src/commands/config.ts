@@ -11,6 +11,8 @@ export interface ConfigReport {
   exists: boolean;
   schemaValid: boolean;
   schemaError?: string;
+  /** Declared or defaulted schema version; undefined when the file is absent or invalid. */
+  schemaVersion?: number;
   pinsCount: number;
   skipCount: number;
   backupDir: string;
@@ -47,6 +49,7 @@ export async function buildConfigReport(paths: PathResolution): Promise<ConfigRe
         .join('; ');
     } else {
       report.schemaValid = true;
+      report.schemaVersion = result.data.version;
       report.pinsCount = Object.values(result.data.pins).reduce(
         (acc, pluginPins) => acc + Object.keys(pluginPins).length,
         0,
@@ -69,7 +72,7 @@ export function formatConfigReport(report: ConfigReport): string {
     `applist:     ${report.applistPath}`,
     `source:      ${report.source}`,
     `exists:      ${report.exists ? 'yes' : 'no (will be created on first write)'}`,
-    `schema:      ${report.schemaValid ? 'valid' : `INVALID — ${report.schemaError ?? 'unknown'}`}`,
+    `schema:      ${report.schemaValid ? `valid${report.schemaVersion ? ` (v${report.schemaVersion})` : ''}` : `INVALID — ${report.schemaError ?? 'unknown'}`}`,
     `pins:        ${report.pinsCount}`,
     `skip:        ${report.skipCount}`,
     `backups dir: ${report.backupDir}`,

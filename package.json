@@ -14,7 +14,7 @@
     "format": "biome format --write .",
     "adr:check": "node scripts/check-adrs.mjs",
     "shellcheck": "git ls-files '*.sh' | xargs shellcheck --severity=warning",
-    "deslop:lint": "uvx --from git+https://github.com/jv-k/deslopper@cd56f1ac2bacb19e53681670c26e231cc07f0d12 deslopper lint",
+    "deslop:lint": "uvx --from git+https://github.com/jv-k/deslopper@038e6b5170b4d5d97eff143a17475181d73aea99 deslopper lint",
     "sandcastle": "npx tsx .sandcastle/main.mts",
     "prepare": "simple-git-hooks || true"
   },

@@ -29,7 +29,7 @@ jobs:
           for sha in $(git rev-list "$BASE..$HEAD"); do
             subject=$(git log -1 --format=%s "$sha")
             case "$subject" in
-              "Merge "*) continue ;;
+              "Merge "* | "merge: "*) continue ;;
             esac
             if ! printf '%s' "$subject" | grep -qE "$pattern"; then
               echo "::error::Not a Conventional Commit: $subject"

@@ -13,9 +13,12 @@ sample size of one".
 The playbook has since added `stacks/js-tui.md`, a stack for a Node command-line utility that wraps
 other tools. It was generalised from macup, so its layer table restates choices macup already made
 one ADR at a time: citty (0006), raw DECSTBM (0005), `bun build --compile` (0007), the ExecRunner
-seam (0010), Biome (0013), Vitest (0014), tsup (0015), npm with provenance and a Homebrew tap
-(0018), and the Node 20 plus ES2022 baseline (0020). The premise 0002 rests on, that no menu entry
-fits, is now false, and the stack-as-ADR rule wants the pick on the record either way.
+seam (0010), YAML plus Zod for config (0004), the pnpm and Turborepo monorepo (0009), Biome (0013),
+Vitest (0014) and the hermetic fixtures and headless VT it runs (0012), tsup (0015), npm with
+provenance and a Homebrew tap (0018), and the Node 20 plus ES2022 baseline (0020). Every layer the
+entry names traces to an ADR here, and it imports nothing macup does not already do. The premise
+0002 rests on, that no menu entry fits, is now false, and the stack-as-ADR rule wants the pick on
+the record either way.
 
 Two things are worth stating plainly rather than leaving for a reader to notice. The entry was
 written at sample size one, which is the condition 0002 called premature, so the playbook has taken
@@ -46,9 +49,14 @@ that a stack is a starting point and the project records its picks and swaps.
 - The next tool or layer choice defaults to the menu entry, and a deliberate divergence from it is a
   swap ADR here rather than an unrecorded difference.
 - macup is behind the stack it seeded: Biome `^1.9.4` against the entry's 2.5.3, Vitest `^2.1.8`
-  against 4.1.10, and citty `^0.1.6` against 0.2.2, which matters most of the three because citty is
-  0.x and its minors carry breaking changes. That lag is now drift against a named default instead
-  of an invisible fact. Each upgrade is its own change, not this ADR's.
+  against 4.1.10, and citty `^0.1.6` against 0.2.2. That lag is now drift against a named default
+  instead of an invisible fact. Each upgrade is its own change, not this ADR's.
+- citty is the one of those three to plan rather than schedule. Being 0.x, `^0.1.6` pins the minor
+  rather than floating, so 0.2.x cannot arrive by accident, and the 0.2.0 macup is held back from
+  carried three breaking changes: a swap to `node:util.parseArgs` for arg parsing, parsed-optional
+  and enum type safety, and a change to how negative boolean usage prints. Against a subcommand tree
+  generated from plugin manifests through a citty factory (0006), that reads as a port rather than a
+  bump. Worth weighing that citty sat between 0.1.6 in February 2024 and 0.2.0 in January 2026.
 - One fact now has two homes, the per-choice ADRs here and the layer table in the playbook, which is
   the drift risk the single-source-of-truth rule warns about. The split that keeps it honest: the
   ADRs hold why macup chose a thing, the entry holds what the house default is. Neither should

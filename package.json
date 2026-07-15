@@ -25,6 +25,6 @@
     "turbo": "^2.3.0"
   },
   "simple-git-hooks": {
-    "pre-commit": "FILES=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.markdown' '*.mdx' | grep -Ev '(^|/)(node_modules|\\.sandcastle|\\.github/chatmodes|docs/superpowers|\\.worktrees)/' || true); [ -z \"$FILES\" ] && exit 0; echo \"$FILES\" | xargs pnpm deslop:lint"
+    "pre-commit": "FILES=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.markdown' '*.mdx' | grep -Ev '(^|/)(node_modules|\\.sandcastle|\\.github/chatmodes|docs/superpowers|\\.worktrees)/' || true); [ -z \"$FILES\" ] && exit 0; echo \"$FILES\" | xargs env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm deslop:lint"
   }
 }

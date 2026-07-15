@@ -16,8 +16,21 @@ describe('docsMetadata', () => {
     const list = brew?.commands.find((c) => c.name === 'list');
     const flags = list?.flags.map((f) => f.flag) ?? [];
     expect(flags).toEqual(
-      expect.arrayContaining(['--only-outdated', '--all', '--json', '--cask', '--formula']),
+      expect.arrayContaining([
+        '--only-outdated',
+        '--all',
+        '--json',
+        '--cask',
+        '--formula',
+        '--subtype',
+      ]),
     );
+  });
+
+  it('does not document --subtype on single-subtype plugins', () => {
+    const npm = docsMetadata().plugins.find((p) => p.id === 'npm');
+    const flags = npm?.commands.flatMap((c) => c.flags.map((f) => f.flag)) ?? [];
+    expect(flags).not.toContain('--subtype');
   });
 
   it('gives every documented flag a non-empty description', () => {

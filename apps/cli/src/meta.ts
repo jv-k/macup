@@ -13,7 +13,7 @@
 
 import { FLAG_COMMAND_ALIASES } from './cli/argv';
 import { OUTDATED_ARGS } from './commands/outdated';
-import { commandsFor, flagsForCommand } from './completions/shared';
+import { SUBTYPE_COMMANDS, commandsFor, flagsForCommand } from './completions/shared';
 import { ApplistKeySchema } from './config/schema';
 import { BUILTIN_PLUGINS } from './plugins/registry';
 import type { Plugin } from './plugins/types';
@@ -93,6 +93,7 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
   '--verbose': 'Tee subprocess output to scrollback for a grep-able copy.',
   '--cask': 'Scope the command to Homebrew casks.',
   '--formula': 'Scope the command to Homebrew formulas.',
+  '--subtype': 'Scope the command to one subtype by name (e.g. `--subtype=casks`).',
 };
 
 // Top-level flags, with the prose used for the reference. Mirrors the
@@ -195,13 +196,22 @@ function pluginDoc(plugin: Plugin): PluginDoc {
       remove: m.capabilities.remove,
       outdated: m.capabilities.outdated,
     },
-    commands: commandsFor(plugin).map((name) => ({
-      name,
-      flags: flagsForCommand(plugin, name).map((flag) => ({
-        flag,
-        description: FLAG_DESCRIPTIONS[flag] ?? '',
-      })),
-    })),
+    commands: commandsFor(plugin).map((name) => {
+      // from-manifest.ts also defines --subtype on subtype-aware plugins;
+      // completions offer only the --cask/--formula shortcuts, so add it
+      // here for the docs.
+      const flags = flagsForCommand(plugin, name);
+      if ((m.subtypes?.length ?? 0) > 1 && SUBTYPE_COMMANDS.has(name)) {
+        flags.push('--subtype');
+      }
+      return {
+        name,
+        flags: flags.map((flag) => ({
+          flag,
+          description: FLAG_DESCRIPTIONS[flag] ?? '',
+        })),
+      };
+    }),
   };
 }
 

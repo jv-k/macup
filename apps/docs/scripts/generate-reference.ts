@@ -87,7 +87,7 @@ function flagAvailability(meta: DocsMetadata): string {
     out += `| \`${cmd}\` | ${cells.join(' | ')} |\n`;
   }
   out += '\n`outdated` is top-level (`macup outdated`); the rest are per-plugin ';
-  out += '(`macup brew list`). `--cask` and `--formula` are Homebrew only.\n';
+  out += '(`macup brew list`). `--cask`, `--formula`, and `--subtype` are Homebrew only.\n';
   return out;
 }
 

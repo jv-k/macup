@@ -1,11 +1,18 @@
 import { z } from 'zod';
 
 // The applist schema version this build reads and writes. Bump only on a
-// breaking shape change, and add a migration in the store's load path.
-// Files without a `version:` field are read as SCHEMA_VERSION (a v1 file
-// predates the field); a file declaring a HIGHER version than this is
-// rejected at load — it was written by a newer macup. See ADR/issue #7.
+// breaking shape change, and add a migration in the store's load path. A
+// file declaring a HIGHER version is rejected at load — it was written by
+// a newer macup. See ADR/issue #7.
 export const SCHEMA_VERSION = 1;
+
+// The version at which the `version:` field was introduced. A file with no
+// `version:` predates the field and is therefore exactly this version — so
+// the schema default is this literal, NOT SCHEMA_VERSION. Keeping them
+// separate means a future SCHEMA_VERSION bump won't silently reinterpret a
+// legacy version-less file as the new schema; it stays v1 until an explicit
+// migration upgrades it.
+export const INITIAL_SCHEMA_VERSION = 1;
 
 // ApplistKey identifies a list of tracked package names within applist.yaml.
 // Keys are dotted paths matching the in-file structure: top-level lists use
@@ -24,10 +31,11 @@ export const BrewListSchema = z
   .default({ formulas: [], casks: [] });
 
 export const ApplistSchema = z.object({
-  // Absent in v1 files (the field postdates them), so it defaults rather
-  // than being required. Load-time logic rejects versions above what this
-  // build knows; zod only guarantees it's a positive integer.
-  version: z.number().int().positive().default(SCHEMA_VERSION),
+  // Absent in v1 files (the field postdates them), so it defaults to the
+  // introduction version rather than being required. Load-time logic
+  // rejects versions above what this build knows; zod only guarantees a
+  // positive integer.
+  version: z.number().int().positive().default(INITIAL_SCHEMA_VERSION),
   appstore: StringList,
   npm: StringList,
   pnpm: StringList,

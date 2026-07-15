@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { parse } from 'yaml';
 import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
 import type { PathResolution } from '../config/paths';
-import { ApplistSchema } from '../config/schema';
+import { ApplistSchema, SCHEMA_VERSION } from '../config/schema';
 
 export interface ConfigReport {
   applistPath: string;
@@ -47,6 +47,13 @@ export async function buildConfigReport(paths: PathResolution): Promise<ConfigRe
       report.schemaError = result.error.issues
         .map((i) => `${i.path.join('.')}: ${i.message}`)
         .join('; ');
+    } else if (result.data.version > SCHEMA_VERSION) {
+      // Mirror the store's load-time rejection: a newer-than-supported
+      // version is not something this build can safely read, so `--config`
+      // must not call it valid.
+      report.schemaValid = false;
+      report.schemaVersion = result.data.version;
+      report.schemaError = `schema version ${result.data.version} is newer than this macup supports (${SCHEMA_VERSION}) — upgrade macup`;
     } else {
       report.schemaValid = true;
       report.schemaVersion = result.data.version;

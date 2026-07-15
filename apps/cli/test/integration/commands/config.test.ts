@@ -68,6 +68,15 @@ describe('buildConfigReport', () => {
     expect(r.schemaError).toContain('formulas');
   });
 
+  it('reports a newer-than-supported version as invalid, matching the store', async () => {
+    const p = paths();
+    await writeFile(p.applistPath, 'version: 999\nnpm:\n  - typescript\n', 'utf8');
+    const r = await buildConfigReport(p);
+    expect(r.schemaValid).toBe(false);
+    expect(r.schemaVersion).toBe(999);
+    expect(r.schemaError).toMatch(/newer than this macup/);
+  });
+
   it('surfaces the deprecation warning and legacy migration hint', async () => {
     const r = await buildConfigReport({
       ...paths(),

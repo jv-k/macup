@@ -324,3 +324,46 @@ describe('ConfigStore — backup integrity', () => {
     await expect(readdir(backupDir)).rejects.toThrow(); // dir never created
   });
 });
+
+describe('ConfigStore — schema version (#7)', () => {
+  it('loading a version-less file and not mutating leaves it byte-identical', async () => {
+    const original = 'brew:\n  formulas:\n    - git\n';
+    await seed(original);
+    const s = await store();
+    const r = await s.save('noop');
+    expect(r.changed).toBe(false);
+    expect(await readFile(applistPath, 'utf8')).toBe(original); // no surprise stamp on read
+  });
+
+  it('a real mutation stamps version: 1 at the top of the file', async () => {
+    await seed('brew:\n  formulas:\n    - git\n');
+    const s = await store();
+    s.add('brew.formulas', ['curl']);
+    await s.save('add');
+    const written = await readFile(applistPath, 'utf8');
+    expect(written.startsWith('version: 1\n')).toBe(true);
+    expect(written).toContain('curl');
+  });
+
+  it('a brand-new config is written with a version field', async () => {
+    const s = await store(); // no file on disk yet
+    s.add('npm', ['typescript']);
+    await s.save('add');
+    expect(await readFile(applistPath, 'utf8')).toContain('version: 1');
+  });
+
+  it('preserves an explicit version rather than duplicating it', async () => {
+    await seed('version: 1\nbrew:\n  formulas:\n    - git\n');
+    const s = await store();
+    s.add('brew.formulas', ['curl']);
+    await s.save('add');
+    const written = await readFile(applistPath, 'utf8');
+    expect(written.match(/version:/g)?.length).toBe(1);
+  });
+
+  it('rejects a config whose version is newer than this build supports', async () => {
+    await seed('version: 999\nnpm:\n  - typescript\n');
+    const s = new ConfigStore({ applistPath, backupDir });
+    await expect(s.load()).rejects.toThrow(/newer than this macup/);
+  });
+});

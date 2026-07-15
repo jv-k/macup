@@ -21,6 +21,7 @@ export const FLAG_COMMAND_ALIASES = [
   'cleanup',
   'restore',
   'undo',
+  'doctor',
   'logo',
   'plugins',
   'install-completions',

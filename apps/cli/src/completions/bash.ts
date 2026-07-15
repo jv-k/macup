@@ -25,12 +25,17 @@ export function generateBashCompletions(plugins: readonly Plugin[]): string {
     )
     .join('\n');
 
+  // shellcheck disable=SC2207: the $(compgen ...) word-splitting below is the
+  // standard bash-completion idiom. mapfile/read -a would be cleaner but need
+  // bash 4+, and macOS ships bash 3.2 — so keep the array-split and silence the
+  // warning file-wide. Placed in the header (before the first command) so the
+  // directive applies to the whole generated script.
   return `# Auto-generated from plugin manifests. Do not edit.
+# shellcheck disable=SC2207
 
 _macup() {
-  local cur prev
+  local cur
   cur="\${COMP_WORDS[COMP_CWORD]}"
-  prev="\${COMP_WORDS[COMP_CWORD-1]}"
 
   if [[ \${COMP_CWORD} -eq 1 ]]; then
     COMPREPLY=( $(compgen -W "${ids.join(' ')} ${globalFlags}" -- "$cur") )

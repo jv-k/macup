@@ -1,0 +1,71 @@
+---
+title: Safety model
+description: Why macup is cautious by default and what each guard actually protects.
+---
+
+# Safety model
+
+macup is built to be reversible where it can be and explicit where it cannot. Three guards do the work: a backup taken before every config change, a `--dry-run` preview that runs nothing, and a confirmation before a system-wide run. Each protects a different thing. Knowing which is which keeps you from expecting a rollback that does not exist.
+
+## What macup protects
+
+macup protects your config manifest, `applist.yaml`: the list of packages you track, your pins, and your skips. It does not protect installed package versions. Backups copy the manifest, not your packages.
+
+There is no package rollback. After `macup brew update` upgrades `jq`, restoring a backup will not move `jq` back. A restore rewrites `applist.yaml` and nothing else. To hold a package at a known-good version, [pin it](/docs/concepts/selective-updates) before you update.
+
+<Callout type="warn">
+
+Backups and restore cover the manifest only. Use Time Machine or a manager's own snapshot if you need to revert installed binaries.
+
+</Callout>
+
+## Backups guard config edits
+
+Every command that edits `applist.yaml` writes a timestamped copy first, then saves. The manifest-editing commands are `add`, `remove`, `pin`, `unpin`, `skip`, and `unskip`. The package commands, `install` and `update`, never touch the manifest and so write no backup.
+
+```bash
+# Writes applist_<op>_<timestamp>.yaml, then saves
+macup brew add cmake ripgrep
+macup npm pin typescript 5.3.3
+macup brew skip legacy-dep
+```
+
+The backup is the file as it was before the edit. If an edit goes wrong, you can [restore](/docs/guides/safe-updates) the prior state.
+
+Two cases write no backup, by design:
+
+- A no-op edit. If the serialized YAML is byte-for-byte identical to what is on disk, macup saves nothing and writes no backup. A cosmetic reflow alone does not count as a change.
+- The first save. With no `applist.yaml` on disk yet, there is nothing to copy.
+
+This is smart-backup: a copy only when an actual change is about to overwrite an existing file. The backup directory stays free of duplicates and empty saves.
+
+## --dry-run guards execution
+
+`--dry-run` is a per-command flag on `install` and `update`. It prints every command it would run and runs none of them. No subprocess executes: each plugin returns before reaching the runner.
+
+```bash
+# Preview a system-wide update; nothing runs
+macup all update --dry-run
+```
+
+Each line prints as `[dry-run] <cmd>`. Use it to read exactly what an upgrade will do before you commit to it. See [safe updates](/docs/guides/safe-updates) for the full output shape.
+
+## Confirmation guards bulk runs
+
+The composite [`all`](/docs/reference/all) plugin asks before a system-wide `install` or `update` when stdout is a TTY:
+
+```text
+This updates 12 package(s) across all managers. Continue?
+```
+
+The prompt defaults to yes, so Enter proceeds and declining cancels. Single-manager runs such as `macup brew update` are not gated: their scope is narrow and named. Reach for `--dry-run` first when you want a look at one manager before it runs.
+
+## Why this split
+
+Config edits are cheap to reverse, so macup makes them reversible automatically. Package upgrades are not cheap to reverse, so macup makes them explicit instead: preview with `--dry-run`, confirm a bulk `all` run, pin anything you cannot afford to move. The guards match the cost of the mistake they prevent.
+
+## See also
+
+- [Safe updates](/docs/guides/safe-updates) is the how-to for preview, restore, and cleanup.
+- [Configuration](/docs/guides/configuration) covers the applist and where backups live.
+- [Selective updates](/docs/concepts/selective-updates) explains how pins hold a package at a known-good version.

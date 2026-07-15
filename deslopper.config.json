@@ -1,7 +1,7 @@
 {
   "extends": ["deslopper:recommended"],
   "files": {
-    "include": ["**/*.md", "**/*.markdown"],
+    "include": ["**/*.md", "**/*.markdown", "**/*.mdx"],
     "exclude": [
       ".sandcastle/**",
       ".github/chatmodes/**",

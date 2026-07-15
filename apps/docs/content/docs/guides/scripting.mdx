@@ -1,0 +1,139 @@
+---
+title: Scripting macup
+description: JSON output, exit codes, and non-TTY behavior for automation.
+---
+
+# Scripting macup
+
+macup is built to run unattended. Two commands emit structured JSON, exit
+codes are stable at the coarse level, and the interactive UI steps aside when
+stdout or stdin is not a terminal. See [Verbosity](/docs/guides/verbosity) for
+the output modes.
+
+## JSON output
+
+Exactly two commands take `--json`: the cross-plugin `outdated` command and the
+per-plugin `list` subcommand. No other command emits JSON.
+
+```bash
+# Cross-plugin outdated report as JSON
+macup outdated --json
+
+# Tracked packages for one plugin as JSON
+macup brew list --json
+```
+
+With `--json`, `outdated` skips the pill header and the spinner, so nothing
+leaks onto stdout before the payload.
+
+`macup outdated --json` emits one object:
+
+```json
+{
+  "totalOutdated": 3,
+  "plugins": [
+    {
+      "pluginId": "brew",
+      "displayName": "Homebrew",
+      "available": true,
+      "outdated": []
+    }
+  ]
+}
+```
+
+`outdated` queries every registered plugin in parallel and isolates per-plugin
+failures: a missing binary yields `available: false` with a `reason` instead of
+aborting the report. The composite `all` plugin is excluded so packages are not
+double-counted. See [Checking what is outdated](/docs/guides/checking-outdated)
+for the rendered, human-readable view.
+
+`<plugin> list --json` emits a `PackageStatus[]` array. By default it lists
+tracked packages from your applist. Pass `--all` for every installed package,
+and `--only-outdated` to keep only outdated entries.
+
+```bash
+# JSON of every installed brew package, not just tracked ones
+macup brew list --json --all
+
+# Outdated tracked brew packages only
+macup brew list --json --only-outdated
+```
+
+## Parsing with jq
+
+```bash
+# Total outdated count
+macup outdated --json | jq '.totalOutdated'
+
+# Plugin ids that have outdated packages
+macup outdated --json | jq -r '.plugins[] | select(.outdated | length > 0) | .pluginId'
+
+# Names of outdated tracked brew packages
+macup brew list --json --only-outdated | jq -r '.[].ref.name'
+```
+
+Flag spellings are exact: `--json`, `--all`, `--only-outdated` (hyphenated, not
+`--onlyOutdated`).
+
+## Exit codes
+
+Codes are stable at the coarse level: `0` success, `1` any failure, `130`
+interrupted. The [exit codes reference](/docs/reference/exit-codes) is the
+canonical list.
+
+On SIGINT, macup cancels in-flight subprocesses, then exits `130`.
+
+A failing subprocess does **not** propagate its own exit code. The runner
+throws a generic error whose message includes the subprocess code, and macup
+exits `1`. Do not read the subprocess's exit status from macup's.
+
+## Non-TTY behavior
+
+There is no single non-interactive switch. Code paths check different streams,
+so redirecting one changes behavior differently from redirecting another.
+
+- Wizard (no-arg run) checks `stdin`. When stdin is not a TTY, macup prints
+  the Apple logo plus a one-line hint
+  (`macup — N plugin(s). Run with --help or a command.`) and returns. The
+  interactive picker runs only when stdin is a TTY.
+- `outdated` spinner checks `stdout`. Piped, the report still prints, just
+  without the spinner.
+- `all` confirmation checks `stdout`. Piped, `macup all update` and
+  `macup all install` proceed without the `Continue?` prompt.
+- Color is auto-disabled when stdout is not a TTY or when `NO_COLOR` is set.
+  Piped output is uncolored without a flag.
+
+## Status bar in CI
+
+The pinned status bar needs a TTY with scroll-region support. Force it off when
+your terminal or CI runner misbehaves:
+
+```bash
+# Disable the pinned status bar (e.g. in CI)
+MACUP_STATUS_BAR=off macup all update
+```
+
+[Disable the status bar](/docs/recipes/disable-the-status-bar) covers the
+variable, the `$TERM` values that disable the bar on their own, and what turning
+it off does and does not change. The
+[environment variables reference](/docs/reference/environment-variables) lists
+every variable macup reads.
+
+## Keeping stdout clean
+
+`--debug` suppresses the bar and routes the full shell-call trace to stderr, so
+stdout stays JSON-only:
+
+```bash
+# Full trace to stderr, JSON on stdout
+macup --debug outdated --json
+```
+
+Preview commands without running them with `--dry-run` (see
+[Safe updates](/docs/guides/safe-updates)):
+
+```bash
+# Print the commands that would run, without executing
+macup brew update --dry-run
+```

@@ -1,0 +1,104 @@
+---
+title: Use macup in CI
+description: Run macup unattended with JSON output, stable exit codes, and the status bar off.
+---
+
+# Use macup in CI
+
+macup runs without a terminal. JSON output stays clean, exit codes are stable at
+the coarse level, and the interactive UI steps aside when stdin or stdout is not
+a TTY. See [Scripting macup](/docs/guides/scripting) for the full reference.
+
+## Read the report as JSON
+
+`macup outdated --json` emits one object. The pill header and the spinner are
+suppressed, so nothing leaks onto stdout before the payload.
+
+```bash
+# Cross-plugin outdated report as JSON
+macup outdated --json
+```
+
+Pipe it into [jq](/docs/recipes/json-into-jq) to extract what your job needs:
+
+```bash
+# Total outdated count
+macup outdated --json | jq '.totalOutdated'
+```
+
+## Gate a job on outdated packages
+
+Fail the build when anything tracked is behind:
+
+```bash
+# Exit non-zero if any package is outdated
+count=$(macup outdated --json | jq '.totalOutdated')
+if [ "$count" -gt 0 ]; then
+  echo "$count package(s) outdated"
+  exit 1
+fi
+```
+
+`outdated` isolates per-plugin failures. A missing binary yields
+`available: false` with a `reason` instead of aborting the report, so the count
+stays meaningful on a partial runner.
+
+## Exit codes
+
+Codes are stable at the coarse level: `0` success, `1` any failure, `130`
+interrupted. Branch on these, not on a subprocess's own status: a failing
+subprocess does not propagate its own exit code. The runner throws a generic
+error and macup exits `1`. The
+[exit codes reference](/docs/reference/exit-codes) is the canonical list.
+
+## Turn off the status bar
+
+The pinned status bar needs a TTY with scroll-region support. Force it off on
+runners that misbehave:
+
+```bash
+# Disable the pinned status bar
+MACUP_STATUS_BAR=off macup all update
+```
+
+[Disable the status bar](/docs/recipes/disable-the-status-bar) covers the
+variable in full, and the
+[environment variables reference](/docs/reference/environment-variables) lists
+every variable macup reads.
+
+## Non-TTY behavior
+
+There is no single non-interactive switch. Different code paths check different
+streams, so each behaves on its own.
+
+- The wizard checks stdin. With stdin not a TTY, the no-arg run prints a one-line
+  hint and returns instead of opening the picker.
+- The `outdated` spinner checks stdout. Piped, the report still prints, without
+  the spinner.
+- The `all` confirmation checks stdout. Piped, `macup all update` and
+  `macup all install` proceed without the `Continue?` prompt.
+- Color is auto-disabled when stdout is not a TTY or when `NO_COLOR` is set.
+
+<Callout type="warn">
+
+Because piped `all` runs skip the confirmation, scope what you change. Pin or
+skip risky packages first, or preview with `macup all update --dry-run`.
+
+</Callout>
+
+## Keep stdout JSON-only
+
+`--debug` suppresses the bar and routes the full shell-call trace to stderr, so
+stdout carries only the JSON payload:
+
+```bash
+# Full trace to stderr, JSON on stdout
+macup --debug outdated --json
+```
+
+## See also
+
+- [Scripting macup](/docs/guides/scripting) covers JSON output and non-TTY behavior in full.
+- [Exit codes](/docs/reference/exit-codes) is the canonical status-code list.
+- [Environment variables](/docs/reference/environment-variables) lists every variable macup reads.
+- [Pipe JSON into jq](/docs/recipes/json-into-jq) builds the queries above.

@@ -1,0 +1,116 @@
+---
+title: Quick start
+description: Install macup and update your machine safely in five minutes.
+---
+
+# Quick start
+
+This is the five-minute path from install to your first safe update. The
+examples use Homebrew. Preview any change first with `--dry-run`; the wizard
+confirms the exact command before running it.
+
+<Steps>
+
+<Step>
+
+### Install macup
+
+macup is macOS only and needs Node 20 or newer.
+
+```bash
+npm i -g macup
+```
+
+Verify it runs:
+
+```bash
+macup --version
+```
+
+See [Installation](/docs/getting-started/installation) for the pnpm, npx, and
+bun variants.
+
+</Step>
+
+<Step>
+
+### Run the wizard
+
+Run `macup` with no arguments. It opens an interactive menu: pick a backend,
+pick an action, and confirm the exact command before it runs.
+
+```bash
+macup
+```
+
+The wizard is the front door for exploring.
+[The wizard](/docs/getting-started/the-wizard) walks through every screen.
+
+</Step>
+
+<Step>
+
+### See what is outdated
+
+One command checks every backend and prints a single summary.
+
+```bash
+macup outdated
+```
+
+Add `--json` for a machine-readable version you can pipe into scripts.
+
+```bash
+macup outdated --json
+```
+
+</Step>
+
+<Step>
+
+### Update safely
+
+Preview an upgrade with `--dry-run` first. The preview prints the commands and
+changes nothing.
+
+```bash
+macup brew update --dry-run
+```
+
+When the plan looks right, run it for real.
+
+```bash
+macup brew update
+```
+
+<Callout type="info">
+  `update` upgrades only your tracked, outdated packages. Pass `--all` to
+  upgrade everything Homebrew reports. See
+  [Safe updates](/docs/guides/safe-updates).
+</Callout>
+
+</Step>
+
+<Step>
+
+### Track and commit
+
+Tracking a package records it in `applist.yaml`. It installs nothing.
+
+```bash
+macup brew add ripgrep
+```
+
+Commit `applist.yaml` to your dotfiles, and a new Mac is one `macup` run away
+from the same setup.
+
+</Step>
+
+</Steps>
+
+## Where to next
+
+- [Checking what is outdated](/docs/guides/checking-outdated): the summary and per-plugin listings.
+- [Selective updates](/docs/concepts/selective-updates): pins, skips, and the update scope.
+- [Configuration](/docs/guides/configuration): the `applist.yaml` manifest and the dotfiles workflow.
+- [Scripting macup](/docs/guides/scripting): `--json`, exit codes, and CI.

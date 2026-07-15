@@ -1,0 +1,156 @@
+---
+title: How macup works
+description: The host-plus-plugins model, command shape, availability filtering, and tracked-vs-installed.
+---
+
+# How macup works
+
+macup is a host, not a package manager. It owns the CLI shell, the config
+file, and the output UI. Each plugin owns the semantics of one backend
+(Homebrew, npm, the App Store, and so on). The registry is the only seam
+between plugins and the rest of the app, and every command a plugin exposes is
+derived from its manifest. So adding a backend touches one file plus one
+registry line, and nothing in dispatch, help, or completions.
+
+## Command shape
+
+```bash
+macup <plugin> <command> [args]
+# <plugin>  one of: brew, npm, pnpm, appstore, xcode, system, all
+# <command> derived from the plugin's manifest (list, install, update, ...)
+```
+
+Each registered plugin becomes a top-level subcommand. Its subcommands come
+from the manifest, so `brew` and `npm` expose the same generic command set
+unless their capabilities differ.
+
+## Built-in plugins
+
+There are seven built-ins. Six are individual backends. `all` is a composite
+built from them.
+
+| Plugin     | Name                              | Requires on PATH                   |
+| ---------- | --------------------------------- | ---------------------------------- |
+| `brew`     | Homebrew                          | `brew`                             |
+| `npm`      | npm (global)                      | `npm`                              |
+| `pnpm`     | pnpm (global)                     | `pnpm`                             |
+| `appstore` | Mac App Store                     | `mas`                              |
+| `xcode`    | Xcode (app + Command Line Tools)  | `mas`, `xcode-select`, `pkgutil`   |
+| `system`   | macOS system updates              | `softwareupdate`                   |
+| `all`      | All package managers              | none                               |
+
+Every built-in is darwin-only.
+
+## Availability filtering
+
+A plugin registers only when both conditions hold:
+
+- its `supportedOS` includes the current platform (darwin), and
+- every binary in its `requires` resolves on `PATH`.
+
+The PATH probe is which-style: it splits `$PATH` and checks each directory for
+an executable entry. If a plugin fails either check it never registers, so its
+subcommand does not appear.
+
+To see what is available and why, ask:
+
+```bash
+macup --plugins
+# lists each built-in and whether it is available here.
+# unavailable plugins carry a reason:
+#   missing: <bins>                       # required binary not on PATH
+#   unsupported on <platform> (needs <os>)  # OS mismatch
+# `macup plugins` (no dashes) rewrites to `macup --plugins`.
+```
+
+`all` is always reported available. It has no `requires`.
+
+## The composite `all` plugin
+
+`all` fans `list`, `install`, and `update` out across each constituent and
+isolates per-plugin failures. Each constituent runs inside a try/catch. A
+failure is logged and the run continues:
+
+```bash
+macup all update
+# upgrades each constituent's outdated set, system-wide.
+# a missing or broken backend is skipped, not fatal:
+#   [appstore] skipped: <message>
+```
+
+`all` checks each constituent lazily, during the run, rather than up front. It
+exposes only `list`, `install`, and `update` (no `add`, `remove`, `pin`, or
+`skip`). `all install` installs each constituent's own tracked-but-not-installed
+set. It ignores any package names you pass.
+
+## Tracked vs installed
+
+macup tracks a curated set in `applist.yaml`, separate from everything
+installed on the machine. `list` and `update` default to that tracked set.
+`--all` widens to whatever the backend reports.
+
+```bash
+macup brew list                 # only packages tracked in applist.yaml
+macup brew list --all           # everything Homebrew has installed
+macup brew list --only-outdated # tracked packages that are outdated
+macup brew list --cask          # scope to casks (omit the flag to list both)
+
+macup npm update                # upgrade outdated tracked packages
+macup npm update --all          # upgrade every outdated package
+macup npm update typescript     # explicit names override the tracked scope
+```
+
+`add`, `remove`, `pin`, and `skip` mutate `applist.yaml` only and install
+nothing. They exist on plugins that carry config keys (`brew`, `npm`, `pnpm`,
+`appstore`). `xcode` and `system` have none, so they get no such subcommands.
+See [Configuration](/docs/guides/configuration) for the file and
+[Selective updates](/docs/concepts/selective-updates) for pins and skips.
+
+## Seeing everything outdated at once
+
+```bash
+macup outdated         # one pane across every registered plugin
+macup outdated --json  # the same report as a JSON payload
+```
+
+`outdated` runs the constituents in parallel with per-plugin error isolation
+and excludes the composite `all` to avoid double-counting. See
+[Checking what is outdated](/docs/guides/checking-outdated) for the full view.
+
+## Dry runs
+
+`install` and `update` take `--dry-run`. The flag is threaded to the plugin,
+which prints what it would run and executes nothing:
+
+```bash
+macup brew update --dry-run
+# [dry-run] <command>   ... per package, nothing is run
+```
+
+See [Safe updates](/docs/guides/safe-updates) for the full dry-run output and
+the automatic backups that protect config changes.
+
+## Adding a package manager
+
+Adding a backend is one new file in `apps/cli/plugins/` plus one line in the
+registry's `INDIVIDUAL_PLUGINS`. Because every command derives from the
+manifest, dispatch, help, and completions need no edits. A plugin's `check()`
+throws `ErrPluginUnavailable` (not a bare `Error`) when its backend is missing,
+which is what `all` catches to skip it. See the
+[Plugins reference](/docs/reference/plugins) for the contract.
+
+## Bare words become flags
+
+A handful of top-level words are rewritten to flags before parsing, so the
+no-dash spelling works:
+
+```bash
+macup version  ->  macup --version
+macup plugins  ->  macup --plugins
+macup config   ->  macup --config
+# also: cleanup, restore, logo, install-completions
+```
+
+Running `macup` with no args or flags launches the interactive
+[wizard](/docs/getting-started/the-wizard). Unknown top-level flags are rejected with
+`error: unknown option <flag>` and exit 1.

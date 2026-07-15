@@ -18,7 +18,9 @@ export function commandsFor(plugin: Plugin): string[] {
 // arg defs in src/commands/from-manifest.ts — keep in sync (that file is the
 // source of truth). Subtype shortcuts (--cask/--formula) are only offered for
 // plugins that declare more than one subtype (e.g. brew).
-const SUBTYPE_COMMANDS = new Set(['list', 'install', 'update', 'add', 'remove']);
+// Exported for macup/meta: the docs flag matrix marks --subtype on these
+// commands (completions deliberately offer only the shortcut spellings).
+export const SUBTYPE_COMMANDS = new Set(['list', 'install', 'update', 'add', 'remove']);
 
 export function flagsForCommand(plugin: Plugin, command: string): string[] {
   const flags: string[] = [];

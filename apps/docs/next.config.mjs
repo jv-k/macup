@@ -14,6 +14,16 @@ const config = {
   turbopack: {
     root: join(here, '..', '..'),
   },
+  // Installation, quick-start, and the-wizard moved from guides/ into the
+  // getting-started/ section. Redirect the old URLs so external links survive.
+  async redirects() {
+    const moved = ['installation', 'quick-start', 'the-wizard'];
+    return moved.map((slug) => ({
+      source: `/docs/guides/${slug}`,
+      destination: `/docs/getting-started/${slug}`,
+      permanent: true,
+    }));
+  },
 };
 
 export default withMDX(config);

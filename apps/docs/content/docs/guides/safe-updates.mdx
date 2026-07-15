@@ -1,0 +1,153 @@
+---
+title: Safe updates
+description: Preview changes with --dry-run, recover from automatic backups, and confirm bulk runs.
+---
+
+# Safe updates
+
+macup gives you three ways to stay cautious: preview a run before it touches
+anything, recover from a backup taken before every config change, and confirm
+before a system-wide update.
+
+## Preview with --dry-run
+
+`--dry-run` is a per-command flag on `install` and `update`. It prints every
+command that would run and runs none of them.
+
+```bash
+# Preview brew installs of tracked packages — runs nothing
+macup brew install --dry-run
+
+# Preview brew upgrades of outdated tracked packages
+macup brew update --dry-run
+
+# Preview npm global installs
+macup npm install --dry-run
+```
+
+Each line is printed in the form `[dry-run] <cmd>`:
+
+```text
+[dry-run] brew install git
+[dry-run] brew upgrade jq
+[dry-run] npm install -g typescript
+[dry-run] pnpm add -g eslint
+[dry-run] mas install 497799835
+[dry-run] xcode-select --install
+[dry-run] softwareupdate --install macOS --verbose
+```
+
+No subprocess executes: each plugin returns before reaching the runner. Pair
+`--dry-run` with `--verbose` / `-v` for more detail.
+
+`--all` (on `update` only) extends the preview to every outdated package, not
+just tracked ones:
+
+```bash
+# Preview a system-wide update across every manager
+macup all update --dry-run
+```
+
+## Automatic backups
+
+Every config mutation writes a timestamped copy of your `applist.yaml` before
+overwriting it. The operations that trigger a backup are `add`, `remove`,
+`pin`, `unpin`, `skip`, and `unskip`: the commands that edit the
+[applist](/docs/guides/configuration), not the ones that install packages.
+
+```bash
+# Each writes applist_<op>_<timestamp>.yaml before saving
+macup brew add cmake ripgrep
+macup brew remove legacy-dep
+macup brew pin node 22
+macup brew skip flaky-tool
+```
+
+Backup files live in the backup directory and are named for the operation and
+the moment they were taken:
+
+```text
+applist_add_2026-06-19_14-22-08.yaml
+applist_remove_2026-06-19_14-25-31.yaml
+```
+
+When a backup is written, macup prints its path:
+
+```text
+Backup: ~/.config/macup/backups/applist_add_2026-06-19_14-22-08.yaml
+```
+
+Details that keep backups honest:
+
+- **Smart-backup.** If the saved document is byte-for-byte identical to what
+  was already on disk, no backup is written and no `Backup:` line prints. The
+  comparison runs against the serialized YAML, so a cosmetic reflow alone does
+  not trigger one.
+- **First run.** The first save, when no `applist.yaml` exists yet, writes the
+  file but no backup. There is nothing to copy.
+- **Atomic writes.** The new applist is written to a temp file and renamed into
+  place, so a crash mid-write cannot leave a half-written config.
+- **Collision-proof.** Two same-operation saves in the same second get an
+  incrementing suffix rather than overwriting each other.
+
+## Restore from a backup
+
+`macup --restore` lists your backups newest-first, lets you pick one, and
+confirms before overwriting `applist.yaml`.
+
+```bash
+macup --restore
+# macup restore is rewritten to this form
+```
+
+The picker labels each entry as `<timestamp>  (<operation>)`. The confirm
+prompt `Overwrite <applistPath> with <filename>?` defaults to **no**. Press
+Enter, decline, or cancel to keep your current file, which prints
+`Restore cancelled.` A successful restore prints `Restored from <filename>.`
+
+With no backups present, macup prints
+`No backups found — nothing to restore.` and exits without prompting.
+
+> Restore overwrites `applist.yaml` directly and does not first back up the
+> file it replaces. The restore itself is not reversible through the backup
+> system.
+
+## Clean up backups
+
+`macup --cleanup` lists every backup file, then asks for a single confirmation
+before deleting all of them.
+
+```bash
+macup --cleanup
+# macup cleanup is rewritten to this form
+```
+
+The confirm prompt `Delete ALL backup files? This cannot be undone.` defaults
+to **no**. Cleanup is all-or-nothing. There is no per-file selection. On
+confirmation macup deletes every `applist_*.yaml` backup, removes the backup
+directory if it becomes empty, and prints `Removed <n> backup file(s).`
+
+With nothing to remove, macup prints
+`No backups found — nothing to clean up.` Declining prints
+`Cleanup cancelled — no files removed.`
+
+## Confirm bulk operations
+
+The composite [`all`](/docs/reference/all) plugin asks for confirmation before a
+system-wide `install` or `update`, when stdout is a TTY:
+
+```text
+This updates 12 package(s) across all managers. Continue?
+```
+
+The prompt defaults to **yes**, so pressing Enter proceeds. Cancelling prints
+`Update cancelled.` or `Install cancelled.`. Single-manager runs such as
+`macup brew update` are not confirmation-gated. Use `--dry-run` first if you
+want a look before they run.
+
+## See also
+
+- [Configuration](/docs/guides/configuration) covers the applist and where backups live.
+- [Selective updates](/docs/concepts/selective-updates) explains how pins and skips shape an update.
+- [Scripting macup](/docs/guides/scripting) documents JSON output and exit codes.
+- [Verbosity](/docs/guides/verbosity) controls quieter or louder output for scripted runs.

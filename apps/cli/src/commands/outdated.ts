@@ -166,6 +166,15 @@ export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions
   return lines.join('\n');
 }
 
+// Arg defs live outside the factory so macup/meta can project them into
+// the generated reference without constructing CliDeps.
+export const OUTDATED_ARGS = {
+  json: {
+    type: 'boolean',
+    description: 'Emit JSON instead of formatted text.',
+  },
+} as const;
+
 // Citty CommandDef factory for the cross-plugin `macup outdated` subcommand.
 // Lives here (not in cli.ts) so the dispatch + spinner orchestration sits
 // alongside the report builder/formatter it drives.
@@ -175,12 +184,7 @@ export function buildOutdatedCommand(deps: CliDeps) {
       name: 'outdated',
       description: 'Show outdated packages across every registered plugin in one pane.',
     },
-    args: {
-      json: {
-        type: 'boolean',
-        description: 'Emit JSON instead of formatted text.',
-      },
-    },
+    args: OUTDATED_ARGS,
     async run({ args }) {
       // JSON callers want a pristine payload — skip both the pill header
       // and the spinner so nothing leaks onto stdout before the JSON.

@@ -1,0 +1,30 @@
+---
+title: Recipes
+description: Task-focused how-tos that walk through one job start to finish.
+---
+
+# Recipes
+
+A recipe is a focused how-to: one task, runnable start to finish, with the exact
+commands you paste into a shell. Each entry below points to the page that solves
+a single problem and shows the full command surface for it.
+
+New to macup? Read [Quick start](/docs/getting-started/quick-start) first, then
+come back here for a specific job.
+
+<Cards>
+  <Card title="Pin a package" href="/docs/recipes/pin-a-package">Hold a package at a known-good version so updates stop short of it.</Card>
+  <Card title="Back up before a risky upgrade" href="/docs/recipes/back-up-before-a-risky-upgrade">Preview an upgrade, then restore the applist copy if it breaks.</Card>
+  <Card title="Use macup in CI" href="/docs/recipes/use-macup-in-ci">Run macup non-interactively and read its exit code in a pipeline.</Card>
+  <Card title="Reproduce a machine" href="/docs/recipes/reproduce-a-machine">Commit your applist and install the same package set on a new Mac.</Card>
+  <Card title="Track without installing" href="/docs/recipes/track-without-installing">Record a package in your applist without installing it yet.</Card>
+  <Card title="Upgrade one backend only" href="/docs/recipes/upgrade-one-backend-only">Update just Homebrew, or just npm, instead of every manager.</Card>
+  <Card title="JSON into jq" href="/docs/recipes/json-into-jq">Pipe <code>--json</code> output through jq to filter and reshape results.</Card>
+  <Card title="Disable the status bar" href="/docs/recipes/disable-the-status-bar">Set <code>MACUP_STATUS_BAR=off</code> for logs, scripts, and CI.</Card>
+</Cards>
+
+## See also
+
+- [Safe updates](/docs/guides/safe-updates) covers dry-run, backups, and confirmation prompts.
+- [Scripting macup](/docs/guides/scripting) documents JSON output and exit codes.
+- [Plugins reference](/docs/reference/plugins) lists every backend and its subcommands.

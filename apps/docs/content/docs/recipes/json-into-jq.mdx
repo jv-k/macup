@@ -1,0 +1,96 @@
+---
+title: Pipe macup outdated into jq
+description: Script against macup's JSON output to count outdated packages, list affected plugins, and gate CI.
+---
+
+# Pipe macup outdated into jq
+
+Two commands emit JSON: `macup outdated --json` and a per-plugin `macup <id> list --json`. Pipe either into [jq](https://jqlang.github.io/jq/) to script against the result.
+
+<Callout type="info">
+
+Only `outdated` and per-plugin `list` accept `--json`. No other command emits JSON.
+
+</Callout>
+
+## The payload
+
+`macup outdated --json` writes one object and skips the header and spinner, so stdout stays JSON-only:
+
+```bash
+macup outdated --json
+```
+
+```json
+{
+  "totalOutdated": 3,
+  "plugins": [
+    {
+      "pluginId": "brew",
+      "displayName": "Homebrew",
+      "available": true,
+      "outdated": []
+    }
+  ]
+}
+```
+
+An unavailable backend reports `available: false` and a `reason` string instead of aborting the report. The composite `all` plugin is excluded so packages are not double-counted.
+
+## Count what is outdated
+
+```bash
+# Total outdated count across every manager
+macup outdated --json | jq '.totalOutdated'
+```
+
+## List the affected plugins
+
+`select` keeps only plugins with a non-empty `outdated` array, and `-r` strips the JSON quotes:
+
+```bash
+# Plugin ids that have outdated packages
+macup outdated --json | jq -r '.plugins[] | select(.outdated | length > 0) | .pluginId'
+```
+
+To name the actual packages for one of those plugins, switch to its `list`. The `--only-outdated` flag drops up-to-date and not-installed entries:
+
+```bash
+# Names of outdated tracked brew packages
+macup brew list --json --only-outdated | jq -r '.[].ref.name'
+```
+
+Flag spellings are exact: `--json`, `--all`, `--only-outdated` (hyphenated, not `--onlyOutdated`).
+
+## Gate CI on outdated packages
+
+`macup outdated` itself exits `0` whether or not anything is outdated, so a green run does not mean you are current. Read `totalOutdated` and fail the job yourself:
+
+```bash
+# Exit non-zero when any package is outdated
+count=$(macup outdated --json | jq '.totalOutdated')
+if [ "$count" -gt 0 ]; then
+  echo "$count package(s) outdated"
+  exit 1
+fi
+```
+
+<Callout type="warn">
+
+A failing subprocess does not propagate its own code. macup exits `1` on any error. Read the count from the payload, not the subprocess exit status.
+
+</Callout>
+
+## Keep stdout clean
+
+Color is auto-disabled when stdout is not a TTY, so piped JSON is uncolored without a flag. For the full shell-call trace alongside JSON, route the trace to stderr with `--debug`:
+
+```bash
+# Trace to stderr, JSON on stdout
+macup --debug outdated --json | jq '.totalOutdated'
+```
+
+## See also
+
+- [Scripting macup](/docs/guides/scripting) covers JSON output, exit codes, and non-TTY behavior.
+- [Checking what is outdated](/docs/guides/checking-outdated) shows the rendered, human-readable report.

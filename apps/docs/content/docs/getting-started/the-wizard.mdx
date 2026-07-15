@@ -1,0 +1,153 @@
+---
+title: The wizard
+description: The interactive menu macup runs when you invoke it with no arguments in a terminal.
+---
+
+# The wizard
+
+Run `macup` with no arguments in a terminal and it launches an interactive
+wizard:
+
+```bash
+# Launch the wizard
+macup
+```
+
+The wizard only ever offers plugins that are available on this machine: they
+are built in, their `supportedOS` includes your platform, and their required
+binaries are on `PATH` (see [How macup works](/docs/concepts/how-it-works)).
+Check availability with:
+
+```bash
+# List every built-in plugin and whether it's available here
+macup --plugins   # same as: macup plugins
+```
+
+That prints a header (`plugins: A / B available  (platform: …)`) and one row
+per plugin: a `✓`/`✗` glyph, the plugin id, the display name, and either its
+capability list or a red reason (`missing: <bin>` or
+`unsupported on <platform> (needs <os>)`).
+
+## Non-TTY
+
+If stdin is not a TTY (piped or redirected), the wizard does not run. It prints
+the Apple logo and a one-line hint, then exits:
+
+```text
+macup — N plugin(s). Run with --help or a command.
+```
+
+In scripts, call a command directly instead.
+
+## The flow
+
+On a TTY the wizard prints a splash block (version, description, author,
+homepage), then walks four steps.
+
+### 1. Pick a target
+
+The first prompt (`Which package manager?`) is a single-pick list of targets
+grouped by category. A *target* is a plugin, or a single subtype of one (like
+Homebrew's formulas or casks):
+
+- Targets are grouped by manifest category, falling back to the plugin's
+  display name. Category headers and the blank rows between groups are disabled
+  rows the cursor skips.
+- The composite [`all`](/docs/reference/all) plugin is excluded. The wizard
+  runs one backend at a time. Cross-manager updates are CLI-only
+  (`macup all update`).
+- A plugin with more than one subtype (for example Homebrew's formulas and
+  casks) expands into one row per subtype.
+
+The last group is a `Help` row, **About macup / how to use**. Pick it to render
+the About panel and return to the target prompt. It does not exit. The panel
+lists direct-invocation forms and top-level commands:
+
+```bash
+macup <plugin> <action>      # e.g. macup brew list
+macup <plugin> add <pkg>     # track a new package
+macup <plugin> pin <pkg> <ver>  # pin to max version
+macup outdated               # outdated packages across every plugin
+macup config                 # config location + schema status
+macup plugins                # built-in plugins and availability
+macup --help                 # full help
+```
+
+It also notes the manifest path: `$XDG_CONFIG_HOME/macup/applist.yaml`.
+
+Cancel (Esc) at the target prompt to exit the wizard.
+
+### 2. Pick an action
+
+The second prompt (`What do you want to do?`) is gated by what the chosen
+plugin advertises. A sticky inverted pill above the prompt shows the chosen
+category (with `· <subtype>` when a subtype is set). The on-screen labels are
+exactly:
+
+| Label                | Shown when the plugin supports         |
+| -------------------- | -------------------------------------- |
+| `List tracked`       | `list`                                 |
+| `Update tracked`     | `update`                               |
+| `Add/Remove`         | `add` + `remove` + a tracked applist key |
+| `Update selectively` | `update` + `outdated`                  |
+| `Install tracked`    | `install`                              |
+
+`List tracked`, `Update tracked`, and `Install tracked` dispatch straight into
+the plugin's subcommand and operate on the full tracked set, with no package
+picker. Before running, the wizard echoes a green ` macup ` badge and the
+resolved command (for example `brew update`).
+
+Cancel (Esc) here returns to the target prompt. After each action the action
+prompt re-renders so you can run another.
+
+### 3. Pick packages
+
+`Add/Remove` and `Update selectively` open a paged autocomplete picker. The
+keybindings are:
+
+```text
+↑/↓ next · PgUp/PgDn page · Home/End jump · space toggle · enter submit · type to filter
+```
+
+The list is a column-major multi-column grid sized to the terminal width. A
+`(page A/B)` indicator appears only when the filtered list spans more than one
+page. The page size is capped to your terminal height.
+
+**Add/Remove** loads installed and tracked packages (already-tracked rows are
+pre-checked). The title shows `N packages · N tracked · N installed`. Per-row
+hints tag `tracked` or `not installed`. On submit, the wizard diffs your
+selection against the current tracked set, writes the adds and removes to
+`applist.yaml`, and echoes a one-line summary: green `+`, red `-` under a
+`TRACKED` pill:
+
+```text
+TRACKED +foo -bar
+```
+
+This is config-only: it edits the manifest, it does not install or uninstall.
+The summary prints after the write. There is no separate confirmation step.
+
+**Update selectively** fetches outdated rows (via the plugin behind a spinner).
+If none are outdated it prints `Already up-to-date.` and returns to the action
+prompt. Otherwise the picker title shows `N outdated` and per-row hints show
+`cur → latest`. The picked subset dispatches as `update <names...>`. See
+[Selective updates](/docs/concepts/selective-updates) for how pins and skips
+filter that set.
+
+### 4. Execute
+
+For install and update actions, subprocess output streams live into a bordered
+box pinned just above the status bar. Lines matching `Error:`, `fatal:`, or
+`Warning:` surface as one-line notices above the bar. Other query output is
+dropped from the box.
+
+The pinned bar reserves the bottom terminal rows using ANSI scroll regions and
+adapts when you resize the window. It is a no-op on non-TTY. Opt out if your
+terminal misbehaves:
+
+```bash
+# Disable the pinned bar and box pane
+MACUP_STATUS_BAR=off macup
+```
+
+See [Verbosity](/docs/guides/verbosity) for the output modes.

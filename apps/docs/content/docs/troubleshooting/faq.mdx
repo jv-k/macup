@@ -1,0 +1,96 @@
+---
+title: FAQ
+description: Short answers to common questions about macup's scope, config, and behavior.
+---
+
+# FAQ
+
+<Accordions>
+
+<Accordion title="Does macup run on Linux or Windows?">
+
+No. macup is macOS only by design. Every built-in plugin declares `supportedOS: ['darwin']`, and the binaries it calls (`brew`, `mas`, `xcode-select`, `softwareupdate`) are macOS-specific.
+
+</Accordion>
+
+<Accordion title="Does macup install Homebrew or Node for me?">
+
+No. macup works through backends already on your `PATH`. A plugin registers only when its required binary resolves, so `npm` appears when `npm` is installed and `brew` appears when `brew` is. To see what is available and why, run:
+
+```bash
+macup --plugins
+```
+
+Unavailable plugins carry a reason, such as `missing: <bins>` when a required binary is not on `PATH`. See [How macup works](/docs/concepts/how-it-works) for the availability check.
+
+</Accordion>
+
+<Accordion title="Where is my config?">
+
+Your tracked packages live in `applist.yaml`. macup resolves the path in this order, first match wins:
+
+1. `$MACUP_CONFIG`, if set
+2. `$MACOS_UPDATETOOL_CONFIG`, if set (legacy, warns)
+3. `$XDG_CONFIG_HOME/macup/applist.yaml` when `$XDG_CONFIG_HOME` is set, otherwise `~/.config/macup/applist.yaml`
+4. `~/.config/macos-updatetool/applist.yaml`, if it already exists (legacy)
+
+When none of the above resolve, macup falls back to the path from step 3. Run `macup --config` to print the active path and tracked counts. See [Configuration](/docs/guides/configuration) for the file shape.
+
+</Accordion>
+
+<Accordion title="Is there a Homebrew tap?">
+
+Not yet. The tap (`brew install jv-k/tap/macup`) is planned, not live. Install macup through npm, pnpm, or npx instead:
+
+```bash
+npx macup
+pnpm add -g macup
+```
+
+See [Installation](/docs/getting-started/installation) for the current options.
+
+</Accordion>
+
+<Accordion title="What is the difference between tracked and installed?">
+
+Installed is whatever a backend has on the machine. Tracked is the curated set you record in `applist.yaml`. `list` and `update` default to the tracked set, and `--all` widens to everything the backend reports.
+
+```bash
+macup brew list         # tracked packages only
+macup brew list --all   # everything Homebrew has installed
+```
+
+See [How macup works](/docs/concepts/how-it-works) for the full model.
+
+</Accordion>
+
+<Accordion title="Can I undo an upgrade?">
+
+There is no automatic rollback of packages. To go back, reinstall the prior version through the backend (for example `brew install <formula>@<version>`).
+
+Backups protect your `applist.yaml`, not your installed packages. Every config mutation writes a timestamped copy you can restore with `macup --restore`. See [Safe updates](/docs/guides/safe-updates) for what is and is not reversible.
+
+</Accordion>
+
+<Accordion title="How is macup different from running each tool myself?">
+
+You get one unified view of every backend, a declarative manifest that makes your setup portable, per-package pins and skips, and automatic backups of that manifest.
+
+```bash
+macup outdated   # one pane across every registered backend
+```
+
+See [How macup works](/docs/concepts/how-it-works) for the host-plus-plugins model behind that.
+
+</Accordion>
+
+</Accordions>
+
+## See also
+
+<Cards>
+  <Card title="How macup works" href="/docs/concepts/how-it-works">The host-plus-plugins model and availability filtering.</Card>
+  <Card title="Configuration" href="/docs/guides/configuration">The applist.yaml file and its resolution order.</Card>
+  <Card title="Safe updates" href="/docs/guides/safe-updates">Dry runs, what backups cover, and what they do not.</Card>
+  <Card title="Selective updates" href="/docs/concepts/selective-updates">Per-package pins and skips that shape an update.</Card>
+</Cards>

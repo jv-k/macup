@@ -35,6 +35,20 @@ Adding a package manager is a one-file plus one-line change: a new `apps/cli/plu
 
 A choice that constrains future work, is hard to reverse, or would later make someone ask "why is it like this?" earns an ADR. That test and the procedure live in ADR 0001. Copy `docs/adr/0000-template.md` to the next number, fill Context, Decision, Alternatives, and Consequences, set the status and date, then add the index row in `docs/adr/README.md`. Run `pnpm adr:check`: it gates structure, sequential numbering, and index sync, and CI runs it on every push. It cannot tell when an ADR is missing, so that call is yours.
 
+## Agent skills
+
+### Issue tracker
+
+Issues live in `jv-k/macup`'s GitHub Issues, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
 ## Don't
 
 - Don't bypass `ExecRunner` (`apps/cli/src/exec/run.ts`) with direct `execa` or `child_process`. It carries dry-run, logging, and redaction, and the hermetic tests depend on it.

@@ -11,7 +11,7 @@
 
 import pc from 'picocolors';
 import { useColor } from '../runtime';
-import { stripAnsi, visualWidth } from './width';
+import { clipToWidth, stripAnsi, visualWidth } from './width';
 
 export interface StatusBarOptions {
   readonly color?: boolean;
@@ -29,12 +29,11 @@ const SPINNER_FRAMES = ['◐', '◓', '◑', '◒'] as const;
 function clipOrPad(line: string, width: number): string {
   const clean = stripAnsi(line);
   const w = visualWidth(clean);
-  if (w === width) return clean;
-  if (w > width) {
-    const arr = [...clean];
-    return `${arr.slice(0, Math.max(0, width - 1)).join('')}…`;
-  }
-  return clean + ' '.repeat(width - w);
+  if (w <= width) return clean + ' '.repeat(width - w);
+  // Clip by cell width, then pad in case the last fullwidth cell didn't fit,
+  // so the box-pane column stays exactly `width` cells wide.
+  const clipped = clipToWidth(clean, width);
+  return clipped + ' '.repeat(Math.max(0, width - visualWidth(clipped)));
 }
 
 export class StatusBar {
@@ -203,7 +202,7 @@ export class StatusBar {
     const frame = SPINNER_FRAMES[this.frameIdx];
     const tail = this.suffix.length > 0 ? `  ${this.suffix}` : '';
     const text = `${frame}  ${this.message}${tail}`;
-    const truncated = visualWidth(text) > cols ? `${text.slice(0, cols - 1)}…` : text;
+    const truncated = clipToWidth(text, cols);
     const styled = this.color ? pc.cyan(truncated) : truncated;
     this.out.write(`\x1b7\x1b[${rows};1H\x1b[2K${styled}\x1b8`);
   }

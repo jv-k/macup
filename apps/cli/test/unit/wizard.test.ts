@@ -22,8 +22,8 @@ function mkPlugin(id: string, extra?: Partial<PluginManifest>): Plugin {
         list: true,
         install: true,
         update: true,
-        add: true,
-        remove: true,
+        track: true,
+        untrack: true,
         outdated: true,
       },
       ...extra,
@@ -40,8 +40,8 @@ const npm = mkPlugin('npm', {
     list: true,
     install: true,
     update: true,
-    add: false,
-    remove: false,
+    track: false,
+    untrack: false,
     outdated: true,
   },
 });
@@ -141,8 +141,8 @@ describe('pickTarget', () => {
         list: true,
         install: true,
         update: true,
-        add: false,
-        remove: false,
+        track: false,
+        untrack: false,
         outdated: true,
       },
     });
@@ -193,7 +193,7 @@ describe('pickAction — option gating', () => {
           return null;
         },
       }),
-      { pluginId: 'npm' }, // npm fixture has add: false, remove: false
+      { pluginId: 'npm' }, // npm fixture has track: false, untrack: false
     );
     expect(offered).not.toContain('sync-tracked');
     expect(offered).toContain('list');
@@ -225,8 +225,8 @@ describe('pickAction — option gating', () => {
         list: true,
         install: true,
         update: true,
-        add: true,
-        remove: true,
+        track: true,
+        untrack: true,
         outdated: false,
       },
     });

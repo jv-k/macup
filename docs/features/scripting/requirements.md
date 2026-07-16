@@ -23,7 +23,7 @@ PRD goal G5: macup is scriptable, with `--json` output and stable exit codes for
 ### Environment and aliases
 
 8. `MACUP_STATUS_BAR=off` disables the pinned status bar; `NO_COLOR` disables color; `MACUP_CONFIG` points at an explicit applist path (with `MACOS_UPDATETOOL_CONFIG` as the deprecated legacy form); `XDG_CONFIG_HOME` and `XDG_DATA_HOME` steer config and completion paths.
-9. Bare-word forms of the flag-styled top-level commands (`macup version`, `config`, `cleanup`, `restore`, `logo`, `plugins`, `install-completions`) are rewritten to their `--flag` form at argv preprocessing; only the first positional is rewritten, so `macup brew add config` keeps `config` as a package name.
+9. Bare-word forms of the flag-styled top-level commands (`macup version`, `config`, `cleanup`, `restore`, `logo`, `plugins`, `install-completions`) are rewritten to their `--flag` form at argv preprocessing; only the first positional is rewritten, so `macup brew track config` keeps `config` as a package name.
 10. The `macup/meta` export (`docsMetadata()`) projects the registry, per-command flags, config schema, exit codes, and env vars into a JSON-serializable object consumed by the docs generator; the parts backed by live CLI data structures cannot drift, while the exit-code and env-var tables are maintained mirrors of the control flow in cli.ts and terminal-caps.ts.
 
 ## Source of truth

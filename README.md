@@ -38,10 +38,10 @@ macup all update
 macup brew update --dry-run
 macup brew install --dry-run
 
-# Add packages to your tracked list
-macup brew add git curl jq
-macup brew add --cask firefox visual-studio-code
-macup npm add typescript nodemon
+# Track packages in your applist
+macup brew track git curl jq
+macup brew track --cask firefox visual-studio-code
+macup npm track typescript nodemon
 
 # Pin a package to a max version
 macup npm pin typescript 5.3.3

@@ -33,8 +33,8 @@ function mkManifest(id: string, extra?: Partial<PluginManifest>): PluginManifest
       list: true,
       install: true,
       update: true,
-      add: false,
-      remove: false,
+      track: false,
+      untrack: false,
       outdated: true,
     },
     ...extra,
@@ -42,11 +42,11 @@ function mkManifest(id: string, extra?: Partial<PluginManifest>): PluginManifest
 }
 
 describe('createAllPlugin — manifest', () => {
-  it('declares a composite plugin with id="all" and no add/remove', () => {
+  it('declares a composite plugin with id="all" and no track/untrack', () => {
     const all = createAllPlugin([]);
     expect(all.manifest.id).toBe('all');
-    expect(all.manifest.capabilities.add).toBe(false);
-    expect(all.manifest.capabilities.remove).toBe(false);
+    expect(all.manifest.capabilities.track).toBe(false);
+    expect(all.manifest.capabilities.untrack).toBe(false);
     expect(all.manifest.capabilities.list).toBe(true);
   });
 });

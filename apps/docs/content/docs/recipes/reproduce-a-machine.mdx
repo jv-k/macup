@@ -22,21 +22,21 @@ licenses, and untracked installs are out of scope.
 
 ### Track the packages you want to keep
 
-`add` records a package in `applist.yaml`. It installs nothing. Run it per
+`track` records a package in `applist.yaml`. It installs nothing. Run it per
 backend for the packages you care about:
 
 ```bash
-macup brew add git jq ripgrep
-macup brew add --cask firefox
-macup npm add typescript prettier
-macup pnpm add eslint
+macup brew track git jq ripgrep
+macup brew track --cask firefox
+macup npm track typescript prettier
+macup pnpm track eslint
 ```
 
 App Store apps track by their numeric App Store ID, since that is what `mas`
-installs from. Find the ID with `mas list`, then add it:
+installs from. Find the ID with `mas list`, then track it:
 
 ```bash
-macup appstore add 497799835
+macup appstore track 497799835
 ```
 
 To capture what is already installed, list it first, then add the names you

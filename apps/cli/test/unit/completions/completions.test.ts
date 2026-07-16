@@ -16,8 +16,8 @@ function mkPlugin(id: string, extra?: Partial<PluginManifest>): Plugin {
         list: true,
         install: true,
         update: true,
-        add: true,
-        remove: true,
+        track: true,
+        untrack: true,
         outdated: true,
       },
       ...extra,
@@ -41,12 +41,19 @@ describe('generateZshCompletions', () => {
     expect(out).toContain('npm');
   });
 
-  it('includes commands (list, install, update, add, remove)', () => {
+  it('includes commands (list, install, update, track, untrack)', () => {
     expect(out).toContain('list');
     expect(out).toContain('install');
     expect(out).toContain('update');
-    expect(out).toContain('add');
-    expect(out).toContain('remove');
+    expect(out).toContain('track');
+    expect(out).toContain('untrack');
+  });
+
+  it('omits the deprecated add/remove aliases (ADR 0031)', () => {
+    // Commands are emitted as `'<verb>[<verb>]'`; the aliases dispatch via an
+    // argv rewrite, not a subcommand, so they must never be offered.
+    expect(out).not.toContain("'add[add]'");
+    expect(out).not.toContain("'remove[remove]'");
   });
 
   it('includes the global flags', () => {

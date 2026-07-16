@@ -48,8 +48,8 @@ export interface PluginDoc {
     list: boolean;
     install: boolean;
     update: boolean;
-    add: boolean;
-    remove: boolean;
+    track: boolean;
+    untrack: boolean;
     outdated: boolean;
   };
   commands: CommandDoc[];
@@ -189,8 +189,8 @@ function pluginDoc(plugin: Plugin): PluginDoc {
       list: m.capabilities.list,
       install: m.capabilities.install,
       update: m.capabilities.update,
-      add: m.capabilities.add,
-      remove: m.capabilities.remove,
+      track: m.capabilities.track,
+      untrack: m.capabilities.untrack,
       outdated: m.capabilities.outdated,
     },
     commands: commandsFor(plugin).map((name) => {

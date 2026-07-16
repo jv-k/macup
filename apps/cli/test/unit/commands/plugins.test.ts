@@ -6,8 +6,8 @@ const caps = (over: Partial<PluginCapabilities> = {}): PluginCapabilities => ({
   list: true,
   install: false,
   update: false,
-  add: false,
-  remove: false,
+  track: false,
+  untrack: false,
   outdated: false,
   ...over,
 });
@@ -96,7 +96,7 @@ describe('formatPluginsReport', () => {
       mkPlugin({
         id: 'brew',
         displayName: 'Homebrew',
-        capabilities: caps({ install: true, update: true, add: true, remove: true }),
+        capabilities: caps({ install: true, update: true, track: true, untrack: true }),
       }),
       mkPlugin({ id: 'mas', displayName: 'App Store', requires: ['mas'] }),
     ];
@@ -110,7 +110,7 @@ describe('formatPluginsReport', () => {
     expect(out).toContain('platform: darwin');
     expect(out).toMatch(/✓\s+brew\s+Homebrew/);
     expect(out).toMatch(/✗\s+mas\s+App Store\s+missing: mas/);
-    expect(out).toContain('list, install, update, add, remove');
+    expect(out).toContain('list, install, update, track, untrack');
   });
 
   it('appends subtypes in brackets when a plugin has more than one', () => {

@@ -26,8 +26,8 @@ describe('xcode plugin — manifest', () => {
     expect(xcodePlugin.manifest.requires).toContain('pkgutil');
     expect(xcodePlugin.manifest.capabilities.install).toBe(true);
     expect(xcodePlugin.manifest.capabilities.update).toBe(true);
-    expect(xcodePlugin.manifest.capabilities.add).toBe(false);
-    expect(xcodePlugin.manifest.capabilities.remove).toBe(false);
+    expect(xcodePlugin.manifest.capabilities.track).toBe(false);
+    expect(xcodePlugin.manifest.capabilities.untrack).toBe(false);
   });
 });
 

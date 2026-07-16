@@ -19,8 +19,8 @@ describe('system plugin — manifest', () => {
     expect(systemPlugin.manifest.supportedOS).toEqual(['darwin']);
     expect(systemPlugin.manifest.requires).toContain('softwareupdate');
     expect(systemPlugin.manifest.configKeys).toEqual([]);
-    expect(systemPlugin.manifest.capabilities.add).toBe(false);
-    expect(systemPlugin.manifest.capabilities.remove).toBe(false);
+    expect(systemPlugin.manifest.capabilities.track).toBe(false);
+    expect(systemPlugin.manifest.capabilities.untrack).toBe(false);
     expect(systemPlugin.manifest.capabilities.install).toBe(true);
     expect(systemPlugin.manifest.capabilities.update).toBe(true);
   });

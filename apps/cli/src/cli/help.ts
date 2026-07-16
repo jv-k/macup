@@ -80,8 +80,8 @@ export function buildHelp(deps: CliDeps): string {
     if (m.capabilities.list) cmds.push('list');
     if (m.capabilities.install) cmds.push('install');
     if (m.capabilities.update) cmds.push('update');
-    if (m.capabilities.add) cmds.push('add');
-    if (m.capabilities.remove) cmds.push('remove');
+    if (m.capabilities.track) cmds.push('track');
+    if (m.capabilities.untrack) cmds.push('untrack');
     const subtypeHint =
       m.subtypes && m.subtypes.length > 1 ? ` [--subtype=${m.subtypes.join('|')}]` : '';
     return { label: s.bold(m.id), desc: `${m.displayName}  ${cmds.join(', ')}${subtypeHint}` };
@@ -151,8 +151,8 @@ export function buildHelp(deps: CliDeps): string {
     { label: 'macup brew list all', desc: 'Show all installed formulas' },
     { label: 'macup brew list outdated', desc: 'Show only outdated' },
     { label: 'macup all update', desc: 'Update everything (with confirmation)' },
-    { label: 'macup brew add git curl jq', desc: 'Track new packages' },
-    { label: 'macup brew add cask firefox', desc: 'Track a cask' },
+    { label: 'macup brew track git curl jq', desc: 'Track new packages' },
+    { label: 'macup brew track cask firefox', desc: 'Track a cask' },
     { label: 'macup npm pin typescript 5.3.3', desc: 'Pin to max version' },
     { label: 'macup brew skip legacy-dep', desc: 'Skip from future updates' },
   ];

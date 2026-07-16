@@ -131,7 +131,7 @@ skip:
 
 ### 5.3 Safety mechanisms
 
-- **Timestamped backups**: automatic before any add/remove/install
+- **Timestamped backups**: automatic before any track/untrack/install
 - **Smart backup optimization**: only keeps backups when changes occur
 - **`macup restore`**: interactive restore from any backup
 - **`macup cleanup`**: interactive backup deletion
@@ -143,8 +143,8 @@ Running `macup` with no args drops into a TTY-aware `@clack/prompts` flow:
 
 1. **Help / About**: first prompt offers an "About macup" entry rendered via clack `note()`; selecting any other entry falls through to the target picker.
 2. **Pick a target**: plugins are grouped by `category` (e.g. "Node.js" for npm + pnpm, "macOS" for appstore/xcode/system) using a single-pick `select` whose category headers and inter-group spacers are disabled rows the cursor skips.
-3. **Pick an action**: capability-gated submenu (only actions the plugin advertises in its `manifest.capabilities` show up). The chosen target is rendered as a sticky pill above the prompt; Add/Remove diffs are previewed inline before confirmation.
-4. **Pick packages** (for `add` / `remove` / scoped `update`): paged autocomplete picker with PgUp/PgDn, page indicator, count summary, and a multi-column grid layout.
+3. **Pick an action**: capability-gated submenu (only actions the plugin advertises in its `manifest.capabilities` show up). The chosen target is rendered as a sticky pill above the prompt; Track/Untrack diffs are previewed inline before confirmation.
+4. **Pick packages** (for `track` / `untrack` / scoped `update`): paged autocomplete picker with PgUp/PgDn, page indicator, count summary, and a multi-column grid layout.
 5. **Execute**: subprocess output for `user-action` calls (install/upgrade) streams into the pinned `StatusBar`'s box pane (see section 5.6); `query`/`check` chatter (e.g. `--json` data fetches) stays silent unless it emits an `Error:` / `Warning:` line, which surfaces above the bar.
 
 Falls back to `--help` in non-TTY contexts.
@@ -260,7 +260,7 @@ brew:
 ### 5.8.6 Interaction with existing systems
 
 - **Pins/skips**: Bundles can declare pins. On `install`, pins are merged into `applist.yaml`'s pin map. Skips are NOT inherited from bundles (skip is a per-machine intent).
-- **Backups**: `macup bundle install` creates a backup before mutating `applist.yaml`, same as existing `add`/`remove`.
+- **Backups**: `macup bundle install` creates a backup before mutating `applist.yaml`, same as existing `track`/`untrack`.
 - **`--dry-run`**: `macup bundle install <name> --dry-run` shows exactly what would be installed and tracked, with no side effects.
 - **Partial failures**: One plugin failing does not abort the rest. The install result classifies each package as `installed`, `skipped`, or `failed`; the CLI exits non-zero if any failed, but everything installable did install.
 - **Inline bundles are read-only via CLI**: Bundles defined inside `applist.yaml` under `bundles:` can be installed and shown, but `bundle add` / `bundle remove` operate on file-based bundles only in v1.1. To edit an inline bundle, edit `applist.yaml` directly.
@@ -445,7 +445,7 @@ v1.0.x polish:
 
 ### 8.5 Speculative (post-1.2)
 
-- **#37** Package search (`brew search` / `npm search`) in the wizard's `add` flow
+- **#37** Package search (`brew search` / `npm search`) in the wizard's `track` flow
 - **Third-party plugin ecosystem** (`macup-plugin-*` npm packages)
 
 ---

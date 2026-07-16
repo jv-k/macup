@@ -21,7 +21,12 @@
 
 import type { ArgsDef, CommandDef } from 'citty';
 import { defineCommand, runMain } from 'citty';
-import { extractVerbosityFlags, findUnknownTopLevelFlags, rewriteFlagAliases } from './cli/argv';
+import {
+  extractVerbosityFlags,
+  findUnknownTopLevelFlags,
+  rewriteDeprecatedVerbAliases,
+  rewriteFlagAliases,
+} from './cli/argv';
 import { bootstrap } from './cli/bootstrap';
 import { printVersionSplash, showCustomHelp } from './cli/help';
 import type { ActionCommand } from './cli/types';
@@ -52,6 +57,17 @@ export { detectShellFromEnv } from './commands/shell';
 
 rewriteFlagAliases(process.argv);
 const flags = extractVerbosityFlags(process.argv);
+// Deprecated `add`/`remove` verbs → `track`/`untrack` (ADR 0031). Rewritten in
+// argv (not registered as citty subcommands) so the aliases dispatch but stay
+// out of `--help` and completions; the notice goes to stderr. Runs after the
+// verbosity flags are stripped, so `macup --debug brew add rg` still finds the
+// plugin at argv[2]. Gated on the track-capable ids, so `macup all add` (no
+// track verb) isn't rewritten into a notice pointing at a verb it lacks.
+const trackablePluginIds = new Set(
+  BUILTIN_PLUGINS.filter((p) => p.manifest.capabilities.track).map((p) => p.manifest.id),
+);
+const deprecatedVerbNotice = rewriteDeprecatedVerbAliases(process.argv, trackablePluginIds);
+if (deprecatedVerbNotice) console.warn(logui.warning(deprecatedVerbNotice));
 const deps = bootstrap(flags);
 
 // SIGINT: trip the deps-level abort so in-flight subprocesses cancel,

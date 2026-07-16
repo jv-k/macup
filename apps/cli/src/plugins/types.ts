@@ -22,8 +22,8 @@ export interface PluginCapabilities {
   readonly list: true;
   readonly install: boolean;
   readonly update: boolean;
-  readonly add: boolean;
-  readonly remove: boolean;
+  readonly track: boolean;
+  readonly untrack: boolean;
   readonly outdated: boolean;
 }
 
@@ -45,7 +45,7 @@ export interface PluginManifest {
   compareVersions?(a: string, b: string): -1 | 0 | 1;
   /**
    * Optional: resolve a subtype (e.g. 'formulas' for brew) to the applist
-   * key that add/remove should mutate. If omitted, the first entry in
+   * key that track/untrack should mutate. If omitted, the first entry in
    * `configKeys` is used.
    */
   configKeyFor?(subtype?: string): ApplistKey;

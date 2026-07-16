@@ -38,8 +38,8 @@ export function commandsFor(plugin: Plugin): string[] {
   if (c.list) cmds.push('list');
   if (c.install) cmds.push('install');
   if (c.update) cmds.push('update');
-  if (c.add) cmds.push('add');
-  if (c.remove) cmds.push('remove');
+  if (c.track) cmds.push('track');
+  if (c.untrack) cmds.push('untrack');
   if (plugin.manifest.configKeys.length > 0) {
     cmds.push('pin', 'unpin', 'skip', 'unskip');
   }
@@ -52,7 +52,7 @@ export function commandsFor(plugin: Plugin): string[] {
 // plugins that declare more than one subtype (e.g. brew).
 // Exported for macup/meta: the docs flag matrix marks --subtype on these
 // commands (completions deliberately offer only the shortcut spellings).
-export const SUBTYPE_COMMANDS = new Set(['list', 'install', 'update', 'add', 'remove']);
+export const SUBTYPE_COMMANDS = new Set(['list', 'install', 'update', 'track', 'untrack']);
 
 export function flagsForCommand(plugin: Plugin, command: string): string[] {
   const flags: string[] = [];

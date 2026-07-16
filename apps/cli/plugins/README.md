@@ -34,8 +34,8 @@ const brew: Plugin = {
       list: true,
       install: true,
       update: true,
-      add: true,
-      remove: true,
+      track: true,
+      untrack: true,
       outdated: true,
     },
   },
@@ -67,7 +67,7 @@ export default brew;
 | `subtypes` | Optional. Defines `macup <id> <subtype> <command>` shape (e.g. `brew formulas list`). |
 | `supportedOS` | Array of `NodeJS.Platform`. Registry filters plugins whose host platform isn't listed. |
 | `requires` | PATH binaries that must resolve. Registry filters plugins whose binaries are missing. |
-| `configKeys` | Dotted-path YAML keys in `applist.yaml` that this plugin reads/writes (e.g. `['brew.formulas', 'brew.casks']` or `['npm']`). Two-segment keys resolve to a list nested under a plugin block; one-segment keys to a top-level list. Informational only: `add`/`remove` are config mutations handled by the store, not the plugin. |
+| `configKeys` | Dotted-path YAML keys in `applist.yaml` that this plugin reads/writes (e.g. `['brew.formulas', 'brew.casks']` or `['npm']`). Two-segment keys resolve to a list nested under a plugin block; one-segment keys to a top-level list. Informational only: `track`/`untrack` are config mutations handled by the store, not the plugin. |
 | `capabilities` | Declares which operations the plugin implements. Must match the methods actually defined. |
 | `compareVersions` | Optional. Override the default semver comparator for non-semver versioning schemes (brew casks, mas, etc.). |
 
@@ -99,7 +99,7 @@ on its manifest. If comparison is not feasible at all, fall back to
 string equality and log a warning. `src/plugins/selection.ts`
 treats uncomparable pairs as "allow upgrade."
 
-`add` / `remove` / `pin` / `unpin` / `skip` / `unskip` are
+`track` / `untrack` / `pin` / `unpin` / `skip` / `unskip` are
 config-file operations. Plugins do not implement them; they are
 handled uniformly by `ConfigStore` based on the plugin's
 `configKeys`.

@@ -21,11 +21,11 @@ Backups and restore cover the manifest only. Use Time Machine or a manager's own
 
 ## Backups guard config edits
 
-Every command that edits `applist.yaml` writes a timestamped copy first, then saves. The manifest-editing commands are `add`, `remove`, `pin`, `unpin`, `skip`, and `unskip`. The package commands, `install` and `update`, never touch the manifest and so write no backup.
+Every command that edits `applist.yaml` writes a timestamped copy first, then saves. The manifest-editing commands are `track`, `untrack`, `pin`, `unpin`, `skip`, and `unskip`. The package commands, `install` and `update`, never touch the manifest and so write no backup.
 
 ```bash
 # Writes applist_<op>_<timestamp>.yaml, then saves
-macup brew add cmake ripgrep
+macup brew track cmake ripgrep
 macup npm pin typescript 5.3.3
 macup brew skip legacy-dep
 ```

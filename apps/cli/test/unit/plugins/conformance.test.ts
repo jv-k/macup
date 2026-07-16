@@ -75,8 +75,8 @@ describe('plugin conformance — every builtin obeys the contract', () => {
         expect(typeof c.list).toBe('boolean');
         expect(typeof c.install).toBe('boolean');
         expect(typeof c.update).toBe('boolean');
-        expect(typeof c.add).toBe('boolean');
-        expect(typeof c.remove).toBe('boolean');
+        expect(typeof c.track).toBe('boolean');
+        expect(typeof c.untrack).toBe('boolean');
         expect(typeof c.outdated).toBe('boolean');
         // The Plugin contract requires `list` to always be true.
         expect(c.list).toBe(true);
@@ -107,7 +107,7 @@ describe('plugin conformance — every builtin obeys the contract', () => {
       if (subtypes && subtypes.length > 0) {
         it('configKeyFor returns a key listed in configKeys for every declared subtype', () => {
           // Plugins with subtypes (e.g. brew formulas/casks) must implement
-          // configKeyFor so add/remove know which list to mutate.
+          // configKeyFor so track/untrack know which list to mutate.
           const configKeyFor = manifest.configKeyFor;
           expect(typeof configKeyFor).toBe('function');
           if (!configKeyFor) return;

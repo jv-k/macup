@@ -92,12 +92,12 @@ Details that keep backups honest:
 
 ## Restore from a backup
 
-`macup --restore` lists your backups newest-first, lets you pick one, and
+`macup restore` lists your backups newest-first, lets you pick one, and
 confirms before overwriting `applist.yaml`.
 
 ```bash
-macup --restore
-# macup restore is rewritten to this form
+macup restore
+# rewritten to macup --restore at argv parse time; both forms work
 ```
 
 The picker labels each entry as `<timestamp>  (<operation>)`. The confirm

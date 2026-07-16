@@ -50,7 +50,7 @@ This upgrades the brew packages you track that are outdated. To extend it to eve
 A bad `pin`, `skip`, or `remove` is recoverable. macup copied `applist.yaml` to a timestamped backup before the edit. List the backups, pick one, and confirm.
 
 ```bash
-macup --restore
+macup restore
 ```
 
 The picker labels each entry `<timestamp>  (<operation>)`, newest first. The confirm prompt defaults to no, so a successful restore is deliberate. macup prints `Restored from <filename>.`
@@ -69,7 +69,7 @@ Cleanup is all-or-nothing and asks for one confirmation before deleting every ba
 
 <Callout type="warn">
 
-`--restore` overwrites `applist.yaml` in place and does not back up the file it replaces first. The restore itself is not reversible through the backup system. Make sure you picked the right backup before confirming.
+`macup restore` overwrites `applist.yaml` in place and does not back up the file it replaces first. The restore itself is not reversible through the backup system. Make sure you picked the right backup before confirming.
 
 </Callout>
 

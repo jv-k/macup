@@ -19,4 +19,4 @@
 
 ## Out of scope
 
-`add`, `remove`, `pin`, and `skip` have no dry-run flag; they are config-only edits already guarded by timestamped backups and `--restore`.
+`add`, `remove`, `pin`, and `skip` have no dry-run flag; they are config-only edits already guarded by timestamped backups and `macup restore`.

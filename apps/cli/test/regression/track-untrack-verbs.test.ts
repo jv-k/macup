@@ -67,6 +67,27 @@ describe('track / untrack verbs (ADR 0031)', () => {
     expect(stderr).toContain('remove is deprecated; use untrack');
     expect(readFileSync(configPath, 'utf8')).not.toContain('ripgrep');
   });
+
+  it('resolves the alias even when a global flag precedes the plugin', async () => {
+    // The alias rewrite runs after the verbosity flags are stripped, so a
+    // leading `--verbose`/`--debug` does not push the plugin out of argv[2].
+    const { env, configPath } = sandbox();
+    const { stderr } = await run(env, '--verbose brew add ripgrep');
+    expect(stderr).toContain('add is deprecated; use track');
+    expect(readFileSync(configPath, 'utf8')).toContain('ripgrep');
+  });
+
+  it('does not warn about deprecation for a plugin that has no track verb', async () => {
+    // `all` has no track/untrack, so `add` is not rewritten — no misleading
+    // "use track" notice pointing at a verb `all` lacks. citty reports the
+    // unknown command and exits non-zero, which rejects the promise.
+    const { env } = sandbox();
+    const res = (await run(env, 'all add ripgrep').catch((e) => e)) as {
+      stdout?: string;
+      stderr?: string;
+    };
+    expect(`${res.stdout ?? ''}${res.stderr ?? ''}`).not.toContain('deprecated');
+  });
 });
 
 // The deprecated aliases are handled by an argv rewrite (cli/argv.ts), NOT

@@ -18,7 +18,7 @@ No. macup is macOS only by design. Every built-in plugin declares `supportedOS: 
 No. macup works through backends already on your `PATH`. A plugin registers only when its required binary resolves, so `npm` appears when `npm` is installed and `brew` appears when `brew` is. To see what is available and why, run:
 
 ```bash
-macup --plugins
+macup plugins
 ```
 
 Unavailable plugins carry a reason, such as `missing: <bins>` when a required binary is not on `PATH`. See [How macup works](/docs/concepts/how-it-works) for the availability check.
@@ -34,7 +34,7 @@ Your tracked packages live in `applist.yaml`. macup resolves the path in this or
 3. `$XDG_CONFIG_HOME/macup/applist.yaml` when `$XDG_CONFIG_HOME` is set, otherwise `~/.config/macup/applist.yaml`
 4. `~/.config/macos-updatetool/applist.yaml`, if it already exists (legacy)
 
-When none of the above resolve, macup falls back to the path from step 3. Run `macup --config` to print the active path and tracked counts. See [Configuration](/docs/guides/configuration) for the file shape.
+When none of the above resolve, macup falls back to the path from step 3. Run `macup config` to print the active path and tracked counts. See [Configuration](/docs/guides/configuration) for the file shape.
 
 </Accordion>
 

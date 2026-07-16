@@ -1,9 +1,12 @@
 import type { Plugin } from '../plugins/types';
-import { commandsFor, flagsForCommand } from './shared';
+import { TOP_LEVEL_COMMANDS, commandsFor, flagsForCommand } from './shared';
 
 export function generateBashCompletions(plugins: readonly Plugin[]): string {
-  const ids = plugins.map((p) => p.manifest.id);
-  const globalFlags = '--help --version --config --cleanup --restore --undo --logo --completions';
+  // Stand-alone commands complete where a plugin id would go — `macup
+  // restore` is a noun, not a flag (ADR 0029). Only the true modifiers
+  // are left on the flag list.
+  const ids = [...plugins.map((p) => p.manifest.id), ...TOP_LEVEL_COMMANDS.map((c) => c.name)];
+  const globalFlags = '--help --version --verbose --debug --completions';
 
   const pluginCases = plugins
     .map(

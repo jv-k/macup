@@ -14,7 +14,12 @@
 import { FLAG_COMMAND_ALIASES } from './cli/argv';
 import { CHECK_ARGS } from './commands/check';
 import { OUTDATED_ARGS } from './commands/outdated';
-import { SUBTYPE_COMMANDS, commandsFor, flagsForCommand } from './completions/shared';
+import {
+  SUBTYPE_COMMANDS,
+  TOP_LEVEL_COMMANDS,
+  commandsFor,
+  flagsForCommand,
+} from './completions/shared';
 import { ApplistKeySchema } from './config/schema';
 import { BUILTIN_PLUGINS } from './plugins/registry';
 import type { Plugin } from './plugins/types';
@@ -28,6 +33,8 @@ export interface FlagDoc {
 export interface CommandDoc {
   name: string;
   flags: FlagDoc[];
+  /** Present for stand-alone commands; per-plugin commands are described by their plugin. */
+  description?: string;
 }
 
 export interface PluginDoc {
@@ -97,9 +104,10 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
   '--subtype': 'Scope the command to one subtype by name (e.g. `--subtype=casks`).',
 };
 
-// Top-level flags, with the prose used for the reference. Mirrors the
-// FlagAction set wired in src/cli.ts plus the intercepted help/version/
-// verbosity flags. Few and stable, so the descriptions live here.
+// Top-level flags, with the prose used for the reference. These are the
+// real modifiers plus `--completions`; the command nouns are subcommands
+// and belong in topLevelCommands, not here (ADR 0029). Few and stable, so
+// the descriptions live here.
 const GLOBAL_FLAGS: GlobalFlagDoc[] = [
   { flag: '--help', alias: '-h', description: 'Show the help screen.' },
   { flag: '--version', alias: '-v', description: 'Print the version.' },
@@ -109,25 +117,7 @@ const GLOBAL_FLAGS: GlobalFlagDoc[] = [
     alias: '-D',
     description: 'Full raw trace of every shell call, routed to stderr.',
   },
-  {
-    flag: '--plugins',
-    description: 'List built-in plugins and whether each is available on this machine.',
-  },
-  { flag: '--config', description: 'Show config status: the resolved path and tracked counts.' },
   { flag: '--completions', description: 'Emit shell completions for zsh|bash|fish to stdout.' },
-  {
-    flag: '--install-completions',
-    description: 'Detect the shell and install completions to the XDG path.',
-  },
-  { flag: '--cleanup', description: 'Delete all config backup files (with confirmation).' },
-  { flag: '--restore', description: 'Interactively pick and restore a config backup.' },
-  { flag: '--undo', description: 'Revert the applist to the most recent backup, diff first.' },
-  {
-    flag: '--doctor',
-    description:
-      'Run a self-diagnostic report: environment, config, plugin probes, data integrity, shell integration. Add `--json` for machine-readable output. Exits 1 on errors; warnings never fail.',
-  },
-  { flag: '--logo', description: 'Print the macup logo splash.' },
 ];
 
 // The stable process exit codes. A hand-maintained mirror of the exit
@@ -225,6 +215,10 @@ function pluginDoc(plugin: Plugin): PluginDoc {
 
 // Bare spelling for flags argv rewrites (`macup version` → `--version`),
 // derived from the same list cli.ts rewrites with.
+// One description per command, shared with what the shells complete from.
+const describeCommand = (name: string): string =>
+  TOP_LEVEL_COMMANDS.find((c) => c.name === name)?.description ?? '';
+
 function bareFormFor(flag: string): string | undefined {
   const word = flag.replace(/^--/, '');
   return (FLAG_COMMAND_ALIASES as readonly string[]).includes(word) ? `macup ${word}` : undefined;
@@ -237,6 +231,7 @@ export function docsMetadata(): DocsMetadata {
     topLevelCommands: [
       {
         name: 'outdated',
+        description: describeCommand('outdated'),
         flags: Object.entries(OUTDATED_ARGS).map(([name, def]) => ({
           flag: `--${name}`,
           description: FLAG_DESCRIPTIONS[`--${name}`] ?? def.description,
@@ -244,6 +239,7 @@ export function docsMetadata(): DocsMetadata {
       },
       {
         name: 'check',
+        description: describeCommand('check'),
         flags: Object.entries(CHECK_ARGS).map(([name, def]) => ({
           flag: `--${name}`,
           description: FLAG_DESCRIPTIONS[`--${name}`] ?? def.description,
@@ -254,8 +250,22 @@ export function docsMetadata(): DocsMetadata {
         // keeps it out of the docs flag matrix (flagless rows drop);
         // INIT_ARGS.shell.description stays the prose source of truth.
         name: 'init',
+        description: describeCommand('init'),
         flags: [],
       },
+      // The command nouns (ADR 0029). Descriptions come from the same list
+      // the shells complete from, so the reference and your tab key can't
+      // disagree about what `macup restore` is.
+      ...TOP_LEVEL_COMMANDS.filter((c) => !['outdated', 'check', 'init'].includes(c.name)).map(
+        (c) => ({
+          name: c.name,
+          description: c.description,
+          flags:
+            c.name === 'doctor'
+              ? [{ flag: '--json', description: FLAG_DESCRIPTIONS['--json'] ?? '' }]
+              : [],
+        }),
+      ),
     ],
     globalFlags: GLOBAL_FLAGS.map((f) => ({ ...f, bareForm: bareFormFor(f.flag) })),
     config: [

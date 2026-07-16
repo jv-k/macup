@@ -97,7 +97,6 @@ confirms before overwriting `applist.yaml`.
 
 ```bash
 macup restore
-# rewritten to macup --restore at argv parse time; both forms work
 ```
 
 The picker labels each entry as `<timestamp>  (<operation>)`. The confirm
@@ -114,11 +113,11 @@ With no backups present, macup prints
 
 ## Clean up backups
 
-`macup --cleanup` lists every backup file, then asks for a single confirmation
+`macup cleanup` lists every backup file, then asks for a single confirmation
 before deleting all of them.
 
 ```bash
-macup --cleanup
+macup cleanup
 # macup cleanup is rewritten to this form
 ```
 

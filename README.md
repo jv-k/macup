@@ -50,16 +50,16 @@ macup npm pin typescript 5.3.3
 macup brew skip legacy-dep
 
 # Show config status
-macup config            # or: macup --config
+macup config
 
 # List built-in plugins and whether each is available on your machine
-macup plugins           # or: macup --plugins
+macup plugins
 
 # Restore from a backup
-macup restore           # or: macup --restore
+macup restore
 ```
 
-Top-level commands accept both forms: a bare `macup version` is rewritten to `--version` at argv parse time, so existing scripts/aliases keep working unchanged.
+These are commands, not flags: `macup restore`, never `macup --restore`. A flag modifies a command (`--json`, `--dry-run`, `--verbose`), so it is never the command itself. The one exception is `macup version`, which is rewritten to `--version` at argv parse time, because `--version` is the spelling every CLI has.
 
 ## Verbosity
 
@@ -93,7 +93,7 @@ Every plugin also supports `pin`, `unpin`, `skip`, `unskip` for packages tracked
 
 ### Which plugins are available here?
 
-`macup --plugins` prints a one-line status per plugin, flagging anything whose required binary isn't on your PATH:
+`macup plugins` prints a one-line status per plugin, flagging anything whose required binary isn't on your PATH:
 
 ```text
 plugins: 6 / 7 available  (platform: darwin)
@@ -161,7 +161,7 @@ macup restore      # Interactively pick and restore a backup
 The easy path auto-detects the shell and writes to the standard XDG location:
 
 ```bash
-macup --install-completions
+macup install-completions
 # wrote ~/.local/share/zsh/site-functions/_macup (2100 bytes)
 #   Run 'exec zsh' or open a new tab to load completions.
 ```

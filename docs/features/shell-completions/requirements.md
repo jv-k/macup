@@ -17,7 +17,7 @@ Completions for zsh, bash, and fish are generated from the plugin manifests (PRD
 
 ### Installation: --install-completions
 
-6. `macup --install-completions [shell]` (bare form auto-detects) writes the script to the shell's standard lookup path: `$XDG_DATA_HOME/zsh/site-functions/_macup`, `$XDG_DATA_HOME/bash-completion/completions/macup`, or `$XDG_CONFIG_HOME/fish/completions/macup.fish`, with `~/.local/share` and `~/.config` fallbacks.
+6. `macup install-completions [shell]` (auto-detects the shell when omitted) writes the script to the shell's standard lookup path: `$XDG_DATA_HOME/zsh/site-functions/_macup`, `$XDG_DATA_HOME/bash-completion/completions/macup`, or `$XDG_CONFIG_HOME/fish/completions/macup.fish`, with `~/.local/share` and `~/.config` fallbacks.
 7. Missing directories are created; the command reports the written path, byte count, and a per-shell activation hint.
 8. For zsh, cached `.zcompdump*` files across the likely candidate dirs (`$ZDOTDIR`, `$ZSH_COMPDUMP`'s dir, XDG zsh dir, `$HOME`) are removed best-effort so the next `compinit` picks up the fresh functions.
 

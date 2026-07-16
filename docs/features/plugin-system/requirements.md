@@ -15,7 +15,7 @@ macup is a host, not a package manager: each backend lives behind the `Plugin` i
 4. `BUILTIN_PLUGINS` is the closed set: brew, npm, pnpm, appstore, xcode, system, plus the composite `all` built over the six individuals. Registration is the single chokepoint in `registry.ts`.
 5. `buildRegistry` filters candidates to those whose `supportedOS` includes the current platform and whose every `requires` binary resolves on PATH (an executable-bit probe of each `$PATH` entry). Filtered-out plugins get no subcommands.
 6. On startup, a plugin that supports the OS but is missing a binary produces a stderr warning (`Plugin "x" unavailable: \`bin\` not found on PATH`); `--help` and `--version` short-circuit before this probe so a fresh machine sees clean help.
-7. `macup --plugins` (or `macup plugins`) reports every builtin with availability, the reason when unavailable (unsupported OS or missing binaries), capabilities, and subtypes.
+7. `macup plugins` reports every builtin with availability, the reason when unavailable (unsupported OS or missing binaries), capabilities, and subtypes.
 8. All six individual builtins declare `supportedOS: ['darwin']`; the conformance test suite asserts this and the rest of the contract for every plugin.
 
 ### Composite `all`

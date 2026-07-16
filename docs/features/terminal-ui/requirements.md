@@ -6,7 +6,7 @@ The PRD's macOS-first UX shows curated output by default, streams live subproces
 
 ### Splash and identity
 
-1. The wizard, `--help`, and `--version` open with a splash block (name, version, description, author, homepage); `macup --logo` (or `macup logo`) prints the ASCII Apple logo on demand.
+1. The wizard, `--help`, and `--version` open with a splash block (name, version, description, author, homepage); `macup logo` prints the ASCII Apple logo on demand.
 2. Color respects `NO_COLOR` and TTY detection through a single runtime predicate; every renderer takes the resolved flag instead of re-probing.
 
 ### Pinned status bar and box pane

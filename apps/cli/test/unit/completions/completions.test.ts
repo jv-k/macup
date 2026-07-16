@@ -49,10 +49,20 @@ describe('generateZshCompletions', () => {
     expect(out).toContain('remove');
   });
 
-  it('includes global flags (--help, --version, --config, --cleanup, --restore)', () => {
+  it('includes the global flags', () => {
     expect(out).toContain('--help');
     expect(out).toContain('--version');
-    expect(out).toContain('--config');
+    expect(out).toContain('--verbose');
+  });
+
+  it('offers the command nouns, and never their old flag spellings', () => {
+    // `macup restore` is a command, not `--restore` (ADR 0029). Offering a
+    // flag the CLI now rejects would be worse than offering nothing.
+    expect(out).toContain("'restore:Restore the applist from a backup'");
+    expect(out).toContain("'doctor:Run a self-diagnostic report'");
+    expect(out).not.toContain('--restore');
+    expect(out).not.toContain('--config[');
+    expect(out).not.toContain('--plugins[');
   });
 
   it('contains a _macup function definition', () => {
@@ -64,9 +74,8 @@ describe('generateZshCompletions', () => {
   });
 
   it('declares global flags on _arguments (so each can carry a value spec)', () => {
-    expect(out).toContain("'--config[Show config status]'");
-    expect(out).toContain("'--plugins[List built-in plugins and availability]'");
-    // --completions has an optional value with a fixed shell list.
+    // --completions has an optional value with a fixed shell list. It is
+    // the reason flags are declared on _arguments at all.
     expect(out).toContain("'--completions=-[Emit completions");
     expect(out).toContain('::shell:(zsh bash fish)');
   });

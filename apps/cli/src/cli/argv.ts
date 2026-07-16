@@ -1,9 +1,9 @@
 // argv pre-processing run BEFORE citty parses, for two purposes:
 //
-//   1) Rewrite bare flag-styled commands to their --form so existing
-//      scripts can use either `macup version` or `macup --version`.
-//      Only the first positional gets rewritten — `macup brew add config`
-//      should not turn the trailing `config` into `--config`.
+//   1) Rewrite `macup version` to `macup --version`, so both spellings of
+//      the one conventional flag work. Only the first positional gets
+//      rewritten — `macup brew add version` should not turn the trailing
+//      word into a flag.
 //
 //   2) Strip --debug / -D / --verbose / -V from argv before citty sees
 //      them. These are global modifiers consumed by the runtime; the
@@ -13,19 +13,15 @@
 // Both are pure transforms over argv, exported so cli.ts and any future
 // in-process tests can drive them deterministically without spawning.
 
-// Exported for macup/meta, which surfaces the bare form (`macup version`)
-// beside each flag in the generated global-flags reference.
-export const FLAG_COMMAND_ALIASES = [
-  'version',
-  'config',
-  'cleanup',
-  'restore',
-  'undo',
-  'doctor',
-  'logo',
-  'plugins',
-  'install-completions',
-] as const;
+// `--version` is the canonical spelling here, unlike the command nouns:
+// every CLI has `--version`/`-v`, so the flag is the convention and
+// `macup version` is the sugar. The nouns went the other way — they are
+// real subcommands now, so rewriting them would hide them from citty's
+// dispatch (ADR 0029).
+//
+// Exported for macup/meta, which surfaces the bare form beside the flag in
+// the generated reference.
+export const FLAG_COMMAND_ALIASES = ['version'] as const;
 
 export interface VerbosityFlags {
   readonly debug: boolean;

@@ -1,12 +1,19 @@
 import type { Plugin } from '../plugins/types';
-import { commandsFor, flagsForCommand } from './shared';
+import { TOP_LEVEL_COMMANDS, commandsFor, flagsForCommand } from './shared';
+
+const esc = (s: string): string => s.replace(/'/g, "'\\''");
 
 export function generateZshCompletions(plugins: readonly Plugin[]): string {
   // Each plugin gets a `name:description` entry so zsh shows the
-  // displayName next to the id in the completion menu.
+  // displayName next to the id in the completion menu. The stand-alone
+  // commands share this position — `macup restore` is spelled where a
+  // plugin id would go, so completion has to offer both.
   const pluginEntries = plugins
-    .map((p) => `'${p.manifest.id}:${p.manifest.displayName.replace(/'/g, "'\\''")}'`)
+    .map((p) => `'${esc(p.manifest.id)}:${esc(p.manifest.displayName)}'`)
     .join(' ');
+  const commandEntries = TOP_LEVEL_COMMANDS.map(
+    (c) => `'${esc(c.name)}:${esc(c.description)}'`,
+  ).join(' ');
 
   const pluginCases = plugins
     .map((p) => {
@@ -35,8 +42,9 @@ export function generateZshCompletions(plugins: readonly Plugin[]): string {
 # Auto-generated from plugin manifests. Do not edit.
 
 _macup() {
-  local -a plugins
+  local -a plugins commands
   plugins=(${pluginEntries})
+  commands=(${commandEntries})
 
   # Flags are declared on _arguments so each can carry its own value
   # spec (e.g. --completions=<shell>). Positional args 1 and 2 dispatch
@@ -44,12 +52,8 @@ _macup() {
   _arguments -C \\
     '(-h --help)'{-h,--help}'[Show help]' \\
     '(-v --version)'{-v,--version}'[Show version]' \\
-    '--config[Show config status]' \\
-    '--plugins[List built-in plugins and availability]' \\
-    '--cleanup[Delete backup files]' \\
-    '--restore[Restore from backup]' \\
-    '--undo[Revert to the most recent backup]' \\
-    '--logo[Show Apple logo]' \\
+    '(-V --verbose)'{-V,--verbose}'[Stream output to scrollback]' \\
+    '(-D --debug)'{-D,--debug}'[Trace every shell call to stderr]' \\
     '--completions=-[Emit completions (omit value to auto-detect)]::shell:(zsh bash fish)' \\
     '1:plugin:->plugin' \\
     '2:command:->command' \\
@@ -58,6 +62,7 @@ _macup() {
   case $state in
     (plugin)
       _describe -t plugins 'package manager' plugins
+      _describe -t commands 'command' commands
       ;;
     (command)
       case $words[2] in

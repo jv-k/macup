@@ -1,5 +1,5 @@
 import type { Plugin } from '../plugins/types';
-import { commandsFor, flagsForCommand } from './shared';
+import { TOP_LEVEL_COMMANDS, commandsFor, flagsForCommand } from './shared';
 
 export function generateFishCompletions(plugins: readonly Plugin[]): string {
   const lines: string[] = [
@@ -11,11 +11,16 @@ export function generateFishCompletions(plugins: readonly Plugin[]): string {
     '# Global flags',
     'complete -c macup -n "__fish_use_subcommand" -l help -d "Show help"',
     'complete -c macup -n "__fish_use_subcommand" -l version -d "Show version"',
-    'complete -c macup -n "__fish_use_subcommand" -l config -d "Show config status"',
-    'complete -c macup -n "__fish_use_subcommand" -l cleanup -d "Delete backup files"',
-    'complete -c macup -n "__fish_use_subcommand" -l restore -d "Restore from backup"',
-    'complete -c macup -n "__fish_use_subcommand" -l undo -d "Revert to the most recent backup"',
-    'complete -c macup -n "__fish_use_subcommand" -l logo -d "Show Apple logo"',
+    'complete -c macup -n "__fish_use_subcommand" -l verbose -d "Stream output to scrollback"',
+    'complete -c macup -n "__fish_use_subcommand" -l debug -d "Trace every shell call to stderr"',
+    '',
+    // Nouns, not flags (ADR 0029) — so they complete as subcommands,
+    // in the same position as a plugin id.
+    '# Stand-alone commands',
+    ...TOP_LEVEL_COMMANDS.map(
+      (c) =>
+        `complete -c macup -n "__fish_use_subcommand" -a "${c.name}" -d "${c.description.replace(/"/g, '\\"')}"`,
+    ),
     '',
     '# Plugin subcommands',
   ];

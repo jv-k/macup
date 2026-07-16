@@ -84,10 +84,14 @@ if (
   // Subcommand help (`macup brew --help`) flows through to citty below.
 }
 
-const flagActions: readonly FlagAction[] = [
+// Command nouns. These name a thing macup DOES, so they're subcommands:
+// `macup restore`, not `macup --restore`. A flag modifies a command
+// (`--json`, `--dry-run`, `--verbose`); it isn't the command itself. They
+// were flags because the tool grew out of a bash script that only had
+// flags (ADR 0029).
+const NOUN_ACTIONS: readonly FlagAction[] = [
   new LogoAction(),
   new PluginsAction(),
-  new CompletionsAction(),
   new InstallCompletionsAction(),
   new ConfigAction(),
   new CleanupAction(),
@@ -95,6 +99,29 @@ const flagActions: readonly FlagAction[] = [
   new UndoAction(),
   new DoctorAction(),
 ];
+
+// `--completions[=<shell>]` stays a flag: it takes a value, it's machine
+// plumbing that the generated completion scripts reference by name, and
+// `install-completions` is the noun a human reaches for.
+const flagActions: readonly FlagAction[] = [new CompletionsAction()];
+
+/**
+ * Adapts a FlagAction into the citty subcommand it should always have
+ * been. Invoking the subcommand IS the trigger, so its boolean flag is
+ * dropped from the arg schema and synthesised for run() — the actions
+ * keep their existing `matches`/`run` contract, and the wizard and tests
+ * that drive them directly are untouched.
+ */
+function subCommandFromAction(action: FlagAction): CommandDef {
+  const { [action.name]: _trigger, ...modifiers } = action.args;
+  return defineCommand({
+    meta: { name: action.name, description: action.description },
+    args: modifiers as ArgsDef,
+    async run({ args }) {
+      await action.run({ ...args, [action.name]: true }, deps);
+    },
+  });
+}
 
 const pluginSubCommands: Record<string, ReturnType<typeof commandsFromManifest>> = {};
 for (const plugin of deps.registry) {
@@ -160,6 +187,9 @@ const topLevelSubCommands = {
   outdated: withErrorBoundary(buildOutdatedCommand(deps)),
   check: withErrorBoundary(buildCheckCommand(deps)),
   init: withErrorBoundary(buildInitCommand()),
+  ...Object.fromEntries(
+    NOUN_ACTIONS.map((a) => [a.name, withErrorBoundary(subCommandFromAction(a))]),
+  ),
 };
 
 // Startup: warn for plugins that can't load (missing binaries on the
@@ -251,7 +281,15 @@ const main = defineCommand({
     // through to the wizard, so `macup --bogus` errors instead of exiting 0.
     const unknownFlags = findUnknownTopLevelFlags(rawArgs, KNOWN_TOP_LEVEL_FLAGS);
     if (unknownFlags.length > 0) {
-      console.error(`error: unknown option ${unknownFlags[0]}`);
+      const flag = unknownFlags[0] as string;
+      // `--restore` was the spelling before these became commands (ADR
+      // 0029). Anyone with it in muscle memory or an old alias gets the
+      // one-word answer, not a bare rejection.
+      const asCommand = flag.replace(/^--/, '');
+      const didYouMean = (topLevelSubCommands as Record<string, unknown>)[asCommand]
+        ? `\n${logui.trace(`\`${flag}\` is now a command: try \`macup ${asCommand}\`.`)}`
+        : '';
+      console.error(`error: unknown option ${flag}${didYouMean}`);
       process.exitCode = 1;
       return;
     }

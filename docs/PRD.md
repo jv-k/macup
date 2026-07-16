@@ -55,7 +55,7 @@ Software engineers on macOS who:
 Developers who avoid `brew upgrade` because it once broke their setup. They want:
 - To preview what *would* change before committing (`--dry-run`)
 - Per-package version pins
-- An undo button (`--restore`)
+- An undo button (`macup restore`)
 - A skip list for known-problematic packages
 
 ### 3.3 Non-users
@@ -72,7 +72,7 @@ Developers who avoid `brew upgrade` because it once broke their setup. They want
 
 - **G1** Unified view of all outdated packages across all supported managers
 - **G2** Declarative YAML manifest (`applist.yaml`) as single source of truth
-- **G3** Safe-by-default: confirmations, backups, `--dry-run`, `--restore`
+- **G3** Safe-by-default: confirmations, backups, `--dry-run`, `macup restore`
 - **G4** Extensible: adding a new package manager is one file
 - **G5** Scriptable: `--json` output and stable exit codes for automation
 - **G6** Fast: Interactive wizard for exploratory use, explicit args for scripting
@@ -108,7 +108,7 @@ macup <plugin> <command> [args]
 
 `<plugin> update` upgrades only tracked, outdated packages by default (consistent with `install`/`list`); `--all` upgrades every outdated package; explicit names override. The composite `all update` stays system-wide.
 
-A top-level `macup outdated` aggregates the per-plugin `outdated` results behind a spinner with progress, and supports `--json` for scripting. The other top-level commands are flag-styled (`--config`, `--cleanup`, `--restore`, `--logo`, `--plugins`, `--version`, `--install-completions`); for ergonomics the no-dash form (`macup config`, `macup version`, …) is rewritten into the canonical flag at argv parse time.
+A top-level `macup outdated` aggregates the per-plugin `outdated` results behind a spinner with progress, and supports `--json` for scripting. The other stand-alone commands are spelled as command words (`macup config`, `macup restore`, `macup plugins`), in the same position a plugin id goes. They name a thing macup does, so they are commands, not flags; a flag modifies a command (`--json`, `--dry-run`, `--verbose`). `macup version` is the one exception, rewritten to `--version` at argv parse time, because `--version` is the spelling every CLI has. See ADR 0029.
 
 ### 5.2 Declarative manifest (`applist.yaml`)
 
@@ -133,8 +133,8 @@ skip:
 
 - **Timestamped backups**: automatic before any add/remove/install
 - **Smart backup optimization**: only keeps backups when changes occur
-- **`--restore`**: interactive restore from any backup
-- **`--cleanup`**: interactive backup deletion
+- **`macup restore`**: interactive restore from any backup
+- **`macup cleanup`**: interactive backup deletion
 - **Confirmations**: required before bulk operations
 
 ### 5.4 Interactive wizard

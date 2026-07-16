@@ -48,7 +48,7 @@ is on `PATH`.
 List every built-in plugin and the reason each unavailable one is skipped:
 
 ```bash
-macup --plugins
+macup plugins
 ```
 
 The report marks each plugin and names the missing binary:
@@ -62,7 +62,7 @@ plugins: 6 / 7 available  (platform: darwin)
 ```
 
 `missing: mas` means `mas` is not on `PATH`. Install it (`brew install mas`),
-open a new shell so `PATH` refreshes, then re-run `macup --plugins` to confirm
+open a new shell so `PATH` refreshes, then re-run `macup plugins` to confirm
 the plugin flips to `✓`. The [plugins reference](/docs/reference/plugins) lists
 each plugin's required binary.
 
@@ -137,7 +137,7 @@ warning: $MACOS_UPDATETOOL_CONFIG is deprecated; use $MACUP_CONFIG instead.
 Inspect what macup resolved, including any migration notice, with `--config`:
 
 ```bash
-macup --config
+macup config
 ```
 
 ```text

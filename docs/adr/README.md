@@ -56,3 +56,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0026](0026-adopt-js-tui-stack.md) | Adopt the playbook's JS TUI utility stack | accepted |
 | [0027](0027-retire-sandcastle-orchestration.md) | Retire the Sandcastle orchestration | accepted |
 | [0028](0028-clack-core-subclassing-and-pin.md) | Subclass @clack/core's AutocompletePrompt, and pin core to prompts' version | accepted |
+| [0029](0029-command-nouns-are-subcommands.md) | Command nouns are subcommands, not flags | accepted |

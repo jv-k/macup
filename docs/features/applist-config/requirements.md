@@ -26,8 +26,8 @@
 
 ### Restore and cleanup
 
-12. `macup restore` (or `macup --restore`) lists backups newest first, asks for a target and a confirmation (default No), then copies the chosen backup over the live applist; with no backups it prints `No backups found` and exits 0.
-13. `macup --cleanup` (or `macup cleanup`) lists every `applist_*.yaml` backup, requires confirmation (default No), deletes them all, reports the count, and removes the backup dir if it is left empty.
+12. `macup restore` lists backups newest first, asks for a target and a confirmation (default No), then copies the chosen backup over the live applist; with no backups it prints `No backups found` and exits 0.
+13. `macup cleanup` lists every `applist_*.yaml` backup, requires confirmation (default No), deletes them all, reports the count, and removes the backup dir if it is left empty.
 
 ## Source of truth
 

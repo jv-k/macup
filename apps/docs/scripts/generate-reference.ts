@@ -86,16 +86,32 @@ function flagAvailability(meta: DocsMetadata): string {
     const cells = flags.map((f) => (accept.get(f)?.has(cmd) ? 'yes' : ' '));
     out += `| \`${cmd}\` | ${cells.join(' | ')} |\n`;
   }
-  out += '\n`outdated` and `check` are top-level (`macup outdated`, `macup check`); the rest are per-plugin ';
-  out += '(`macup brew list`). `--cask`, `--formula`, and `--subtype` are Homebrew only.\n';
+  out += '\n`outdated`, `check`, and `doctor` are [stand-alone commands](/docs/reference/commands) ';
+  out += '(`macup outdated`); the rest are per-plugin (`macup brew list`). ';
+  out += '`--cask`, `--formula`, and `--subtype` are Homebrew only.\n';
+  return out;
+}
+
+function commandsPage(meta: DocsMetadata): string {
+  let out = frontmatter('Commands', 'The stand-alone commands macup runs.');
+  out += `# Commands\n\n`;
+  out += `These run on their own, in the same position a plugin id goes: \`macup restore\`, `;
+  out += `\`macup outdated\`. They are commands, not flags — a flag modifies a command `;
+  out += `(\`--json\`, \`--dry-run\`), so it is never the command itself.\n\n`;
+  out += `| Command | Description |\n| --- | --- |\n`;
+  for (const c of meta.topLevelCommands) {
+    if (!c.description) continue;
+    out += `| \`macup ${c.name}\` | ${c.description} |\n`;
+  }
   return out;
 }
 
 function globalFlagsPage(meta: DocsMetadata): string {
   let out = frontmatter('Global flags', 'Top-level macup flags.');
   out += `# Global flags\n\n`;
-  out += `Flags with an “Also as” form can be spelled as a bare command word: `;
-  out += `\`macup version\` is rewritten to \`macup --version\`.\n\n`;
+  out += `These modify how macup runs. What macup DOES is a [command](/docs/reference/commands) `;
+  out += `— \`macup restore\`, not \`macup --restore\`. \`macup version\` is the one bare form `;
+  out += `that maps onto a flag, since \`--version\` is the universal spelling.\n\n`;
   out += `| Flag | Alias | Also as | Description |\n| --- | --- | --- | --- |\n`;
   for (const f of meta.globalFlags) {
     const alias = f.alias ? `\`${f.alias}\`` : ' ';
@@ -139,6 +155,7 @@ function metaJson(plugins: PluginDoc[]): string {
   const pages = [
     'plugins',
     ...plugins.map((p) => p.id),
+    'commands',
     'global-flags',
     'config-schema',
     'exit-codes',
@@ -155,6 +172,7 @@ function main(): void {
   for (const p of meta.plugins) {
     writeFileSync(join(OUT, `${p.id}.mdx`), pluginPage(p));
   }
+  writeFileSync(join(OUT, 'commands.mdx'), commandsPage(meta));
   writeFileSync(join(OUT, 'global-flags.mdx'), globalFlagsPage(meta));
   writeFileSync(join(OUT, 'config-schema.mdx'), configPage(meta));
   writeFileSync(join(OUT, 'exit-codes.mdx'), exitCodesPage(meta));

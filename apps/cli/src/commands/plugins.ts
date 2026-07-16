@@ -1,5 +1,4 @@
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
-import { BUILTIN_PLUGINS, isOnPath } from '../plugins/registry';
 import type { Plugin, PluginCapabilities } from '../plugins/types';
 import { painter } from '../ui/color';
 
@@ -131,9 +130,9 @@ export function formatPluginsReport(report: PluginsReport, opts: FormatOptions =
 }
 
 export async function runPlugins(_args: ParsedArgs, deps: CliDeps): Promise<void> {
-  const report = buildPluginsReport(BUILTIN_PLUGINS, {
-    platform: process.platform,
-    onPath: (b) => isOnPath(b),
+  const report = buildPluginsReport(deps.registry, {
+    platform: deps.platform,
+    onPath: (b) => deps.exec.onPath(b),
   });
   console.log(formatPluginsReport(report, { color: deps.color }));
 }

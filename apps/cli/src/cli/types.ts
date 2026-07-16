@@ -37,6 +37,8 @@ export interface CliDeps {
   readonly getStore: () => Promise<ConfigStore>;
   readonly env: NodeJS.ProcessEnv;
   readonly home: string;
+  /** Host platform, resolved once at startup so commands don't read process.platform. */
+  readonly platform: NodeJS.Platform;
   /** Process-wide cancellation signal. Aborted on SIGINT by cli.ts. */
   readonly signal: AbortSignal;
   /** Trip the cancellation signal. Used by the SIGINT handler. */

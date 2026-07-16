@@ -225,7 +225,7 @@ export function buildOutdatedCommand(deps: CliDeps) {
         makeCtx: () => ({
           exec: deps.exec,
           log: deps.log,
-          signal: new AbortController().signal,
+          signal: deps.signal,
         }),
         onProgress: (e) => {
           s?.message(`Checking plugins… (${e.completed}/${e.total}) ${e.displayName}`);

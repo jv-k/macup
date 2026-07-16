@@ -1,0 +1,129 @@
+---
+title: Reproduce a machine from applist.yaml
+description: Track your dev packages, commit applist.yaml to dotfiles, and reinstall the tracked set on a new Mac.
+---
+
+# Reproduce a machine from applist.yaml
+
+Your [applist.yaml](/docs/guides/configuration) is the curated list of packages
+macup tracks. Commit it to your dotfiles, and a new Mac becomes a copy of the
+old one: install macup, then install each plugin's tracked set.
+
+<Callout type="info">
+
+This rebuilds the packages you track, not your full machine. App settings,
+licenses, and untracked installs are out of scope.
+
+</Callout>
+
+<Steps>
+
+<Step>
+
+### Track the packages you want to keep
+
+`add` records a package in `applist.yaml`. It installs nothing. Run it per
+backend for the packages you care about:
+
+```bash
+macup brew add git jq ripgrep
+macup brew add --cask firefox
+macup npm add typescript prettier
+macup pnpm add eslint
+```
+
+App Store apps track by their numeric App Store ID, since that is what `mas`
+installs from. Find the ID with `mas list`, then add it:
+
+```bash
+macup appstore add 497799835
+```
+
+To capture what is already installed, list it first, then add the names you
+want tracked:
+
+```bash
+macup brew list --all   # every formula and cask Homebrew has installed
+```
+
+</Step>
+
+<Step>
+
+### Commit applist.yaml to your dotfiles
+
+The file lives at `~/.config/macup/applist.yaml`. Track it with your dotfiles:
+
+```bash
+cp ~/.config/macup/applist.yaml ~/dotfiles/macup/applist.yaml
+cd ~/dotfiles && git add macup/applist.yaml && git commit -m "Track dev packages"
+```
+
+On the new Mac, copy it back to a path macup resolves. macup reads
+`$MACUP_CONFIG` first, then `$XDG_CONFIG_HOME/macup/applist.yaml`, then
+`~/.config/macup/applist.yaml`. See [configuration](/docs/guides/configuration)
+for the full resolution order.
+
+</Step>
+
+<Step>
+
+### Install macup on the new Mac
+
+Set up macup, then point it at your tracked applist:
+
+```bash
+mkdir -p ~/.config/macup
+cp ~/dotfiles/macup/applist.yaml ~/.config/macup/applist.yaml
+```
+
+See [installation](/docs/getting-started/installation) for getting the `macup`
+binary onto the machine.
+
+</Step>
+
+<Step>
+
+### Install the tracked set
+
+Each per-plugin `install` installs that plugin's tracked-but-not-installed
+packages. Run them backend by backend:
+
+```bash
+macup brew install
+macup npm install
+macup pnpm install
+macup appstore install
+```
+
+Or install across every backend in one command. `macup all install` walks each
+plugin and installs its own tracked-but-not-installed set:
+
+```bash
+macup all install
+```
+
+`all install` ignores any package names you pass: each constituent installs its
+own tracked set. A backend that is missing or not signed in is skipped, not
+fatal. See [how it works](/docs/concepts/how-it-works) for the composite model.
+
+</Step>
+
+</Steps>
+
+## Preview before you install
+
+Run a dry run first to see every command without touching the machine:
+
+```bash
+macup all install --dry-run
+```
+
+Each line prints as `[dry-run] <cmd>` and nothing executes. See
+[safe updates](/docs/guides/safe-updates) for the full preview output.
+
+## See also
+
+- [Configuration](/docs/guides/configuration) covers the applist and its resolution order.
+- [How macup works](/docs/concepts/how-it-works) explains tracked-vs-installed and the composite `all` plugin.
+- [Track without installing](/docs/recipes/track-without-installing) records packages without pulling them down.

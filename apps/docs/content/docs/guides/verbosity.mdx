@@ -1,0 +1,21 @@
+---
+title: Verbosity
+description: Default, verbose, and debug output modes.
+---
+
+# Verbosity
+
+macup has three output modes:
+
+- default: a pinned status bar on the bottom row. Install and upgrade flows
+  open a bordered box just above the bar where subprocess output streams live,
+  including download progress and `Password:` prompts. `Error:` and `Warning:`
+  lines surface above the bar.
+- `--verbose` / `-V`: the same UI, plus subprocess output is teed to
+  scrollback so you keep a grep-able copy.
+- `--debug` / `-D`: a full raw trace of every shell call routed to stderr,
+  with timing. The bar is suppressed, so you see exactly what each underlying
+  command printed.
+
+Set `MACUP_STATUS_BAR=off` to fall back to a plain inline spinner if your
+terminal misbehaves with scroll regions.

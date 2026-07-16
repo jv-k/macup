@@ -1,0 +1,65 @@
+---
+title: Disable the status bar
+description: Turn off the pinned status bar when a terminal or CI runner mangles scroll regions.
+---
+
+# Disable the status bar
+
+macup pins a status bar to the bottom row of the terminal by default. The bar
+relies on DECSTBM scroll regions, which a few terminals and CI runners render
+incorrectly. When that happens, set one environment variable to fall back to a
+plain inline spinner.
+
+## Turn it off for one run
+
+Set `MACUP_STATUS_BAR=off` in front of any command:
+
+```bash
+MACUP_STATUS_BAR=off macup all update
+```
+
+The bar disappears and macup prints a plain inline spinner instead. Every other
+behavior stays the same.
+
+To turn it off for a whole session, export it:
+
+```bash
+export MACUP_STATUS_BAR=off
+macup brew update
+macup npm update
+```
+
+## When the bar turns off on its own
+
+macup also drops the bar when `$TERM` reports a terminal that cannot drive
+scroll regions:
+
+- `$TERM` is empty
+- `$TERM` is `dumb`
+
+Most CI runners set one of these, so the bar is usually off in CI without any
+config. If yours sets a richer `$TERM` and the output looks scrambled, set
+`MACUP_STATUS_BAR=off` explicitly.
+
+<Callout type="info">
+
+`MACUP_STATUS_BAR=force` does the opposite: it keeps the bar on even when
+`$TERM` is empty or `dumb`. On a capable terminal it changes nothing, since
+the bar is already on by default.
+
+</Callout>
+
+## What you lose and keep
+
+The bar is presentation only. Turning it off changes nothing about which
+packages macup updates, the exit code, or JSON output.
+
+`--debug` / `-D` already suppresses the bar and prints a raw trace of every
+shell call to stderr, so reach for it when you want to see exactly what an
+underlying command printed. See [Verbosity](/docs/guides/verbosity) for the
+full set of output modes.
+
+## See also
+
+- [Verbosity](/docs/guides/verbosity) covers the default, verbose, and debug output modes.
+- [Environment variables](/docs/reference/environment-variables) lists every variable macup reads.

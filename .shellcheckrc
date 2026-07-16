@@ -1,0 +1,21 @@
+# shellcheck configuration for zsh
+shell=zsh
+
+# Enable zsh-specific checks
+enable=add-default-case
+enable=avoid-nullary-conditions
+enable=check-unassigned-uppercase
+enable=deprecate-which
+enable=quote-safe-variables
+enable=require-variable-braces
+
+# Disable bash-specific warnings that don't apply to zsh
+disable=SC2148  # Tips depend on target shell and yours is unknown
+disable=SC2034  # Variable appears unused (zsh handles scoping differently)
+disable=SC2154  # Variable is referenced but not assigned (zsh parameter expansion)
+disable=SC1090  # Can't follow non-constant source (common in zsh configs)
+disable=SC1091  # Not following included file (zsh modules)
+
+# Zsh-specific exclusions
+disable=SC2296  # Parameter expansions can't start with (
+disable=SC2268  # Avoid x-prefix in zsh

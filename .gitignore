@@ -1,0 +1,13 @@
+node_modules
+.worktrees/
+dist/
+coverage/
+.DS_Store
+img/tmp/
+.turbo/
+# prepack copies (created by apps/cli prepack, removed by postpack)
+apps/cli/README.md
+apps/cli/LICENSE.md
+apps/docs/test-results/
+apps/docs/playwright-report/
+

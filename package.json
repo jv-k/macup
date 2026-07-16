@@ -1,44 +1,28 @@
 {
-  "name": "macos-updatetool",
-  "version": "0.1.0",
-  "description": "A CLI tool that manages apps and packages on macOS. It handles Homebrew, npm, App Store apps, and Xcode components.",
-  "main": "bin/macos-updatetool",
-  "bin": {
-    "macos-updatetool": "./bin/macos-updatetool"
-  },
-  "scripts": {
-    "checkshell": "zsh -n ./bin/macos-updatetool",
-    "install": "echo 'Setting up macos-updatetool...'",
-    "postinstall": "echo 'macos-updatetool installed successfully! Run: macos-updatetool --help'"
-  },
-  "keywords": [
-    "macos",
-    "package-manager",
-    "homebrew",
-    "npm",
-    "app-store",
-    "xcode",
-    "automation",
-    "cli",
-    "maintenance"
-  ],
-  "author": "John Valai <git@jvk.to>",
+  "name": "macup-monorepo",
+  "private": true,
+  "type": "module",
   "license": "MIT",
-  "os": [
-    "darwin"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jv-k/macos-updatetool.git"
+  "packageManager": "pnpm@10.33.1",
+  "scripts": {
+    "build": "turbo run build",
+    "build:binary": "turbo run build:binary",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "adr:check": "node scripts/check-adrs.mjs",
+    "shellcheck": "git ls-files '*.sh' | xargs shellcheck --severity=warning",
+    "deslop:lint": "uvx --from git+https://github.com/jv-k/deslopper@038e6b5170b4d5d97eff143a17475181d73aea99 deslopper lint",
+    "prepare": "simple-git-hooks || true"
   },
-  "bugs": {
-    "url": "https://github.com/jv-k/macos-updatetool/issues"
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "simple-git-hooks": "^2.13.1",
+    "turbo": "^2.3.0"
   },
-  "homepage": "https://github.com/jv-k/macos-updatetool#readme",
-  "preferGlobal": true,
-  "files": [
-    "bin/",
-    "README.md",
-    "LICENSE"
-  ]
+  "simple-git-hooks": {
+    "pre-commit": "FILES=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.markdown' '*.mdx' | grep -Ev '(^|/)(node_modules|\\.github/chatmodes|docs/superpowers|\\.worktrees)/' || true); [ -z \"$FILES\" ] && exit 0; echo \"$FILES\" | xargs env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm deslop:lint"
+  }
 }

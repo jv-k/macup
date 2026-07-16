@@ -1,0 +1,80 @@
+---
+title: Back up before a risky upgrade
+description: Preview an upgrade, run it, and recover your applist from an automatic backup if a config change goes wrong.
+---
+
+# Back up before a risky upgrade
+
+Upgrade cautiously: look before you run, run the upgrade, and recover your config if an edit goes wrong.
+
+<Callout type="info">
+
+macup writes automatic backups before it mutates your `applist.yaml` (add, remove, pin, unpin, skip, unskip), not before a package upgrade. A backup protects your tracked-package list, not the installed binaries. To roll a package back, use the package manager's own pin or reinstall.
+
+</Callout>
+
+<Steps>
+
+<Step>
+
+### Preview the upgrade
+
+`--dry-run` prints every command without running any of them.
+
+```bash
+macup brew update --dry-run
+```
+
+Each line prints as `[dry-run] brew upgrade <name>`. See [safe updates](/docs/guides/safe-updates) for the full preview behavior.
+
+</Step>
+
+<Step>
+
+### Run the upgrade
+
+When the preview looks right, drop the flag.
+
+```bash
+macup brew update
+```
+
+This upgrades the brew packages you track that are outdated. To extend it to every outdated formula and cask, add `--all`.
+
+</Step>
+
+<Step>
+
+### Recover the applist if a config edit went wrong
+
+A bad `pin`, `skip`, or `remove` is recoverable. macup copied `applist.yaml` to a timestamped backup before the edit. List the backups, pick one, and confirm.
+
+```bash
+macup restore
+```
+
+The picker labels each entry `<timestamp>  (<operation>)`, newest first. The confirm prompt defaults to no, so a successful restore is deliberate. macup prints `Restored from <filename>.`
+
+To clear old backups once you no longer need them:
+
+```bash
+macup cleanup
+```
+
+Cleanup is all-or-nothing and asks for one confirmation before deleting every backup file.
+
+</Step>
+
+</Steps>
+
+<Callout type="warn">
+
+`macup restore` overwrites `applist.yaml` in place and does not back up the file it replaces first. The restore itself is not reversible through the backup system. Make sure you picked the right backup before confirming.
+
+</Callout>
+
+## See also
+
+- [Safe updates](/docs/guides/safe-updates) documents `--dry-run`, automatic backups, restore, and cleanup in full.
+- [Pin a package](/docs/recipes/pin-a-package) holds a package at a known-good version through an upgrade.
+- [Selective updates](/docs/concepts/selective-updates) explains how tracking, pins, and skips shape an update.

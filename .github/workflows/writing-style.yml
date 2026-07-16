@@ -1,0 +1,43 @@
+name: Writing style
+
+# De-slop gate. Runs deslopper (github.com/jv-k/deslopper) over the Markdown changed in the
+# pull request and fails the build on an error-tier tell (em dashes, the section sign).
+# Warn-tier findings (the word lists, bold bullet leads) annotate the PR but do not block.
+# Only changed files are linted so the legacy prose backlog does not fail the check. Run
+# `pnpm deslop:lint <paths>` locally to reproduce.
+#
+# Release PRs (base=main) are exempt: the diff against main is the whole accumulated
+# develop delta, so it re-lints prose each feature PR already cleared on its own diff.
+# The develop-facing PR is the enforcement point; this one only reports.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: De-slop lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v8.2.0
+      - name: Run deslopper on changed Markdown
+        # The deslopper git pin lives in one place: the deslop:lint script in
+        # package.json. Extract it so a version bump is a one-file change.
+        # Mirror the pre-commit hook's filters: skip deleted files and the
+        # config's excluded dirs (passing files explicitly bypasses the
+        # deslopper.config.json excludes).
+        run: |
+          if [ "${{ github.base_ref }}" = "main" ]; then
+            echo "Release PR (base=main): prose already linted on develop-facing PRs. Skipping."
+            exit 0
+          fi
+          pin=$(jq -r '.scripts["deslop:lint"]' package.json | grep -oE '[0-9a-f]{40}')
+          files=$(git diff --name-only --diff-filter=ACMR "origin/${{ github.base_ref }}...HEAD" -- '*.md' '*.markdown' '*.mdx' \
+            | grep -Ev '(^|/)(node_modules|\.github/chatmodes|docs/superpowers|\.worktrees)/' || true)
+          [ -z "$files" ] && exit 0
+          uvx --from "git+https://github.com/jv-k/deslopper@$pin" deslopper lint --format github $files

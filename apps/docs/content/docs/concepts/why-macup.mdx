@@ -1,0 +1,88 @@
+---
+title: Why macup
+description: A Mac dev installs from many sources with no shared state, and macup gives that mess one interface, one manifest, and one safety model.
+---
+
+# Why macup
+
+A working Mac dev machine pulls software from five to seven places: Homebrew
+formulas and casks, npm globals, pnpm globals, the Mac App Store, the Xcode
+command-line tools, and `softwareupdate` for the OS itself. Each one has its own
+CLI, its own definition of "outdated," its own upgrade semantics, and no shared
+state with the others. macup puts one interface, one manifest, and one safety
+model over all of them.
+
+## The four problems
+
+The split across backends creates four concrete problems.
+
+Visibility. No single command answers "what is outdated across the whole
+machine?" You run `brew outdated`, then `npm outdated -g`, then check the App
+Store, then `softwareupdate -l`, and assemble the answer in your head.
+
+Reproducibility. Setting up a new Mac means remembering every package by hand.
+Dotfiles cover shell config but not the list of installed software.
+
+Safety. An upgrade can break work in progress. There is no lightweight undo:
+you reinstall the old version if you wrote it down.
+
+Selectivity. You want to upgrade most things but hold one package at a
+known-good version. Each manager spells this differently (`brew pin`) or offers
+nothing.
+
+macup answers each one. `macup outdated` aggregates every backend behind a
+single command. An `applist.yaml` manifest records what you track, so a new
+machine is one config file away. Every config change writes a timestamped
+backup you can restore. Pins and skips give one pin/skip vocabulary across every
+backend.
+
+```bash
+# One command for the whole machine, not five
+macup outdated
+```
+
+<Callout type="info">
+
+macup is macOS only by design. The plugins shell out to `brew`, `mas`,
+`xcode-select`, and `softwareupdate`. Cross-platform is a non-goal, not a gap.
+
+</Callout>
+
+## How macup compares
+
+The same job can be done with the native CLIs, with a run-everything updater
+like topgrade, or with `mas` for the App Store alone. Here is where macup
+differs.
+
+| | macup | Individual tools | topgrade | mas |
+|---|---|---|---|---|
+| Unified interface | Yes | No | Yes | No |
+| Declarative manifest | Yes | No | No | No |
+| Per-package pins and skips | Yes | Partial | No | No |
+| Timestamped backups | Yes | No | No | No |
+| macOS-first | Yes | Varies | No | Yes |
+
+topgrade is the closest in spirit but leans Linux, carries no config-as-code,
+and has no pin or skip semantics. macup treats package management as a stateful,
+auditable workflow, not only "run everything." The native CLIs each do one
+backend well and share nothing. `mas` covers the App Store and stops there.
+
+## What you get for it
+
+A declarative manifest you commit to dotfiles. See
+[configuration](/docs/guides/configuration).
+
+[Selective updates](/docs/concepts/selective-updates): a pin caps a version, a
+skip excludes a package, and both are keyed by backend.
+
+[Safe updates](/docs/guides/safe-updates): preview a run with `--dry-run`,
+restore from an automatic backup, and confirm before a system-wide change.
+
+Scriptable output. `outdated` and `list` emit `--json`, and exit codes are
+stable. See [scripting macup](/docs/guides/scripting).
+
+## Next
+
+Read [how macup works](/docs/concepts/how-it-works) for the host-plus-plugins
+model, or jump to the [quick start](/docs/getting-started/quick-start) and run
+it.

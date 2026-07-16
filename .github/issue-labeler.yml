@@ -1,0 +1,67 @@
+# Title/body regex labels for github/issue-labeler@v3.4 (PRs and issues).
+# Each label maps to a list of regexes; any match applies the label.
+# /.../i is case-insensitive. sync-labels is 0 in the workflow, so a
+# non-match never removes a label (path-based area labels stay put).
+# The ^type(...) anchors catch conventional PR titles; the word-boundary
+# keywords catch free-text issues. Best-effort, correct by hand when off.
+# Only area:* and type:* (plus bug/enhancement) labels are routed here.
+# Human-only triage labels (status:*, milestone:*, epic, priority:*) are
+# never applied by this automation.
+
+# --- type (conventional title prefix, or issue keywords) ---
+bug:
+  - '/^fix(\(|!|:)/i'
+  - '/\b(bug|wrong|incorrect|broken|crash(es|ed|ing)?|fail(s|ed|ing|ure)?|regression|stack trace|stacktrace|traceback)\b/i'
+
+enhancement:
+  - '/^(feat|feature)(\(|!|:)/i'
+  - '/\b(feature request|propose|proposal|suggestion|would be (nice|good|great)|please add|missing|support for)\b/i'
+
+"type:feature":
+  - '/^(feat|feature)(\(|!|:)/i'
+
+"type:refactor":
+  - '/^refactor(\(|!|:)/i'
+  - '/\b(restructure|reorganis\w*|reorganiz\w*|rewrite|tidy|de[ -]?slop|cleanup|clean[ -]?up)\b/i'
+
+"type:chore":
+  - '/^(chore|build|ci|deps|docs|style|test)(\(|!|:)/i'
+  - '/\b(maintenance|dependency|dependencies|bump|tooling|housekeeping)\b/i'
+
+"type:perf":
+  - '/^perf(\(|!|:)/i'
+  - '/\b(performance|slow(er|ness)?|latency|speed[ -]?up|optimi[sz]e|optimi[sz]ation)\b/i'
+
+# --- area (free-text keywords; also reinforces PR path labels) ---
+"area:cli":
+  - '/\b(cli|command[ -]?line|argv|flag|argument|subcommand|completion|completions)\b/i'
+
+"area:tui":
+  - '/\b(tui|terminal ui|spinner|prompt|render(ing)?|output format(ting)?|ansi|colou?r output|table output)\b/i'
+
+"area:config":
+  - '/\b(config(uration)?|applist|applist\.ya?ml|schema|zod|settings file)\b/i'
+
+"area:plugins":
+  - '/\b(plugin|brew|homebrew|npm|mas|app store|mac app store|xcode|package manager)\b/i'
+
+"area:docs":
+  - '/\b(docs?|documentation|readme|prd|guide|authoring)\b/i'
+
+"area:ci":
+  - '/\b(ci|cd|workflow|github actions?|biome|lint(er|ing)?|shellcheck|release pipeline|label(l?ing|er)?|automation)\b/i'
+
+"area:testing":
+  - '/\b(test(s|ing)?|vitest|unit test|integration test|e2e|end[ -]?to[ -]?end|fixture|coverage)\b/i'
+
+"area:helpsystem":
+  - '/\b(help text|help system|help output|usage (text|output|message)|--help|man page)\b/i'
+
+"area:bundles":
+  - '/\b(bundle|bundles|package collection|grouped packages|package group)\b/i'
+
+"area:distribution":
+  - '/\b(distribution|packaging|install path|installation method|publish (to)?|homebrew tap|npm publish)\b/i'
+
+"area:release":
+  - '/\b(release|changelog|version bump|semver|tag(ging|ged)?|publish release)\b/i'

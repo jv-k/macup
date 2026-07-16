@@ -1,0 +1,40 @@
+[
+  {
+    "cmd": "mas",
+    "args": ["list"],
+    "result": {
+      "stdout": "497799835 Xcode (15.2)\n1333542190 1Password 7 (7.9.11)\n682658836 GarageBand (10.4.11)\n",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "mas",
+    "args": ["outdated"],
+    "result": {
+      "stdout": "497799835 Xcode (15.2 -> 15.4)\n",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "mas",
+    "args": ["install", "497799835"],
+    "result": { "stdout": "==> Installing Xcode\n", "stderr": "", "exitCode": 0 }
+  },
+  {
+    "cmd": "mas",
+    "args": ["upgrade", "497799835"],
+    "result": { "stdout": "==> Upgrading Xcode\n", "stderr": "", "exitCode": 0 }
+  },
+  {
+    "cmd": "mas",
+    "args": ["install", "Xcode"],
+    "result": { "stdout": "==> Installing Xcode\n", "stderr": "", "exitCode": 0 }
+  },
+  {
+    "cmd": "mas",
+    "args": ["upgrade", "Xcode"],
+    "result": { "stdout": "==> Upgrading Xcode\n", "stderr": "", "exitCode": 0 }
+  }
+]

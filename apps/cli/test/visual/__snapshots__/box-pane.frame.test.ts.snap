@@ -1,0 +1,28 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`box pane frame > default mode: brew upgrade streams into the box 1`] = `
+"
+
+
+
+
+
+
+
+
+
+
+
+
+┌ brew upgrade git ────────────────────────────────────────────────────────────┐
+│ ==> Upgrading git                                                            │
+│ ==> Pouring git--2.43.0.arm64                                                │
+│ 🍺  git was upgraded
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+◐  Upgrading 1 formula"
+`;

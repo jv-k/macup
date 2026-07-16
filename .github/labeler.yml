@@ -1,0 +1,46 @@
+# PR labels applied from changed file paths by actions/labeler@v6.
+# Maps the macup source layout onto the area: taxonomy. Every label here must
+# already exist in the repo; the action applies labels, it never creates them.
+# Globs use minimatch. Source lives under apps/cli/ (monorepo layout).
+# Area labels with no clean path glob (area:helpsystem, area:bundles,
+# area:distribution, area:release) are handled by title/body regex in
+# .github/issue-labeler.yml, not here.
+
+"area:cli":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/cli/src/cli.ts"
+          - "apps/cli/src/cli/**"
+          - "apps/cli/src/commands/**"
+
+"area:tui":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/cli/src/ui/**"
+
+"area:config":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/cli/src/config/**"
+
+"area:plugins":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/cli/src/plugins/**"
+          - "apps/cli/plugins/**"
+
+"area:docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "README.md"
+
+"area:ci":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+
+"area:testing":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/cli/test/**"

@@ -1,0 +1,153 @@
+import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
+import { BUILTIN_PLUGINS, isOnPath } from '../plugins/registry';
+import type { Plugin, PluginCapabilities } from '../plugins/types';
+
+export interface PluginStatus {
+  id: string;
+  displayName: string;
+  available: boolean;
+  /** Short reason string when `available` is false. */
+  reason?: string;
+  supportedOS: readonly NodeJS.Platform[];
+  requires: readonly string[];
+  /** Subset of `requires` not found on PATH. */
+  missing: readonly string[];
+  capabilities: PluginCapabilities;
+  subtypes?: readonly string[];
+  category?: string;
+}
+
+export interface PluginsReport {
+  platform: NodeJS.Platform;
+  total: number;
+  available: number;
+  statuses: PluginStatus[];
+}
+
+export interface PluginsReportDeps {
+  platform: NodeJS.Platform;
+  onPath: (binary: string) => boolean;
+}
+
+export function buildPluginsReport(
+  plugins: readonly Plugin[],
+  deps: PluginsReportDeps,
+): PluginsReport {
+  const statuses: PluginStatus[] = plugins.map((p) => {
+    const m = p.manifest;
+    const osSupported = m.supportedOS.includes(deps.platform);
+    const missing = m.requires.filter((bin) => !deps.onPath(bin));
+
+    let available = osSupported && missing.length === 0;
+    let reason: string | undefined;
+    if (!osSupported) {
+      reason = `unsupported on ${deps.platform} (needs ${m.supportedOS.join('/')})`;
+    } else if (missing.length > 0) {
+      reason = `missing: ${missing.join(', ')}`;
+    }
+
+    // The composite `all` plugin has no requires/supportedOS of its own;
+    // treat it as available whenever we have it registered.
+    if (m.id === 'all') {
+      available = true;
+      reason = undefined;
+    }
+
+    return {
+      id: m.id,
+      displayName: m.displayName,
+      available,
+      reason,
+      supportedOS: m.supportedOS,
+      requires: m.requires,
+      missing,
+      capabilities: m.capabilities,
+      subtypes: m.subtypes,
+      category: m.category,
+    };
+  });
+
+  return {
+    platform: deps.platform,
+    total: statuses.length,
+    available: statuses.filter((s) => s.available).length,
+    statuses,
+  };
+}
+
+export interface FormatOptions {
+  /** If true, wraps status glyphs and labels in ANSI. Otherwise plain ASCII. */
+  color?: boolean;
+}
+
+/**
+ * Render a plugins report for TTY output. Layout:
+ *
+ *   plugins: 6 / 7 available
+ *
+ *     ✓ brew       Homebrew              list, install, update, add, remove  [formulas|casks]
+ *     ✗ appstore   App Store (mas)       missing: mas
+ *     ✓ all        All (composite)       list, install, update
+ */
+export function formatPluginsReport(report: PluginsReport, opts: FormatOptions = {}): string {
+  const color = opts.color ?? false;
+  const green = (s: string) => (color ? `\x1b[32m${s}\x1b[0m` : s);
+  const red = (s: string) => (color ? `\x1b[31m${s}\x1b[0m` : s);
+  const dim = (s: string) => (color ? `\x1b[2m${s}\x1b[0m` : s);
+
+  const idPad = Math.max(4, ...report.statuses.map((s) => s.id.length));
+  const namePad = Math.max(4, ...report.statuses.map((s) => s.displayName.length));
+
+  const lines: string[] = [];
+  lines.push(
+    `plugins: ${report.available} / ${report.total} available  (platform: ${report.platform})`,
+  );
+  lines.push('');
+
+  for (const s of report.statuses) {
+    const glyph = s.available ? green('✓') : red('✗');
+    const id = s.id.padEnd(idPad);
+    const name = s.displayName.padEnd(namePad);
+
+    let trailing: string;
+    if (!s.available) {
+      trailing = red(s.reason ?? 'unavailable');
+    } else {
+      const cmds: string[] = [];
+      if (s.capabilities.list) cmds.push('list');
+      if (s.capabilities.install) cmds.push('install');
+      if (s.capabilities.update) cmds.push('update');
+      if (s.capabilities.add) cmds.push('add');
+      if (s.capabilities.remove) cmds.push('remove');
+      trailing = dim(cmds.join(', '));
+      if (s.subtypes && s.subtypes.length > 1) {
+        trailing += dim(`  [${s.subtypes.join('|')}]`);
+      }
+    }
+
+    lines.push(`  ${glyph} ${id}  ${name}  ${trailing}`);
+  }
+
+  return lines.join('\n');
+}
+
+export async function runPlugins(_args: ParsedArgs, deps: CliDeps): Promise<void> {
+  const report = buildPluginsReport(BUILTIN_PLUGINS, {
+    platform: process.platform,
+    onPath: (b) => isOnPath(b),
+  });
+  console.log(formatPluginsReport(report, { color: deps.color }));
+}
+
+export class PluginsAction implements ActionCommand {
+  readonly name = 'plugins';
+  readonly description = 'List built-in plugins and whether each is available on this machine.';
+  readonly args = {
+    plugins: {
+      type: 'boolean' as const,
+      description: 'List built-in plugins and whether each is available on this machine.',
+    },
+  };
+
+  run = runPlugins;
+}

@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm lint *)",
+      "Bash(gh issue create --title 'Starter config / init command' --label type:feature,priority:low,area:cli,area:config --body ' *)",
+      "Bash(gh issue create --title 'UI column alignment across all commands' --label type:feature,priority:low,area:tui --body ' *)",
+      "Bash(gh issue create --title 'Optional file logging' --label type:feature,priority:low,area:cli --body ' *)",
+      "Bash(gh issue create --title 'Shell integration \\(macup init zsh/bash/fish\\)' --label type:feature,priority:low,area:cli --body ' *)",
+      "Bash(git -C /Users/Jonny/Dev/jv-k/macos-updatetool log --all --oneline --grep=\"citty\\\\|cli framework\\\\|commander\\\\|yargs\")",
+      "Bash(pnpm vitest *)",
+      "Bash(node /Users/Jonny/Dev/jv-k/macos-updatetool/dist/cli.mjs brew list --cask --json)",
+      "Bash(node /Users/Jonny/Dev/jv-k/macos-updatetool/dist/cli.mjs npm list --subtype=anything)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(node dist/cli.mjs)",
+      "Bash(node dist/cli.mjs brew list --subtype=bogus)",
+      "Bash(node /Users/Jonny/Dev/jv-k/macos-updatetool/dist/cli.mjs brew list --cask)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(git worktree *)",
+      "Read(//Users/Jonny/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/subagent-driven-development/**)",
+      "Bash",
+      "Agent",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep"
+    ]
+  }
+}

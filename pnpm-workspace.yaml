@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm 10 reads build-script allowlist here, not from package.json's "pnpm" field.
+onlyBuiltDependencies:
+  - "@biomejs/biome"
+  - esbuild
+  - node-pty

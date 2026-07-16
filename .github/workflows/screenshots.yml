@@ -1,0 +1,102 @@
+name: Screenshots
+
+# Regenerates CLI visuals on every published release so the README stays in
+# sync with the released tool. Renders both outputs via vhs, then commits
+# them back to main.
+#
+#   img/screenshot.png   — vhs, single PNG of `macup --help`
+#   img/demo.gif         — vhs, sandbox-driven demo recording
+#
+# Also available via manual dispatch.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: screenshots-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  vhs:
+    name: Render via vhs (help + demo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install JetBrains Mono font
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y fonts-jetbrains-mono
+          fc-cache -f
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install deps + build dist
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Ensure img/tmp exists for vhs Output
+        run: mkdir -p img/tmp
+
+      - name: Render help.tape
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: apps/cli/dev/help.tape
+
+      - name: Render demo.tape
+        run: vhs apps/cli/dev/demo.tape
+
+      - name: Upload vhs artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vhs-screenshots
+          path: |
+            img/screenshot.png
+            img/demo.gif
+          retention-days: 7
+          if-no-files-found: error
+
+  commit:
+    name: Commit updated screenshots to main
+    needs: [vhs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Download vhs artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: vhs-screenshots
+          path: img
+
+      - name: Commit updated screenshots
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          branch: main
+          file_pattern: img/screenshot.png img/demo.gif
+          commit_message: "docs(img): regenerate screenshots [skip ci]"
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "41898282+github-actions[bot]@users.noreply.github.com"

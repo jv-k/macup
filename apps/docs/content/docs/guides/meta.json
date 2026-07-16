@@ -1,0 +1,11 @@
+{
+  "title": "Guides",
+  "pages": [
+    "checking-outdated",
+    "configuration",
+    "safe-updates",
+    "scripting",
+    "verbosity",
+    "shell-completions"
+  ]
+}

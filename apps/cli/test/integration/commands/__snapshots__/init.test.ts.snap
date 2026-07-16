@@ -1,0 +1,56 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderInitSnippet — per-shell snapshots > bash snippet matches its snapshot 1`] = `
+"# macup shell integration (bash). Add to ~/.bashrc:
+#   eval "$(macup init bash)"
+_macup_check_notice() {
+  local summary rc
+  summary="$(command macup check 2>/dev/null)"
+  rc=$?
+  if [ "$rc" -eq 1 ] && [ -n "$summary" ]; then
+    printf 'macup: %s\\n' "$summary"
+  fi
+}
+if [ -z "\${MACUP_CHECKED:-}" ] && command -v macup >/dev/null 2>&1; then
+  export MACUP_CHECKED=1
+  _macup_check_notice &
+  disown 2>/dev/null || true
+fi
+"
+`;
+
+exports[`renderInitSnippet — per-shell snapshots > fish snippet matches its snapshot 1`] = `
+"# macup shell integration (fish). Add to ~/.config/fish/config.fish:
+#   macup init fish | source
+function _macup_check_notice
+    set -l summary (command macup check 2>/dev/null)
+    set -l rc $status
+    if test "$rc" -eq 1; and test -n "$summary"
+        echo "macup: $summary"
+    end
+end
+if not set -q MACUP_CHECKED; and command -sq macup
+    set -gx MACUP_CHECKED 1
+    _macup_check_notice &
+    disown 2>/dev/null
+end
+"
+`;
+
+exports[`renderInitSnippet — per-shell snapshots > zsh snippet matches its snapshot 1`] = `
+"# macup shell integration (zsh). Add to ~/.zshrc:
+#   eval "$(macup init zsh)"
+_macup_check_notice() {
+  local summary rc
+  summary="$(command macup check 2>/dev/null)"
+  rc=$?
+  if [ "$rc" -eq 1 ] && [ -n "$summary" ]; then
+    printf 'macup: %s\\n' "$summary"
+  fi
+}
+if [ -z "\${MACUP_CHECKED:-}" ] && command -v macup >/dev/null 2>&1; then
+  export MACUP_CHECKED=1
+  _macup_check_notice &!
+fi
+"
+`;

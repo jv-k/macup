@@ -1,0 +1,13 @@
+{
+  "extends": ["deslopper:recommended"],
+  "tells": {
+    "override": {
+      "middle-dot@pre-entity": { "tier": "warn" },
+      "middle-dot@post-entity": { "tier": "warn" }
+    }
+  },
+  "files": {
+    "include": ["**/*.md", "**/*.markdown", "**/*.mdx"],
+    "exclude": [".github/chatmodes/**", "docs/superpowers/**", ".worktrees/**", "node_modules/**"]
+  }
+}

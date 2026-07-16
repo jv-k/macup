@@ -1,0 +1,156 @@
+import { defaultCheck } from '../src/plugins/defaults';
+import type {
+  ListOptions,
+  MutateOptions,
+  PackageRef,
+  PackageStatus,
+  Plugin,
+  PluginContext,
+} from '../src/plugins/types';
+
+// `pip3 list --format=json` → [{ name, version }, …]
+interface PipListEntry {
+  name: string;
+  version?: string;
+}
+
+// `pip3 list --outdated --format=json` → [{ name, version, latest_version }, …]
+interface PipOutdatedEntry {
+  name: string;
+  latest_version?: string;
+}
+
+// pip is invoked as `pip3` — the binary Homebrew's python3 and most macOS
+// setups provide. (A future enhancement could probe for `pip` too.)
+const PIP = 'pip3';
+
+// Parse the stdout of a `pip … --format=json` call into an array, or throw a
+// diagnostic if pip failed or the payload isn't the JSON array we expect.
+// Unlike `npm outdated` (which exits 1 to signal drift), pip's list commands
+// exit 0 on success, so a non-zero code is a real failure worth surfacing.
+function parseJsonArray<T>(
+  label: string,
+  result: { stdout: string; stderr: string; exitCode: number },
+): T[] {
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `${label} exited ${result.exitCode}: ${result.stderr.trim() || result.stdout.trim()}`,
+    );
+  }
+  const trimmed = result.stdout.trim();
+  if (!trimmed) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(`${label} produced unparseable JSON`);
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error(`${label} produced non-array JSON`);
+  }
+  return parsed as T[];
+}
+
+async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<PackageStatus[]> {
+  const listResult = await ctx.exec.run(PIP, ['list', '--format=json'], {
+    signal: ctx.signal,
+    kind: 'query',
+  });
+  const installed = parseJsonArray<PipListEntry>(`${PIP} list`, listResult);
+
+  // `pip list --outdated` hits the index and can be slow, but it's the only
+  // way to learn latest versions; parse it into a name → latest map.
+  const outdatedResult = await ctx.exec.run(PIP, ['list', '--outdated', '--format=json'], {
+    signal: ctx.signal,
+    kind: 'query',
+  });
+  const outdatedRaw = parseJsonArray<PipOutdatedEntry>(`${PIP} list --outdated`, outdatedResult);
+  const latest = new Map<string, string>();
+  for (const o of outdatedRaw) {
+    if (o.latest_version !== undefined) latest.set(o.name, o.latest_version);
+  }
+
+  const result: PackageStatus[] = installed.map((e) => {
+    const latestVersion = latest.get(e.name);
+    const status: PackageStatus = {
+      ref: { kind: 'pip', name: e.name },
+      installed: true,
+      installedVersion: e.version,
+      outdated: latestVersion !== undefined,
+    };
+    if (latestVersion !== undefined) status.latestVersion = latestVersion;
+    return status;
+  });
+
+  return onlyOutdated ? result.filter((s) => s.outdated) : result;
+}
+
+async function runAll(
+  ctx: PluginContext,
+  refs: readonly PackageRef[],
+  action: 'install' | 'update',
+  opts: MutateOptions,
+): Promise<void> {
+  // pip has no distinct "update" verb — `install --upgrade` both installs and
+  // upgrades. Only `update` passes --upgrade so a plain add doesn't force an
+  // already-satisfied package to the latest.
+  const args = action === 'update' ? ['install', '--upgrade'] : ['install'];
+  for (const ref of refs) {
+    if (opts.dryRun) {
+      ctx.log.info(`[dry-run] ${PIP} ${args.join(' ')} ${ref.name}`);
+      continue;
+    }
+    const r = await ctx.exec.run(PIP, [...args, ref.name], {
+      signal: ctx.signal,
+      kind: 'user-action',
+    });
+    if (r.exitCode !== 0) {
+      throw new Error(
+        `${PIP} ${args.join(' ')} ${ref.name} exited ${r.exitCode}: ${r.stderr.trim() || r.stdout.trim()}`,
+      );
+    }
+  }
+}
+
+const pip: Plugin = {
+  manifest: {
+    id: 'pip',
+    displayName: 'pip (global)',
+    category: 'Python',
+    supportedOS: ['darwin'],
+    requires: [PIP],
+    configKeys: ['pip'],
+    capabilities: {
+      list: true,
+      install: true,
+      update: true,
+      add: true,
+      remove: true,
+      outdated: true,
+    },
+  },
+
+  check: defaultCheck('pip', [PIP]),
+
+  async list(ctx: PluginContext, opts: ListOptions): Promise<PackageStatus[]> {
+    return fetchStatus(ctx, opts.onlyOutdated ?? false);
+  },
+
+  async install(
+    ctx: PluginContext,
+    refs: readonly PackageRef[],
+    opts: MutateOptions,
+  ): Promise<void> {
+    await runAll(ctx, refs, 'install', opts);
+  },
+
+  async update(
+    ctx: PluginContext,
+    refs: readonly PackageRef[],
+    opts: MutateOptions,
+  ): Promise<void> {
+    await runAll(ctx, refs, 'update', opts);
+  },
+};
+
+export default pip;

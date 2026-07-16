@@ -1,0 +1,58 @@
+[
+  {
+    "cmd": "brew",
+    "args": ["list", "--versions"],
+    "result": {
+      "stdout": "git 2.40.0\ncurl 8.0.0\njq 1.6\nripgrep 14.0.0\n",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "brew",
+    "args": ["list", "--cask", "--versions"],
+    "result": {
+      "stdout": "firefox 120.0\nvisual-studio-code 1.85.0\n",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "brew",
+    "args": ["outdated", "--json=v2", "--formula"],
+    "result": {
+      "stdout": "{\"formulae\":[{\"name\":\"git\",\"installed_versions\":[\"2.40.0\"],\"current_version\":\"2.43.0\",\"pinned\":false,\"pinned_version\":null}],\"casks\":[]}",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "brew",
+    "args": ["outdated", "--json=v2", "--cask"],
+    "result": {
+      "stdout": "{\"formulae\":[],\"casks\":[{\"name\":\"firefox\",\"installed_versions\":\"120.0\",\"current_version\":\"121.0\"}]}",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "brew",
+    "args": ["install", "jq"],
+    "result": { "stdout": "==> Installing jq\n", "stderr": "", "exitCode": 0 }
+  },
+  {
+    "cmd": "brew",
+    "args": ["install", "--cask", "firefox"],
+    "result": { "stdout": "==> Installing firefox\n", "stderr": "", "exitCode": 0 }
+  },
+  {
+    "cmd": "brew",
+    "args": ["upgrade", "git"],
+    "result": { "stdout": "==> Upgrading git\n", "stderr": "", "exitCode": 0 }
+  },
+  {
+    "cmd": "brew",
+    "args": ["upgrade", "--cask", "firefox"],
+    "result": { "stdout": "==> Upgrading firefox\n", "stderr": "", "exitCode": 0 }
+  }
+]

@@ -1,0 +1,143 @@
+---
+title: Selective updates
+description: How macup decides which packages to upgrade, using tracking, pins, and skips.
+---
+
+# Selective updates
+
+macup never upgrades blindly. For each plugin it builds a list of outdated
+packages, then filters that list down to what you actually want changed. Three
+inputs drive the decision: what you track, what you pin, and what you skip.
+
+## The default: tracked and outdated
+
+`update` with no arguments upgrades only packages that are both **tracked** (in
+your [applist.yaml](/docs/guides/configuration)) and **outdated**. This mirrors
+`list` and `install`, which also scope to the tracked set by default.
+
+```bash
+# Upgrade only the npm packages you track that have a newer version
+macup npm update
+
+# Upgrade every outdated npm package, tracked or not
+macup npm update --all
+
+# Restrict to named packages — overrides both the default and --all
+macup npm update typescript prettier
+```
+
+Explicit names override both the tracked default and `--all`. Pins and skips
+still apply in every case: a skipped or pin-blocked package is removed even if
+you name it explicitly.
+
+The composite [`all`](/docs/reference/all) plugin tracks nothing, so it has no
+tracked filter to apply. `macup all update` stays system-wide and updates every
+manager.
+
+```bash
+# System-wide update across all managers — not scoped to applist
+macup all update
+```
+
+## Pins cap a maximum version
+
+A pin sets the highest version a package may move to. If the latest version is
+greater than the pin, the package is held back and reported. Otherwise it
+upgrades up to the cap.
+
+```bash
+# Hold typescript at 5.3.3 or lower
+macup npm pin typescript 5.3.3
+
+# Remove the pin
+macup npm unpin typescript
+```
+
+`pin` requires both a name and a version. Pins live in `applist.yaml` under
+`pins.<pluginId>.<name>`:
+
+```yaml
+pins:
+  npm:
+    typescript: "5.3.3"
+```
+
+A pin only blocks when the plugin reports a `latestVersion`. With no known
+latest version, the pin does not engage and the package upgrades.
+
+## Skips exclude a package entirely
+
+A skip removes a package from updates regardless of version. Skip wins over
+everything: a skipped package is never even checked for being outdated.
+
+```bash
+# Never update these formulas
+macup brew skip legacy-dep
+
+# Stop skipping
+macup brew unskip legacy-dep
+```
+
+`skip` and `unskip` accept one or more names. Skips live under
+`skip.<pluginId>`:
+
+```yaml
+skip:
+  brew:
+    - legacy-dep
+```
+
+Pins and skips are keyed by **plugin id**, not subtype. A `brew` pin or skip
+applies to both formulas and casks. The [`all`](/docs/reference/all) plugin
+tracks nothing and has no `pin`/`skip` subcommands.
+
+## How versions are compared
+
+Comparison defaults to semver: when both the latest version and the pin are
+valid semver, macup compares them numerically. npm and pnpm report standard
+semver, so pins there behave as you expect.
+
+When either version is not valid semver, the comparison treats them as equal
+and the package upgrades. brew, App Store, and `mas` versions are frequently
+not semver (date strings, build IDs), so a pin on those is permissive: a
+non-semver pin will not block an upgrade. This is deliberate: a malformed pin
+should not trap you out of updates.
+
+A plugin can supply its own comparator via the optional `compareVersions`
+manifest hook, but no built-in plugin does, so every plugin uses the semver
+default at runtime.
+
+## What update prints
+
+```bash
+# Preview without changing anything
+macup npm update --dry-run
+
+# One-line trace per package
+macup npm update --verbose
+```
+
+Held-back and excluded packages are reported before the upgrade runs:
+
+- `Pinned (skipping): name@version` for each pin-blocked package
+- `Skipped: name` for each skipped package
+
+If nothing is left to upgrade, `update` prints `All <plugin> packages are
+up-to-date!`. With explicit names that match nothing outdated, it prints a
+`No matching outdated packages for: ...` hint instead.
+
+## Where this is decided
+
+The classification is a pure function, `resolveSelection`, in
+`apps/cli/src/plugins/selection.ts`. It sorts each status into one of three
+buckets (`skipped`, `pinnedBlocked`, `upgradable`) and runs before the
+tracked and explicit-name filters in `update`. See
+[Configuration](/docs/guides/configuration) for the on-disk shape and the
+[config schema](/docs/reference/config-schema) for every key.
+
+A config mutation (`pin`, `unpin`, `skip`, `unskip`) rewrites `applist.yaml`
+only when it actually changes the file. When an `applist.yaml` already exists,
+the prior file is first copied to a timestamped backup. The command then prints
+the backup path as a `Backup: <path>` trace line after the write. A first-run
+save (no existing file) and a no-op mutation write no backup. See
+[Safe updates](/docs/guides/safe-updates) for restoring from those backups.

@@ -7,7 +7,7 @@
 // any error — warnings never fail the exit.
 
 import { release } from 'node:os';
-import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
+import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { BUILTIN_PLUGINS } from '../plugins/registry';
 import { getVersion } from '../version';
 import { check as checkConfig } from './doctor/checks/config';
@@ -70,7 +70,7 @@ export async function runDoctor(args: ParsedArgs, deps: CliDeps): Promise<void> 
   process.exitCode = exitCodeFor(report);
 }
 
-export class DoctorAction implements FlagAction {
+export class DoctorAction implements ActionCommand {
   readonly name = 'doctor';
   readonly description =
     'Run a self-diagnostic report: environment, config, plugin probes, data integrity, shell integration.';
@@ -81,10 +81,6 @@ export class DoctorAction implements FlagAction {
         'Run a self-diagnostic report: environment, config, plugin probes, data integrity, shell integration.',
     },
   };
-
-  matches(args: ParsedArgs): boolean {
-    return args.doctor === true;
-  }
 
   // `--json` is deliberately NOT a registered root arg. Registering it
   // would shadow subcommand `--json` (e.g. `macup outdated --json`) and

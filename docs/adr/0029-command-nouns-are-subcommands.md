@@ -27,17 +27,23 @@ compatibility with nobody and cost a permanently ambiguous interface.
 
 ## Decision
 
-The eight command nouns are citty subcommands. `macup restore` runs; `macup --restore` is an
+The nine command nouns are citty subcommands. `macup restore` runs; `macup --restore` is an
 unknown option and exits 1, with a hint naming the command to use instead.
 
-The flags that remain are the ones that really do modify a run: `--help`/`-h`, `--version`/`-v`,
-`--verbose`/`-V`, `--debug`/`-D`, plus `--completions[=<shell>]`, which takes a value and is machine
-plumbing the generated completion scripts name directly. `--version` and `--help` keep their flag
+The flags that remain are only the ones that really do modify a run: `--help`/`-h`,
+`--version`/`-v`, `--verbose`/`-V`, `--debug`/`-D`. `--version` and `--help` keep their flag
 spelling because that is the universal convention, and `macup version` stays as the one bare word
 `rewriteFlagAliases` still maps onto a flag.
 
-The `FlagAction` contract is unchanged. A small adapter in `cli.ts` turns one into the subcommand it
-should have been, dropping the trigger flag from the arg schema (invoking the subcommand is the
+`--completions[=<shell>]` was carved out at first, on the grounds that it takes a value. That was
+wrong for the same reason as the rest: taking a value does not make a thing a modifier, it makes it
+a command with an argument, which is what `macup init <shell>` already was. It became `macup
+completions <shell>` before this shipped, and the carve-out survives below only as the alternative
+it turned out to be.
+
+The `ActionCommand` contract (formerly `FlagAction`) keeps its `args`/`run` shape. A small adapter
+in `cli.ts` turns one into the subcommand it should have been, dropping the trigger arg from the
+schema (invoking the subcommand is the
 trigger) and synthesising it for `run()`. The actions, and everything that drives them directly,
 did not move.
 
@@ -54,17 +60,24 @@ did not move.
 - **Remove `--version`/`--help` too, for consistency.** Superficially tidier and actively hostile.
   Every CLI on the machine answers `--version`; being the one that doesn't is not a principled
   stand.
-- **Make `--completions` a noun as well.** Tempting for symmetry, but it takes a value
-  (`--completions=zsh`), and the generated zsh/bash/fish scripts reference it by name. The human
-  noun is `install-completions`, which did move.
+- **Keep `--completions` a flag, because it takes a value.** Considered and taken, briefly, then
+  reversed. A value-taking command is still a command: `macup init <shell>` had always been spelled
+  that way. Keeping it would have left one flag-shaped command as a permanent question, and the
+  scripts that name it are generated, so they were updated in the same change.
 
 ## Consequences
 
 - `macup --restore` now fails. Nothing published depends on it, but the author's own shell aliases
   and history might, so the unknown-option error names the replacement rather than just rejecting.
   That hint is keyed off the subcommand table, so it stays correct as commands come and go.
-- Adding a stand-alone command is now the same act as adding any other subcommand. The `FlagAction`
-  indirection remains only for `--completions`, and if that ever moves the type can go with it.
+- Adding a stand-alone command is now the same act as adding any other subcommand. With no flag
+  actions left, the `matches()` predicate and the flag-dispatch loop in `cli.ts` are gone, and
+  `FlagAction` is now `ActionCommand`, since the old name described a mechanism that no longer
+  exists.
+- The adapter reads the trigger arg's type to decide the subcommand's shape: `boolean` becomes a
+  plain command, `string` becomes one positional `[shell]`. Conflating the two is a silent no-op
+  rather than a crash, because a `true` where the shell should be makes these actions return
+  without a word, so that pairing is asserted end to end rather than by construction.
 - The list of stand-alone commands lives in `completions/shared.ts` as `TOP_LEVEL_COMMANDS`, which
   feeds both the shells and `macup/meta`, so the reference and the tab key cannot disagree. The
   `--help` screen still hand-maintains its own copy: it is prose-formatted and column-aligned, and

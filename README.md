@@ -170,12 +170,12 @@ For zsh, this also clears cached `.zcompdump` files so the new completions load 
 
 ### Manual install (dotfiles / scripting)
 
-`--completions` emits to stdout, useful when you want full control over the path or are writing dotfiles:
+`macup completions` emits to stdout, useful when you want full control over the path or are writing dotfiles:
 
 ```bash
-macup --completions=zsh  > ~/.local/share/zsh/site-functions/_macup
-macup --completions=bash > ~/.local/share/bash-completion/completions/macup
-macup --completions=fish > ~/.config/fish/completions/macup.fish
+macup completions zsh  > ~/.local/share/zsh/site-functions/_macup
+macup completions bash > ~/.local/share/bash-completion/completions/macup
+macup completions fish > ~/.config/fish/completions/macup.fish
 ```
 
 Both forms accept an explicit shell (`zsh`/`bash`/`fish`) or auto-detect from `$SHELL` when the value is omitted.

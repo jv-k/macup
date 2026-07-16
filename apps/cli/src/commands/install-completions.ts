@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
+import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { generateBashCompletions } from '../completions/bash';
 import { generateFishCompletions } from '../completions/fish';
 import { generateZshCompletions } from '../completions/zsh';
@@ -173,7 +173,7 @@ function resolveShellArg(value: string, env: NodeJS.ProcessEnv): Shell | undefin
   return undefined;
 }
 
-export class InstallCompletionsAction implements FlagAction {
+export class InstallCompletionsAction implements ActionCommand {
   readonly name = 'install-completions';
   readonly description =
     `Generate and write shell completions to the standard XDG path for ${SUPPORTED_SHELLS.join('|')} (omit value to auto-detect).`;
@@ -184,10 +184,6 @@ export class InstallCompletionsAction implements FlagAction {
       description: `Generate and write shell completions to the standard XDG path for ${SUPPORTED_SHELLS.join('|')} (omit value to auto-detect).`,
     },
   };
-
-  matches(args: ParsedArgs): boolean {
-    return typeof args['install-completions'] === 'string';
-  }
 
   run = runInstallCompletions;
 }

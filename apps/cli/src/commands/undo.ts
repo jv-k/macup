@@ -11,7 +11,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { confirm, isCancel, outro } from '@clack/prompts';
-import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
+import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { type BackupEntry, BackupStore } from '../config/backup';
 import { computeLineDiff, formatDiff, hasDiff } from '../ui/diff';
 
@@ -90,7 +90,7 @@ export async function runUndoAction(_args: ParsedArgs, deps: CliDeps): Promise<v
   outro('Done.');
 }
 
-export class UndoAction implements FlagAction {
+export class UndoAction implements ActionCommand {
   readonly name = 'undo';
   readonly description = 'Revert the applist to the most recent backup (with a diff preview).';
   readonly args = {
@@ -99,10 +99,6 @@ export class UndoAction implements FlagAction {
       description: 'Revert the applist to the most recent backup (with a diff preview).',
     },
   };
-
-  matches(args: ParsedArgs): boolean {
-    return args.undo === true;
-  }
 
   run = runUndoAction;
 }

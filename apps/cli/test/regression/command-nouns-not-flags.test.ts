@@ -7,6 +7,8 @@
 // the point.
 
 import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -29,15 +31,19 @@ const NOUNS = [
   'doctor',
   'logo',
   'plugins',
+  'completions',
   'install-completions',
 ] as const;
 
-function run(args: string[]): { status: number; stderr: string; stdout: string } {
+function run(
+  args: string[],
+  env: NodeJS.ProcessEnv = {},
+): { status: number; stderr: string; stdout: string } {
   try {
     const stdout = execFileSync('node', [CLI, ...args], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, NO_COLOR: '1' },
+      env: { ...process.env, NO_COLOR: '1', ...env },
     });
     return { status: 0, stdout, stderr: '' };
   } catch (err) {
@@ -67,6 +73,54 @@ describe('regression: the old flag spellings are gone', () => {
     expect(status).toBe(1);
     expect(stderr).toContain('unknown option --bogus');
     expect(stderr).not.toContain('is now a command');
+  });
+});
+
+// The commands whose trigger arg carries a value rather than a boolean.
+// Converting them to subcommands shipped a silent no-op: the adapter
+// synthesised `true` for the trigger, so `runInstallCompletions`'s
+// `if (typeof value !== 'string') return` bailed without a word and exited
+// 0. Nothing caught it because nothing drove these end to end.
+describe('regression: the shell-taking commands actually do their work', () => {
+  it('emits a completion script for an explicit shell', () => {
+    const { status, stdout } = run(['completions', 'zsh']);
+
+    expect(status).toBe(0);
+    expect(stdout).toContain('#compdef macup');
+  });
+
+  it('auto-detects the shell when none is given', () => {
+    // Pin $SHELL rather than inheriting it: the assertion is about which
+    // script auto-detection picks, so the input has to be the test's, not
+    // the machine's. (CI runs under bash; a bare `expect('#compdef')` here
+    // only passed because the author's $SHELL is zsh.)
+    const { status, stdout } = run(['completions'], { SHELL: '/bin/zsh' });
+
+    // The empty trigger value means "auto-detect from $SHELL" — the thing
+    // a synthesised `true` destroyed.
+    expect(status).toBe(0);
+    expect(stdout).toContain('#compdef macup');
+  });
+
+  it('auto-detects bash just as readily', () => {
+    const { status, stdout } = run(['completions'], { SHELL: '/bin/bash' });
+
+    expect(status).toBe(0);
+    expect(stdout).toContain('complete -F _macup macup');
+  });
+
+  it('writes a file for install-completions rather than silently doing nothing', () => {
+    const home = mkdtempSync(join(tmpdir(), 'macup-xdg-'));
+    try {
+      const { status, stdout } = run(['install-completions', 'zsh'], { XDG_DATA_HOME: home });
+
+      expect(status).toBe(0);
+      expect(stdout).toContain('wrote');
+      // The assertion that would have caught the no-op: a real file.
+      expect(existsSync(join(home, 'zsh', 'site-functions', '_macup'))).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });
 

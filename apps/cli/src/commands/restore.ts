@@ -1,5 +1,5 @@
 import { confirm, isCancel, outro, select } from '@clack/prompts';
-import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
+import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { type BackupEntry, BackupStore } from '../config/backup';
 
 export interface RestoreDeps {
@@ -61,7 +61,7 @@ export async function runRestoreAction(_args: ParsedArgs, deps: CliDeps): Promis
   outro('Done.');
 }
 
-export class RestoreAction implements FlagAction {
+export class RestoreAction implements ActionCommand {
   readonly name = 'restore';
   readonly description = 'Interactively restore the applist from a backup.';
   readonly args = {
@@ -70,10 +70,6 @@ export class RestoreAction implements FlagAction {
       description: 'Interactively restore the applist from a backup.',
     },
   };
-
-  matches(args: ParsedArgs): boolean {
-    return args.restore === true;
-  }
 
   run = runRestoreAction;
 }

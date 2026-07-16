@@ -73,11 +73,13 @@ describe('generateZshCompletions', () => {
     expect(out).toContain("_describe -t plugins 'package manager' plugins");
   });
 
-  it('declares global flags on _arguments (so each can carry a value spec)', () => {
-    // --completions has an optional value with a fixed shell list. It is
-    // the reason flags are declared on _arguments at all.
-    expect(out).toContain("'--completions=-[Emit completions");
-    expect(out).toContain('::shell:(zsh bash fish)');
+  it('offers the shells to the commands that take one', () => {
+    // `--completions=<shell>` got this free from its value spec. As a
+    // command (ADR 0029) the shells have to be offered explicitly, or the
+    // move would quietly cost a completion that used to work.
+    expect(out).toContain("completions) _values 'shell' 'zsh' 'bash' 'fish' ;;");
+    expect(out).toContain("install-completions) _values 'shell' 'zsh' 'bash' 'fish' ;;");
+    expect(out).toContain("init) _values 'shell' 'zsh' 'bash' 'fish' ;;");
   });
 
   it('attaches each plugin displayName as its completion description', () => {

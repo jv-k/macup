@@ -1,6 +1,6 @@
 import { ExecaError, execa } from 'execa';
-import { isOnPath } from '../plugins/registry';
 import type { ExecResult, ExecRunOptions, ExecRunner } from '../plugins/types';
+import { isOnPath } from './on-path';
 
 export class ExecaExecRunner implements ExecRunner {
   async run(cmd: string, args: readonly string[], opts: ExecRunOptions = {}): Promise<ExecResult> {

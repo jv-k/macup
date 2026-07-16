@@ -1,5 +1,3 @@
-import { constants, accessSync } from 'node:fs';
-import { delimiter, join } from 'node:path';
 import { createAllPlugin } from '../../plugins/all';
 import appstorePlugin from '../../plugins/appstore';
 import brewPlugin from '../../plugins/brew';
@@ -8,6 +6,7 @@ import pipPlugin from '../../plugins/pip';
 import pnpmPlugin from '../../plugins/pnpm';
 import systemPlugin from '../../plugins/system';
 import xcodePlugin from '../../plugins/xcode';
+import { isOnPath, pathTo } from '../exec/on-path';
 import type { Plugin } from './types';
 
 export interface RegistryDeps {
@@ -30,33 +29,10 @@ export function buildRegistry(plugins: readonly Plugin[], deps: RegistryDeps): P
   });
 }
 
-/**
- * Minimal `which`-style lookup: the first $PATH entry where `binary`
- * exists as an executable, or undefined. `--doctor` uses the resolved
- * path in its plugin report lines.
- */
-export function pathTo(binary: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const pathValue = env.PATH ?? '';
-  const paths = pathValue.split(delimiter).filter(Boolean);
-  for (const dir of paths) {
-    try {
-      const candidate = join(dir, binary);
-      accessSync(candidate, constants.X_OK);
-      return candidate;
-    } catch {
-      // keep searching
-    }
-  }
-  return undefined;
-}
-
-/**
- * Boolean form of pathTo. Used as the default onPath for the registry;
- * tests can override by passing a custom onPath.
- */
-export function isOnPath(binary: string, env: NodeJS.ProcessEnv = process.env): boolean {
-  return pathTo(binary, env) !== undefined;
-}
+// isOnPath / pathTo live in src/exec/on-path.ts (a leaf module with no plugin
+// imports) so exec/run.ts can do its PATH lookup without importing the registry.
+// Re-exported here for the existing consumers (doctor report, buildRegistry).
+export { isOnPath, pathTo };
 
 /**
  * The closed set of built-in plugins. Adding a new plugin = one import

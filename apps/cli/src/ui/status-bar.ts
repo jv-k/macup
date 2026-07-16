@@ -11,6 +11,7 @@
 
 import pc from 'picocolors';
 import { useColor } from '../runtime';
+import { stripAnsi, visualWidth } from './width';
 
 export interface StatusBarOptions {
   readonly color?: boolean;
@@ -25,19 +26,9 @@ export interface StatusBarOptions {
 
 const SPINNER_FRAMES = ['◐', '◓', '◑', '◒'] as const;
 
-// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI on purpose
-const ANSI_REGEX = /\x1b\[[0-9;?]*[A-Za-z]/g;
-function stripAnsi(s: string): string {
-  return s.replace(ANSI_REGEX, '');
-}
-
-function visualLen(s: string): number {
-  return [...stripAnsi(s)].length;
-}
-
 function clipOrPad(line: string, width: number): string {
   const clean = stripAnsi(line);
-  const w = visualLen(clean);
+  const w = visualWidth(clean);
   if (w === width) return clean;
   if (w > width) {
     const arr = [...clean];
@@ -212,7 +203,7 @@ export class StatusBar {
     const frame = SPINNER_FRAMES[this.frameIdx];
     const tail = this.suffix.length > 0 ? `  ${this.suffix}` : '';
     const text = `${frame}  ${this.message}${tail}`;
-    const truncated = visualLen(text) > cols ? `${text.slice(0, cols - 1)}…` : text;
+    const truncated = visualWidth(text) > cols ? `${text.slice(0, cols - 1)}…` : text;
     const styled = this.color ? pc.cyan(truncated) : truncated;
     this.out.write(`\x1b7\x1b[${rows};1H\x1b[2K${styled}\x1b8`);
   }

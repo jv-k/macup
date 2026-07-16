@@ -9,6 +9,7 @@
 
 import pc from 'picocolors';
 import * as logui from '../ui/log';
+import { page } from '../ui/pager';
 import { getVersion } from '../version';
 import type { CliDeps } from './types';
 
@@ -24,9 +25,19 @@ export function printVersionSplash(deps: CliDeps): void {
   );
 }
 
-export function showCustomHelp(deps: CliDeps): void {
+/**
+ * The help screen as one string. Pure and side-effect free so the pager can
+ * measure it before deciding whether to page, and so tests can assert on it
+ * without capturing stdout.
+ */
+export function buildHelp(deps: CliDeps): string {
+  const out: string[] = [];
+  const say = (line = ''): void => {
+    out.push(line);
+  };
+
   const color = deps.color;
-  console.log(
+  say(
     logui.splashBlock({
       version: getVersion(),
       description: 'A plugin-based CLI for tracking and updating developer packages on macOS.',
@@ -35,7 +46,7 @@ export function showCustomHelp(deps: CliDeps): void {
       color,
     }),
   );
-  console.log('');
+  say('');
 
   const id = (x: string) => x;
   const s = color ? pc : { bold: id, cyan: id, dim: id, green: id, yellow: id, underline: id };
@@ -50,19 +61,17 @@ export function showCustomHelp(deps: CliDeps): void {
     logui.formatColumns(rows, { width, descStyle });
 
   // Usage
-  console.log(logui.header('USAGE'));
-  console.log(
-    `  ${s.bold('macup')} ${s.dim('Runs the interactive wizard to pick a plugin and action.')}`,
-  );
-  console.log('');
-  console.log(
+  say(logui.header('USAGE'));
+  say(`  ${s.bold('macup')} ${s.dim('Runs the interactive wizard to pick a plugin and action.')}`);
+  say('');
+  say(
     `  ${s.bold('macup')} ${s.dim('<plugin>')} ${s.dim('<action>')} ${s.dim('[options] [packages...]')}`,
   );
-  console.log(`  ${s.bold('macup')} ${s.dim('<command>')}`);
-  console.log('');
+  say(`  ${s.bold('macup')} ${s.dim('<command>')}`);
+  say('');
 
   // Plugins
-  console.log(
+  say(
     ` ${logui.header('PLUGINS')} ${s.dim('Package and App managers + their available commands')}`,
   );
   const pluginRows: logui.ColumnRow[] = deps.registry.map((plugin) => {
@@ -77,11 +86,11 @@ export function showCustomHelp(deps: CliDeps): void {
       m.subtypes && m.subtypes.length > 1 ? ` [--subtype=${m.subtypes.join('|')}]` : '';
     return { label: s.bold(m.id), desc: `${m.displayName}  ${cmds.join(', ')}${subtypeHint}` };
   });
-  console.log(cols(pluginRows));
-  console.log('');
+  say(cols(pluginRows));
+  say('');
 
   // Top-level (cross-plugin) commands.
-  console.log(`${logui.header('COMMANDS')} ${s.dim('Stand-alone commands')}`);
+  say(`${logui.header('COMMANDS')} ${s.dim('Stand-alone commands')}`);
   const commandRows: logui.ColumnRow[] = [
     { label: 'outdated', desc: 'Show outdated packages across every plugin in one pane [--json]' },
     {
@@ -102,11 +111,11 @@ export function showCustomHelp(deps: CliDeps): void {
     { label: 'plugins', desc: 'List built-in plugins and their availability' },
     { label: 'install-completions', desc: 'Install shell completions (auto-detects shell)' },
   ].map((r) => ({ label: s.bold(r.label), desc: r.desc }));
-  console.log(cols(commandRows));
-  console.log('');
+  say(cols(commandRows));
+  say('');
 
   // Pin / Skip
-  console.log(
+  say(
     `${logui.header('PIN / SKIP')} ${s.dim('Modifiers to control update behavior for tracked packages')}`,
   );
   const pinRows: logui.ColumnRow[] = [
@@ -121,20 +130,20 @@ export function showCustomHelp(deps: CliDeps): void {
       desc: 'Remove from skip list',
     },
   ];
-  console.log(cols(pinRows));
-  console.log('');
+  say(cols(pinRows));
+  say('');
 
   // Genuine global options.
-  console.log(logui.header('GLOBAL OPTIONS'));
+  say(logui.header('GLOBAL OPTIONS'));
   const optionRows: logui.ColumnRow[] = [
     { label: '--verbose, -V', desc: 'Stream user-facing output to scrollback' },
     { label: '--debug, -D', desc: 'Trace every shell call to stderr (dev mode)' },
   ];
-  console.log(cols(optionRows, s.dim));
-  console.log('');
+  say(cols(optionRows, s.dim));
+  say('');
 
   // Examples
-  console.log(logui.dimmedHeader('EXAMPLES'));
+  say(logui.dimmedHeader('EXAMPLES'));
   const exampleRows: logui.ColumnRow[] = [
     { label: 'macup', desc: 'Interactive wizard' },
     { label: 'macup outdated', desc: 'Outdated summary across every plugin' },
@@ -147,5 +156,15 @@ export function showCustomHelp(deps: CliDeps): void {
     { label: 'macup npm pin typescript 5.3.3', desc: 'Pin to max version' },
     { label: 'macup brew skip legacy-dep', desc: 'Skip from future updates' },
   ];
-  console.log(cols(exampleRows, s.dim));
+  say(cols(exampleRows, s.dim));
+  return out.join('\n');
+}
+
+/**
+ * Prints the help, a page at a time when the terminal is too short for it.
+ * Piped output is written straight through, so `macup --help | grep` and CI
+ * logs are unchanged.
+ */
+export async function showCustomHelp(deps: CliDeps): Promise<void> {
+  await page(buildHelp(deps), { color: deps.color });
 }

@@ -79,7 +79,9 @@ if (
     .slice(2)
     .filter((a) => a !== '--help' && a !== '-h' && a !== 'help');
   if (stripped.length === 0) {
-    showCustomHelp(deps);
+    // Awaited: the pager owns the terminal until the reader quits, and an
+    // un-awaited exit(0) would tear it down on the first frame.
+    await showCustomHelp(deps);
     process.exit(0);
   }
   // Subcommand help (`macup brew --help`) flows through to citty below.

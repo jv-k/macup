@@ -86,8 +86,9 @@ function flagAvailability(meta: DocsMetadata): string {
     const cells = flags.map((f) => (accept.get(f)?.has(cmd) ? 'yes' : ' '));
     out += `| \`${cmd}\` | ${cells.join(' | ')} |\n`;
   }
-  out += '\n`outdated` and `check` are top-level (`macup outdated`, `macup check`); the rest are per-plugin ';
-  out += '(`macup brew list`). `--cask`, `--formula`, and `--subtype` are Homebrew only.\n';
+  out += '\n`outdated`, `check`, and `doctor` are [stand-alone commands](/docs/reference/commands) ';
+  out += '(`macup outdated`); the rest are per-plugin (`macup brew list`). ';
+  out += '`--cask`, `--formula`, and `--subtype` are Homebrew only.\n';
   return out;
 }
 

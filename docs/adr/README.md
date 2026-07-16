@@ -57,3 +57,5 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0027](0027-retire-sandcastle-orchestration.md) | Retire the Sandcastle orchestration | accepted |
 | [0028](0028-clack-core-subclassing-and-pin.md) | Subclass @clack/core's AutocompletePrompt, and pin core to prompts' version | accepted |
 | [0029](0029-command-nouns-are-subcommands.md) | Command nouns are subcommands, not flags | accepted |
+| [0030](0030-pin-is-a-version-ceiling.md) | A pin is a version ceiling, not an exact lock | accepted |
+| [0031](0031-track-untrack-verbs.md) | Applist verbs are track and untrack, not add and remove | accepted |

@@ -65,10 +65,20 @@ function formatPath(path: ReadonlyArray<PropertyKey>): string {
 }
 
 /**
- * One human-readable line per problem. `ZodError.message` is a JSON dump
- * of every issue — accurate, but it buries the one thing the user needs
- * (which line of their YAML is wrong) in ~10 lines of machine output.
+ * One human-readable line per problem, for callers that pick their own
+ * separator: the store stacks them on newlines, `--config` inlines them
+ * with `; ` into a one-line summary. Both must SPELL a path the same way,
+ * which is the whole reason this isn't two `.map()`s in two files.
+ */
+export function formatApplistIssueLines(error: z.ZodError): string[] {
+  return error.issues.map((issue) => `${formatPath(issue.path)}: ${issue.message}`);
+}
+
+/**
+ * The same problems as a block. `ZodError.message` is a JSON dump of every
+ * issue — accurate, but it buries the one thing the user needs (which line
+ * of their YAML is wrong) in ~10 lines of machine output.
  */
 export function formatApplistIssues(error: z.ZodError): string {
-  return error.issues.map((issue) => `${formatPath(issue.path)}: ${issue.message}`).join('\n');
+  return formatApplistIssueLines(error).join('\n');
 }

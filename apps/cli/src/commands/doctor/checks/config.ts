@@ -93,7 +93,7 @@ export async function check(deps: CheckDeps): Promise<Section> {
       level: 'error',
       label: 'applist.yaml',
       detail: `${report.applistPath} — ${report.schemaError ?? 'failed validation'}`,
-      hint: 'fix the schema error, or restore a backup: macup --restore',
+      hint: 'fix the schema error, or restore a backup: macup restore',
     });
   }
 

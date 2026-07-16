@@ -11,6 +11,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { buildConfigReport } from '../../src/commands/config';
+import type { PathResolution } from '../../src/config/paths';
 import { ConfigStore } from '../../src/config/store';
 import { ErrInvalidConfig } from '../../src/errors';
 
@@ -31,6 +33,10 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(workDir, { recursive: true, force: true });
 });
+
+function configPaths(): PathResolution {
+  return { applistPath, configDir: workDir, backupDir, source: 'home-macup' };
+}
 
 async function loadCorrupt(): Promise<Error> {
   await writeFile(applistPath, CORRUPT, 'utf8');
@@ -59,6 +65,34 @@ describe('regression: an invalid config names the offending key', () => {
     // The old message was raw ZodError JSON — these are its fingerprints.
     expect(err.message).not.toContain('"code"');
     expect(err.message).not.toContain('"invalid_type"');
+  });
+});
+
+// `--config` / `doctor` render the same zod issues as the store does, and
+// used to hand-roll their own `path.join('.')`, so one broken file was
+// `brew.casks[0]` from `brew list` and `brew.casks.0` from `doctor`. Both
+// now share formatApplistIssueLines; this pins them together.
+describe('regression: every surface spells a config path the same way', () => {
+  it('reports the store path style from buildConfigReport too', async () => {
+    await writeFile(applistPath, CORRUPT, 'utf8');
+
+    const report = await buildConfigReport(configPaths());
+
+    expect(report.schemaValid).toBe(false);
+    expect(report.schemaError).toContain('brew.casks[0]');
+    expect(report.schemaError).not.toContain('brew.casks.0');
+  });
+
+  it('matches the message the store raises for the same file', async () => {
+    // loadCorrupt() writes the file, so it has to run before the report.
+    const err = await loadCorrupt();
+    const report = await buildConfigReport(configPaths());
+
+    // Same file, same problem — so the same words, whichever door you came
+    // through.
+    const path = 'brew.casks[0]: Invalid input: expected string, received null';
+    expect(report.schemaError).toContain(path);
+    expect(err.message).toContain(path);
   });
 });
 

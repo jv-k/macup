@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { parse } from 'yaml';
 import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
 import type { PathResolution } from '../config/paths';
-import { ApplistSchema, SCHEMA_VERSION } from '../config/schema';
+import { ApplistSchema, SCHEMA_VERSION, formatApplistIssueLines } from '../config/schema';
 
 export interface ConfigReport {
   applistPath: string;
@@ -44,9 +44,10 @@ export async function buildConfigReport(paths: PathResolution): Promise<ConfigRe
     const result = ApplistSchema.safeParse(parsed ?? {});
     if (!result.success) {
       report.schemaValid = false;
-      report.schemaError = result.error.issues
-        .map((i) => `${i.path.join('.')}: ${i.message}`)
-        .join('; ');
+      // Shared with the store's load/save errors so a path is spelled the
+      // same everywhere: `brew.casks[0]`, not `brew.casks.0` here and
+      // `brew.casks[0]` there for the identical problem.
+      report.schemaError = formatApplistIssueLines(result.error).join('; ');
     } else if (result.data.version > SCHEMA_VERSION) {
       // Mirror the store's load-time rejection: a newer-than-supported
       // version is not something this build can safely read, so `--config`

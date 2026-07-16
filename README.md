@@ -152,8 +152,8 @@ skip:
 Automatic timestamped backups are created before every config mutation (`add`, `remove`, `pin`, `skip`). If no changes occurred, the backup is deleted. Manage backups with:
 
 ```bash
-macup --cleanup    # Delete all backup files (with confirmation)
-macup --restore    # Interactively pick and restore a backup
+macup cleanup      # Delete all backup files (with confirmation)
+macup restore      # Interactively pick and restore a backup
 ```
 
 ## Shell completions

@@ -1,5 +1,5 @@
 import { confirm, isCancel } from '@clack/prompts';
-import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
+import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { BackupStore } from '../config/backup';
 
 export interface CleanupDeps {
@@ -47,7 +47,7 @@ export async function runCleanupAction(_args: ParsedArgs, deps: CliDeps): Promis
   });
 }
 
-export class CleanupAction implements FlagAction {
+export class CleanupAction implements ActionCommand {
   readonly name = 'cleanup';
   readonly description = 'Interactively delete all backup files.';
   readonly args = {
@@ -56,10 +56,6 @@ export class CleanupAction implements FlagAction {
       description: 'Interactively delete all backup files.',
     },
   };
-
-  matches(args: ParsedArgs): boolean {
-    return args.cleanup === true;
-  }
 
   run = runCleanupAction;
 }

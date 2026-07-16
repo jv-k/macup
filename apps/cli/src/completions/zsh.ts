@@ -1,5 +1,6 @@
+import { SUPPORTED_SHELLS } from '../commands/shell';
 import type { Plugin } from '../plugins/types';
-import { TOP_LEVEL_COMMANDS, commandsFor, flagsForCommand } from './shared';
+import { SHELL_ARG_COMMANDS, TOP_LEVEL_COMMANDS, commandsFor, flagsForCommand } from './shared';
 
 const esc = (s: string): string => s.replace(/'/g, "'\\''");
 
@@ -14,6 +15,12 @@ export function generateZshCompletions(plugins: readonly Plugin[]): string {
   const commandEntries = TOP_LEVEL_COMMANDS.map(
     (c) => `'${esc(c.name)}:${esc(c.description)}'`,
   ).join(' ');
+
+  // `macup completions <TAB>` should offer zsh|bash|fish, the way
+  // `--completions=<TAB>` used to from its value spec.
+  const shellCases = SHELL_ARG_COMMANDS.map(
+    (c) => `      ${c}) _values 'shell' ${SUPPORTED_SHELLS.map((sh) => `'${sh}'`).join(' ')} ;;`,
+  ).join('\n');
 
   const pluginCases = plugins
     .map((p) => {
@@ -47,14 +54,13 @@ _macup() {
   commands=(${commandEntries})
 
   # Flags are declared on _arguments so each can carry its own value
-  # spec (e.g. --completions=<shell>). Positional args 1 and 2 dispatch
-  # to the plugin / command states below.
+  # spec. Positional args 1 and 2 dispatch to the plugin / command
+  # states below.
   _arguments -C \\
     '(-h --help)'{-h,--help}'[Show help]' \\
     '(-v --version)'{-v,--version}'[Show version]' \\
     '(-V --verbose)'{-V,--verbose}'[Stream output to scrollback]' \\
     '(-D --debug)'{-D,--debug}'[Trace every shell call to stderr]' \\
-    '--completions=-[Emit completions (omit value to auto-detect)]::shell:(zsh bash fish)' \\
     '1:plugin:->plugin' \\
     '2:command:->command' \\
     '*:: :->rest'
@@ -67,6 +73,7 @@ _macup() {
     (command)
       case $words[2] in
 ${pluginCases}
+${shellCases}
       esac
       ;;
     (rest)

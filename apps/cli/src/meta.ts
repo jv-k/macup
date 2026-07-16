@@ -117,7 +117,6 @@ const GLOBAL_FLAGS: GlobalFlagDoc[] = [
     alias: '-D',
     description: 'Full raw trace of every shell call, routed to stderr.',
   },
-  { flag: '--completions', description: 'Emit shell completions for zsh|bash|fish to stdout.' },
 ];
 
 // The stable process exit codes. A hand-maintained mirror of the exit

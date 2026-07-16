@@ -1,4 +1,4 @@
-import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
+import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { BUILTIN_PLUGINS, isOnPath } from '../plugins/registry';
 import type { Plugin, PluginCapabilities } from '../plugins/types';
 
@@ -139,7 +139,7 @@ export async function runPlugins(_args: ParsedArgs, deps: CliDeps): Promise<void
   console.log(formatPluginsReport(report, { color: deps.color }));
 }
 
-export class PluginsAction implements FlagAction {
+export class PluginsAction implements ActionCommand {
   readonly name = 'plugins';
   readonly description = 'List built-in plugins and whether each is available on this machine.';
   readonly args = {
@@ -148,10 +148,6 @@ export class PluginsAction implements FlagAction {
       description: 'List built-in plugins and whether each is available on this machine.',
     },
   };
-
-  matches(args: ParsedArgs): boolean {
-    return args.plugins === true;
-  }
 
   run = runPlugins;
 }

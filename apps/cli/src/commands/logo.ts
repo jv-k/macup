@@ -5,7 +5,7 @@
 // error and sets exit code 1 — citty's args parser already accepts the
 // flag at the type level, but it doesn't validate the numeric range.
 
-import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
+import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { renderAppleLogo } from '../ui/logo';
 
 export async function runLogo(args: ParsedArgs, deps: CliDeps): Promise<void> {
@@ -22,7 +22,7 @@ export async function runLogo(args: ParsedArgs, deps: CliDeps): Promise<void> {
   console.log(renderAppleLogo({ color: deps.color, scale }));
 }
 
-export class LogoAction implements FlagAction {
+export class LogoAction implements ActionCommand {
   readonly name = 'logo';
   readonly description = 'Print the Apple logo (optional scale: 0.25, 0.5, 0.75, or 1).';
   readonly args = {
@@ -32,10 +32,6 @@ export class LogoAction implements FlagAction {
       description: 'Print the Apple logo (optional scale: 0.25, 0.5, 0.75, or 1).',
     },
   };
-
-  matches(args: ParsedArgs): boolean {
-    return typeof args.logo === 'string';
-  }
 
   run = runLogo;
 }

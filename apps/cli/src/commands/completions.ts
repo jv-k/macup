@@ -6,7 +6,7 @@
 // resolution, but writes to stdout instead of the XDG completions path.
 // Useful for `eval "$(macup --completions)"` setups.
 
-import type { CliDeps, FlagAction, ParsedArgs } from '../cli/types';
+import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { generateBashCompletions } from '../completions/bash';
 import { generateFishCompletions } from '../completions/fish';
 import { generateZshCompletions } from '../completions/zsh';
@@ -45,7 +45,7 @@ function resolveShell(value: string, env: NodeJS.ProcessEnv): Shell | undefined 
   return undefined;
 }
 
-export class CompletionsAction implements FlagAction {
+export class CompletionsAction implements ActionCommand {
   readonly name = 'completions';
   readonly description =
     `Emit shell completions for ${SUPPORTED_SHELLS.join('|')} (omit value to auto-detect from $SHELL).`;
@@ -56,10 +56,6 @@ export class CompletionsAction implements FlagAction {
       description: `Emit shell completions for ${SUPPORTED_SHELLS.join('|')} (omit value to auto-detect from $SHELL).`,
     },
   };
-
-  matches(args: ParsedArgs): boolean {
-    return typeof args.completions === 'string';
-  }
 
   run = runCompletions;
 }

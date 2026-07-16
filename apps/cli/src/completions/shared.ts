@@ -18,10 +18,19 @@ export const TOP_LEVEL_COMMANDS: ReadonlyArray<{ name: string; description: stri
   { name: 'cleanup', description: 'Delete all config backup files' },
   { name: 'restore', description: 'Restore the applist from a backup' },
   { name: 'undo', description: 'Revert to the most recent backup' },
+  { name: 'completions', description: 'Emit shell completions to stdout' },
   { name: 'install-completions', description: 'Install shell completions' },
   { name: 'version', description: 'Show version with logo' },
   { name: 'logo', description: 'Print the Apple logo' },
 ];
+
+/**
+ * Commands whose one positional is a shell name. `--completions=<shell>`
+ * carried its own value spec, so completion offered the shells for free;
+ * as commands they need this to keep doing it. `init` never offered them
+ * and now can.
+ */
+export const SHELL_ARG_COMMANDS: readonly string[] = ['completions', 'install-completions', 'init'];
 
 export function commandsFor(plugin: Plugin): string[] {
   const cmds: string[] = [];

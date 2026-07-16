@@ -10,10 +10,10 @@ Completions for zsh, bash, and fish are generated from the plugin manifests (PRD
 2. `--cask` and `--formula` are offered only on plugins declaring more than one subtype, and only for the subtype-aware commands.
 3. Generated scripts pass shellcheck as part of repo lint; generated files are never hand-edited.
 
-### Emission: --completions
+### Emission: `macup completions`
 
-4. `macup --completions <shell>` prints the completion source for zsh, bash, or fish to stdout, suitable for `eval "$(macup --completions zsh)"`.
-5. Bare `macup --completions` auto-detects the shell from `$SHELL`, announcing the detection on stderr so stdout stays a pure script; detection failure or an unsupported shell name errors and exits 1.
+4. `macup completions <shell>` prints the completion source for zsh, bash, or fish to stdout, suitable for `eval "$(macup completions zsh)"`.
+5. Bare `macup completions` auto-detects the shell from `$SHELL`, announcing the detection on stderr so stdout stays a pure script; detection failure or an unsupported shell name errors and exits 1.
 
 ### Installation: --install-completions
 

@@ -3,21 +3,17 @@
 // `CliDeps` is the bag of everything wired up at startup (exec runner,
 // status bar, plugin registry, lazy config store, log, env-resolved
 // paths, color/verbose/debug flags). It's threaded through every
-// FlagAction.run(); each action grabs what it needs and ignores the
-// rest. A single deps shape keeps the dispatch loop trivial — no
-// per-action wiring in cli.ts.
+// ActionCommand.run(); each action grabs what it needs and ignores the
+// rest. A single deps shape keeps the wiring trivial — no per-action
+// wiring in cli.ts.
 //
-// `FlagAction` covers the top-level `--cleanup` / `--restore` / `--logo`
-// / `--plugins` / `--config` / `--completions` / `--install-completions`
-// surface. These are flag-triggered actions on the main command (not
-// citty subcommands), so each contributes its own `args` schema and
-// declares a `matches()` predicate. cli.ts iterates the registered
-// actions in order; the first one whose matches() returns true takes
-// over the run() and short-circuits the wizard fallback.
-//
-// Real citty subcommands (`brew`, `npm`, `outdated`, etc.) keep their
-// own dispatch via `subCommands` on the main definition; FlagAction is
-// only for the flag-on-main surface.
+// `ActionCommand` covers the stand-alone commands: `macup cleanup`,
+// `restore`, `logo`, `plugins`, `config`, `completions`,
+// `install-completions`, `undo`, `doctor`. Each carries its own `args`
+// schema and a `run()`; cli.ts adapts them into citty subcommands
+// (ADR 0029). They were `FlagAction`s — flag-triggered actions on the
+// main command with a `matches()` predicate — back when they were
+// spelled `--restore`.
 
 import type { ArgsDef } from 'citty';
 import type { PathResolution } from '../config/paths';
@@ -47,13 +43,16 @@ export interface CliDeps {
   readonly abort: () => void;
 }
 
-export interface FlagAction {
+export interface ActionCommand {
+  /** The command word: `macup <name>`. Also the key of the trigger arg in `args`. */
   readonly name: string;
   readonly description: string;
-  /** Args this action contributes to the main command. Merged at registration time. */
+  /**
+   * The action's own arg schema. The entry keyed by `name` is the trigger:
+   * `boolean` for a plain command, `string` when the command takes a value
+   * (the shell, for the completion commands). cli.ts reads that type to
+   * decide the subcommand's shape, so keep the two in step.
+   */
   readonly args: ArgsDef;
-  /** True iff the parsed args bag indicates this action was requested. */
-  matches(args: ParsedArgs): boolean;
-  /** Execute. Caller has already verified matches(args). */
   run(args: ParsedArgs, deps: CliDeps): Promise<void>;
 }

@@ -6,7 +6,7 @@ export function generateBashCompletions(plugins: readonly Plugin[]): string {
   // restore` is a noun, not a flag (ADR 0029). Only the true modifiers
   // are left on the flag list.
   const ids = [...plugins.map((p) => p.manifest.id), ...TOP_LEVEL_COMMANDS.map((c) => c.name)];
-  const globalFlags = '--help --version --verbose --debug --completions';
+  const globalFlags = '--help --version --verbose --debug';
 
   const pluginCases = plugins
     .map(

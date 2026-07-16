@@ -16,14 +16,14 @@ on the next shell start.
 
 ## Manual install
 
-`--completions` prints to stdout, for dotfiles or scripted setups:
+`macup completions` prints to stdout, for dotfiles or scripted setups:
 
 <Tabs items={['zsh', 'bash', 'fish']}>
 
 <Tab value="zsh">
 
 ```bash
-macup --completions=zsh > ~/.local/share/zsh/site-functions/_macup
+macup completions zsh > ~/.local/share/zsh/site-functions/_macup
 ```
 
 The target directory must be on your `$fpath` before `compinit` runs. After
@@ -35,7 +35,7 @@ with `exec zsh`) so the new completions load.
 <Tab value="bash">
 
 ```bash
-macup --completions=bash > ~/.local/share/bash-completion/completions/macup
+macup completions bash > ~/.local/share/bash-completion/completions/macup
 ```
 
 Requires the `bash-completion` package, which sources files from that
@@ -46,7 +46,7 @@ directory on demand. Open a new shell to pick it up.
 <Tab value="fish">
 
 ```bash
-macup --completions=fish > ~/.config/fish/completions/macup.fish
+macup completions fish > ~/.config/fish/completions/macup.fish
 ```
 
 fish loads completions from that directory automatically; no restart needed.

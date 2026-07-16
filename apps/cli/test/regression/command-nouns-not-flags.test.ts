@@ -90,12 +90,23 @@ describe('regression: the shell-taking commands actually do their work', () => {
   });
 
   it('auto-detects the shell when none is given', () => {
-    const { status, stdout } = run(['completions']);
+    // Pin $SHELL rather than inheriting it: the assertion is about which
+    // script auto-detection picks, so the input has to be the test's, not
+    // the machine's. (CI runs under bash; a bare `expect('#compdef')` here
+    // only passed because the author's $SHELL is zsh.)
+    const { status, stdout } = run(['completions'], { SHELL: '/bin/zsh' });
 
     // The empty trigger value means "auto-detect from $SHELL" — the thing
     // a synthesised `true` destroyed.
     expect(status).toBe(0);
     expect(stdout).toContain('#compdef macup');
+  });
+
+  it('auto-detects bash just as readily', () => {
+    const { status, stdout } = run(['completions'], { SHELL: '/bin/bash' });
+
+    expect(status).toBe(0);
+    expect(stdout).toContain('complete -F _macup macup');
   });
 
   it('writes a file for install-completions rather than silently doing nothing', () => {

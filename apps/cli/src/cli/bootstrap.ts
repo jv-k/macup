@@ -93,6 +93,7 @@ export function bootstrap(input: BootstrapInput): CliDeps {
     getStore,
     env,
     home,
+    platform: process.platform,
     signal: sigintController.signal,
     abort: () => sigintController.abort(),
   };

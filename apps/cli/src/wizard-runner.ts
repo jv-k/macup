@@ -20,7 +20,14 @@ import * as logui from './ui/log';
 import { renderAppleLogo } from './ui/logo';
 import { pageableAutocompleteMultiselect } from './ui/picker';
 import { getVersion } from './version';
-import { type ActionResult, type Target, type WizardDeps, pickAction, pickTarget } from './wizard';
+import {
+  type ActionDeps,
+  type ActionResult,
+  type Target,
+  type TargetDeps,
+  pickAction,
+  pickTarget,
+} from './wizard';
 
 // Cap clack's autocompleteMultiselect window to a sensible fraction of
 // the terminal height so the user can still see the prompt header and
@@ -317,7 +324,7 @@ function reportPickerFailure(what: string, unwindsTo: string, err: unknown): voi
  * is reported and unwound to the plugin picker.
  */
 export async function pickActionSafely(
-  wizardDeps: WizardDeps,
+  wizardDeps: ActionDeps,
   target: Target,
 ): Promise<ActionResult | null | typeof PICKER_FAILED> {
   try {
@@ -336,7 +343,7 @@ export async function pickActionSafely(
  * back to unwind to, so this ends the wizard — but on our terms, with the
  * cause reported and a failing exit code, rather than a raw trace.
  */
-async function pickTargetSafely(wizardDeps: WizardDeps): Promise<Target | null> {
+async function pickTargetSafely(wizardDeps: TargetDeps): Promise<Target | null> {
   try {
     return await pickTarget(wizardDeps);
   } catch (err) {
@@ -406,7 +413,6 @@ export async function runWizard(
         if (isCancel(choice) || choice === null) return null;
         return choice as Target;
       },
-      selectAction: async () => null, // unused at the target stage
       printAbout: () => printAboutScreen(deps.color),
     });
     if (!target) return; // Esc at target picker → exit wizard.
@@ -416,7 +422,6 @@ export async function runWizard(
       const result: ActionResult | null | typeof PICKER_FAILED = await pickActionSafely(
         {
           plugins: deps.registry,
-          selectTarget: async () => null, // unused at the action stage
           selectAction: async (t, opts) => {
             // Sticky inverted-pill header — printed on every prompt
             // iteration so the user always sees which category they're

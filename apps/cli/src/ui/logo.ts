@@ -108,7 +108,7 @@ export function renderAppleLogo(opts: LogoRenderOptions = {}): string {
  * Rendered credits block for the interactive splash — author line and
  * repo URL, all lowercase, dimmed to sit quietly beneath the Apple logo.
  * Kept separate from the branded --version output (which uses titlecase +
- * bullets in src/ui/log.ts:versionBlock) so the splash stays understated.
+ * bullets in src/ui/log.ts:splashBlock) so the splash stays understated.
  */
 export interface CreditsRenderOptions {
   color?: boolean;

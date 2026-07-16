@@ -1,3 +1,4 @@
+import { COMPLETABLE_COMMANDS } from '../cli/commands';
 import type { Plugin } from '../plugins/types';
 
 /**
@@ -5,24 +6,12 @@ import type { Plugin } from '../plugins/types';
  * position: `macup restore`, `macup outdated`. These are nouns, not flags
  * (ADR 0029), so completion offers them where a plugin id would go.
  *
- * Mirrors the subcommands wired in src/cli.ts — that file is the source of
- * truth for dispatch, this is the source of truth for what shells offer.
+ * Projected from the single top-level command registry (src/cli/commands.ts);
+ * `help` is excluded because it is not a dispatched subcommand. cli.ts is the
+ * source of truth for dispatch, the registry for descriptions, and this view
+ * for what the shells offer.
  */
-export const TOP_LEVEL_COMMANDS: ReadonlyArray<{ name: string; description: string }> = [
-  { name: 'outdated', description: 'Show outdated packages across every plugin' },
-  { name: 'check', description: 'Exit 0 if current, 1 if anything is outdated' },
-  { name: 'init', description: 'Emit shell integration to eval from your rc file' },
-  { name: 'doctor', description: 'Run a self-diagnostic report' },
-  { name: 'config', description: 'Show config status' },
-  { name: 'plugins', description: 'List built-in plugins and availability' },
-  { name: 'cleanup', description: 'Delete all config backup files' },
-  { name: 'restore', description: 'Restore the applist from a backup' },
-  { name: 'undo', description: 'Revert to the most recent backup' },
-  { name: 'completions', description: 'Emit shell completions to stdout' },
-  { name: 'install-completions', description: 'Install shell completions' },
-  { name: 'version', description: 'Show version with logo' },
-  { name: 'logo', description: 'Print the Apple logo' },
-];
+export const TOP_LEVEL_COMMANDS = COMPLETABLE_COMMANDS;
 
 /**
  * Commands whose one positional is a shell name. `--completions=<shell>`

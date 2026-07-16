@@ -156,7 +156,6 @@ describe('pickTarget', () => {
         groupsSeen = groups;
         return null;
       },
-      selectAction: async () => null,
     });
     const allValues = groupsSeen.flatMap((g) => g.items.map((i) => i.value.pluginId));
     expect(allValues).not.toContain('all');
@@ -208,7 +207,6 @@ describe('pickAction — option gating', () => {
     await pickAction(
       {
         plugins: [noKeys],
-        selectTarget: async () => null,
         selectAction: async (_t, opts) => {
           offered = opts.map((o) => o.value);
           return null;
@@ -234,7 +232,6 @@ describe('pickAction — option gating', () => {
     await pickAction(
       {
         plugins: [noOutdated],
-        selectTarget: async () => null,
         selectAction: async (_t, opts) => {
           offered = opts.map((o) => o.value);
           return null;
@@ -252,7 +249,6 @@ describe('pickAction — option gating', () => {
     await pickAction(
       {
         plugins: [searchable],
-        selectTarget: async () => null,
         selectAction: async (_t, opts) => {
           offered = opts.map((o) => o.value);
           return null;
@@ -330,7 +326,6 @@ describe('pickAction — update-selected', () => {
     const result = await pickAction(
       {
         plugins: [npm],
-        selectTarget: async () => null,
         selectAction: async () => 'update-selected',
         fetchOutdated: async () => [
           { name: 'typescript', currentVersion: '1.0.0', latestVersion: '5.4.0' },
@@ -356,7 +351,6 @@ describe('pickAction — update-selected', () => {
     const result = await pickAction(
       {
         plugins: [npm],
-        selectTarget: async () => null,
         selectAction: async () => {
           actionCalls++;
           return actionCalls === 1 ? 'update-selected' : null;
@@ -377,7 +371,6 @@ describe('pickAction — update-selected', () => {
     const result = await pickAction(
       {
         plugins: [npm],
-        selectTarget: async () => null,
         selectAction: async () => {
           actionCalls++;
           return actionCalls === 1 ? 'update-selected' : null;
@@ -436,7 +429,6 @@ describe('pickAction — search-add', () => {
     const result = await pickAction(
       {
         plugins: [searchable],
-        selectTarget: async () => null,
         selectAction: async () => 'search-add',
         searchAndPick: async (t) => {
           searchedTarget = t;
@@ -460,7 +452,6 @@ describe('pickAction — search-add', () => {
       const result = await pickAction(
         {
           plugins: [searchable],
-          selectTarget: async () => null,
           selectAction: async () => {
             actionCalls++;
             return actionCalls === 1 ? 'search-add' : null;
@@ -479,7 +470,6 @@ describe('pickAction — search-add', () => {
     const result = await pickAction(
       {
         plugins: [searchable],
-        selectTarget: async () => null,
         selectAction: async () => 'search-add',
       },
       { pluginId: 'brew' },

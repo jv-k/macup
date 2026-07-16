@@ -15,20 +15,18 @@ import type { CheckDeps, CheckResult, Section } from '../report';
 import { missingBinaries, probeList } from './probe';
 
 function trackedFor(applist: Applist, key: ApplistKey): readonly string[] {
-  switch (key) {
-    case 'appstore':
-      return applist.appstore;
-    case 'npm':
-      return applist.npm;
-    case 'pnpm':
-      return applist.pnpm;
-    case 'pip':
-      return applist.pip;
-    case 'brew.formulas':
-      return applist.brew.formulas;
-    case 'brew.casks':
-      return applist.brew.casks;
-  }
+  // Walk the dotted applist key generically (e.g. 'brew.formulas' resolves
+  // applist.brew.formulas), so this reader needs no per-key case and a new
+  // plugin's config key does not force an edit here. The applist schema
+  // (config/schema.ts) stays the one place the key set is declared.
+  const value = key
+    .split('.')
+    .reduce<unknown>(
+      (node, seg) =>
+        node && typeof node === 'object' ? (node as Record<string, unknown>)[seg] : undefined,
+      applist,
+    );
+  return Array.isArray(value) ? (value as readonly string[]) : [];
 }
 
 // Same permissive stance as src/plugins/selection.ts: pins can be

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { buildPluginsReport, formatPluginsReport } from '../../../src/commands/plugins';
+import { describe, expect, it, vi } from 'vitest';
+import type { CliDeps } from '../../../src/cli/types';
+import { buildPluginsReport, formatPluginsReport, runPlugins } from '../../../src/commands/plugins';
 import type { Plugin, PluginCapabilities, PluginManifest } from '../../../src/plugins/types';
 
 const caps = (over: Partial<PluginCapabilities> = {}): PluginCapabilities => ({
@@ -149,5 +150,33 @@ describe('formatPluginsReport', () => {
     });
     const out = formatPluginsReport(report, { color: true });
     expect(out).toContain(ansiStart);
+  });
+});
+
+describe('runPlugins (wiring)', () => {
+  it('renders the report from injected registry, platform, and onPath', async () => {
+    const deps = {
+      registry: [
+        mkPlugin({ id: 'brew', displayName: 'Homebrew', requires: ['brew'] }),
+        mkPlugin({ id: 'npm', displayName: 'npm', requires: ['npm'] }),
+      ],
+      platform: 'darwin',
+      exec: { onPath: (b: string) => b === 'brew' },
+      color: false,
+    } as unknown as CliDeps;
+
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'log').mockImplementation((m?: unknown) => {
+      lines.push(String(m));
+    });
+    try {
+      await runPlugins({}, deps);
+    } finally {
+      spy.mockRestore();
+    }
+    const out = lines.join('\n');
+    expect(out).toContain('plugins: 1 / 2 available');
+    expect(out).toContain('brew');
+    expect(out).toContain('missing: npm');
   });
 });

@@ -1,6 +1,6 @@
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
-import { BUILTIN_PLUGINS, isOnPath } from '../plugins/registry';
 import type { Plugin, PluginCapabilities } from '../plugins/types';
+import { painter } from '../ui/color';
 
 export interface PluginStatus {
   id: string;
@@ -91,9 +91,7 @@ export interface FormatOptions {
  */
 export function formatPluginsReport(report: PluginsReport, opts: FormatOptions = {}): string {
   const color = opts.color ?? false;
-  const green = (s: string) => (color ? `\x1b[32m${s}\x1b[0m` : s);
-  const red = (s: string) => (color ? `\x1b[31m${s}\x1b[0m` : s);
-  const dim = (s: string) => (color ? `\x1b[2m${s}\x1b[0m` : s);
+  const { green, red, dim } = painter(color);
 
   const idPad = Math.max(4, ...report.statuses.map((s) => s.id.length));
   const namePad = Math.max(4, ...report.statuses.map((s) => s.displayName.length));
@@ -132,9 +130,9 @@ export function formatPluginsReport(report: PluginsReport, opts: FormatOptions =
 }
 
 export async function runPlugins(_args: ParsedArgs, deps: CliDeps): Promise<void> {
-  const report = buildPluginsReport(BUILTIN_PLUGINS, {
-    platform: process.platform,
-    onPath: (b) => isOnPath(b),
+  const report = buildPluginsReport(deps.registry, {
+    platform: deps.platform,
+    onPath: (b) => deps.exec.onPath(b),
   });
   console.log(formatPluginsReport(report, { color: deps.color }));
 }

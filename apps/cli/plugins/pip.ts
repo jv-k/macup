@@ -1,4 +1,5 @@
 import { defaultCheck } from '../src/plugins/defaults';
+import { filterOutdated, mutateRefs } from '../src/plugins/helpers';
 import type {
   ListOptions,
   MutateOptions,
@@ -82,34 +83,14 @@ async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<P
     return status;
   });
 
-  return onlyOutdated ? result.filter((s) => s.outdated) : result;
+  return filterOutdated(result, onlyOutdated);
 }
 
-async function runAll(
-  ctx: PluginContext,
-  refs: readonly PackageRef[],
-  action: 'install' | 'update',
-  opts: MutateOptions,
-): Promise<void> {
-  // pip has no distinct "update" verb — `install --upgrade` both installs and
-  // upgrades. Only `update` passes --upgrade so a plain add doesn't force an
-  // already-satisfied package to the latest.
-  const args = action === 'update' ? ['install', '--upgrade'] : ['install'];
-  for (const ref of refs) {
-    if (opts.dryRun) {
-      ctx.log.info(`[dry-run] ${PIP} ${args.join(' ')} ${ref.name}`);
-      continue;
-    }
-    const r = await ctx.exec.run(PIP, [...args, ref.name], {
-      signal: ctx.signal,
-      kind: 'user-action',
-    });
-    if (r.exitCode !== 0) {
-      throw new Error(
-        `${PIP} ${args.join(' ')} ${ref.name} exited ${r.exitCode}: ${r.stderr.trim() || r.stdout.trim()}`,
-      );
-    }
-  }
+// pip has no distinct "update" verb — `install --upgrade` both installs and
+// upgrades. Only update passes --upgrade so a plain add doesn't force an
+// already-satisfied package to the latest.
+function pipArgs(action: 'install' | 'update', name: string): readonly [string, readonly string[]] {
+  return [PIP, action === 'update' ? ['install', '--upgrade', name] : ['install', name]];
 }
 
 const pip: Plugin = {
@@ -141,7 +122,7 @@ const pip: Plugin = {
     refs: readonly PackageRef[],
     opts: MutateOptions,
   ): Promise<void> {
-    await runAll(ctx, refs, 'install', opts);
+    await mutateRefs(ctx, refs, opts, (ref) => pipArgs('install', ref.name));
   },
 
   async update(
@@ -149,7 +130,7 @@ const pip: Plugin = {
     refs: readonly PackageRef[],
     opts: MutateOptions,
   ): Promise<void> {
-    await runAll(ctx, refs, 'update', opts);
+    await mutateRefs(ctx, refs, opts, (ref) => pipArgs('update', ref.name));
   },
 };
 

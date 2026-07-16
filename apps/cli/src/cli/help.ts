@@ -11,6 +11,7 @@ import pc from 'picocolors';
 import * as logui from '../ui/log';
 import { page } from '../ui/pager';
 import { getVersion } from '../version';
+import { TOP_LEVEL_COMMANDS } from './commands';
 import type { CliDeps } from './types';
 
 export function printVersionSplash(deps: CliDeps): void {
@@ -89,28 +90,14 @@ export function buildHelp(deps: CliDeps): string {
   say(cols(pluginRows));
   say('');
 
-  // Top-level (cross-plugin) commands.
+  // Top-level (cross-plugin) commands, projected from the one registry
+  // (src/cli/commands.ts) so this screen can't drift from completions and docs,
+  // and can't silently omit a real command the way the hand-written list did.
   say(`${logui.header('COMMANDS')} ${s.dim('Stand-alone commands')}`);
-  const commandRows: logui.ColumnRow[] = [
-    { label: 'outdated', desc: 'Show outdated packages across every plugin in one pane [--json]' },
-    {
-      label: 'check',
-      desc: 'Exit 0 if everything is current, 1 if anything is outdated [--quiet]',
-    },
-    {
-      label: 'init <shell>',
-      desc: 'Emit shell integration (zsh|bash|fish) to eval from your rc file',
-    },
-    { label: 'version', desc: 'Show version with logo' },
-    { label: 'help', desc: 'Show this help screen' },
-    { label: 'config', desc: 'Show config path, schema, pins/skip counts' },
-    { label: 'cleanup', desc: 'Delete all backup files' },
-    { label: 'restore', desc: 'Restore config from a backup' },
-    { label: 'undo', desc: 'Revert to the most recent backup (diff first)' },
-    { label: 'logo', desc: 'Print the Apple logo' },
-    { label: 'plugins', desc: 'List built-in plugins and their availability' },
-    { label: 'install-completions', desc: 'Install shell completions (auto-detects shell)' },
-  ].map((r) => ({ label: s.bold(r.label), desc: r.desc }));
+  const commandRows: logui.ColumnRow[] = TOP_LEVEL_COMMANDS.map((c) => ({
+    label: s.bold(c.argHint ? `${c.name} ${c.argHint}` : c.name),
+    desc: c.description,
+  }));
   say(cols(commandRows));
   say('');
 

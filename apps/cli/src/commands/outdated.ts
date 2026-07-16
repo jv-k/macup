@@ -3,6 +3,7 @@ import { defineCommand } from 'citty';
 import type { CliDeps } from '../cli/types';
 import { ErrPluginUnavailable } from '../errors';
 import type { PackageStatus, Plugin, PluginContext } from '../plugins/types';
+import { painter } from '../ui/color';
 
 export interface OutdatedPluginSummary {
   pluginId: string;
@@ -133,15 +134,14 @@ export function formatOutdatedHeader(opts: { color?: boolean } = {}): string {
   const color = opts.color ?? false;
   const label = ' OUTDATED ';
   if (!color) return `\n  ${label.trim()}\n`;
-  return `\n  \x1b[33m\x1b[7m\x1b[1m${label}\x1b[0m\n`;
+  const c = painter(color);
+  return `\n  ${c.yellow(c.inverse(c.bold(label)))}\n`;
 }
 
 export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions = {}): string {
   const color = opts.color ?? false;
   const maxNames = opts.maxNames ?? 6;
-  const green = (s: string) => (color ? `\x1b[32m${s}\x1b[0m` : s);
-  const yellow = (s: string) => (color ? `\x1b[33m${s}\x1b[0m` : s);
-  const dim = (s: string) => (color ? `\x1b[2m${s}\x1b[0m` : s);
+  const { green, yellow, dim } = painter(color);
 
   const idPad = Math.max(4, ...report.plugins.map((p) => p.pluginId.length));
 
@@ -225,7 +225,7 @@ export function buildOutdatedCommand(deps: CliDeps) {
         makeCtx: () => ({
           exec: deps.exec,
           log: deps.log,
-          signal: new AbortController().signal,
+          signal: deps.signal,
         }),
         onProgress: (e) => {
           s?.message(`Checking plugins… (${e.completed}/${e.total}) ${e.displayName}`);

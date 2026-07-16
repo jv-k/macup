@@ -27,7 +27,13 @@ export type WizardActionOption =
   | 'search-add'
   | 'install';
 
-export interface WizardDeps {
+// The two picker stages take disjoint callbacks, so each has its own deps
+// interface. Splitting them means neither caller has to stub a callback the
+// other stage owns (pickTarget never touches selectAction, pickAction never
+// touches selectTarget).
+
+/** What the target picker (`pickTarget`) needs. */
+export interface TargetDeps {
   readonly plugins: readonly Plugin[];
   readonly selectTarget: (
     groups: ReadonlyArray<{
@@ -35,12 +41,20 @@ export interface WizardDeps {
       readonly items: ReadonlyArray<{ readonly label: string; readonly value: Target }>;
     }>,
   ) => Promise<Target | null>;
+  /** Renders the "About macup" screen when the Help target is picked. */
+  readonly printAbout?: () => void;
+}
+
+/** What the action picker (`pickAction`) needs: the action choice plus the
+ * per-action IO callbacks. */
+export interface ActionDeps {
+  readonly plugins: readonly Plugin[];
   readonly selectAction: (
     target: Target,
     options: ReadonlyArray<{ readonly label: string; readonly value: WizardActionOption }>,
   ) => Promise<WizardActionOption | null>;
   /**
-   * Picker for "Update selected". Receives the outdated rows; returns the
+   * Picker for "Update selectively". Receives the outdated rows; returns the
    * subset to update, null to nav back to the action prompt, or [] to also
    * nav back (treated as "nothing to do").
    */
@@ -53,12 +67,12 @@ export interface WizardDeps {
     }>,
   ) => Promise<readonly string[] | null>;
   /**
-   * Picker for "Add/Remove tracked". Returns the desired tracked set
+   * Picker for "Track/Untrack". Returns the desired tracked set
    * (any subset of installed ∪ tracked), or null to nav back.
    */
   readonly pickTrackedSet?: (target: Target) => Promise<readonly string[] | null>;
   /**
-   * "Search & add": prompt for a query, search the backend, and return the
+   * "Search & track": prompt for a query, search the backend, and return the
    * package names the user chose to track — or null to nav back. Required
    * only when the search-add action is offered, i.e. when the plugin exposes
    * `search` AND can track additions (track capability + a configKey).
@@ -66,7 +80,7 @@ export interface WizardDeps {
   readonly searchAndPick?: (target: Target) => Promise<readonly string[] | null>;
   /** Reads current tracked names for the given target. Required when sync-tracked is offered. */
   readonly currentTracked?: (target: Target) => Promise<readonly string[]>;
-  /** Fetches outdated rows for "Update selected". Required alongside pickOutdated. */
+  /** Fetches outdated rows for "Update selectively". Required alongside pickOutdated. */
   readonly fetchOutdated?: (target: Target) => Promise<
     ReadonlyArray<{
       readonly name: string;
@@ -74,9 +88,12 @@ export interface WizardDeps {
       readonly latestVersion?: string;
     }>
   >;
-  /** Renders the "About macup" screen when the Help target is picked. */
-  readonly printAbout?: () => void;
 }
+
+/** Combined bag for callers that build one deps object for both stages — the
+ * runner's wizard loop and the unit tests. pickTarget/pickAction each take
+ * only their half, so neither stubs a callback the other stage needs. */
+export type WizardDeps = TargetDeps & ActionDeps;
 
 /** Synthetic plugin id for the Help entry on the target prompt. */
 export const WIZARD_HELP_PLUGIN_ID = '__about__';
@@ -123,7 +140,7 @@ function buildGroups(plugins: readonly Plugin[]): Array<{
   return out;
 }
 
-export async function pickTarget(deps: WizardDeps): Promise<Target | null> {
+export async function pickTarget(deps: TargetDeps): Promise<Target | null> {
   const { selectTarget, plugins, printAbout } = deps;
   const groups = buildGroups(plugins);
   while (true) {
@@ -175,7 +192,7 @@ function diffTracked(
   return { adds, removes };
 }
 
-export async function pickAction(deps: WizardDeps, target: Target): Promise<ActionResult | null> {
+export async function pickAction(deps: ActionDeps, target: Target): Promise<ActionResult | null> {
   const plugin = deps.plugins.find((p) => p.manifest.id === target.pluginId);
   if (!plugin) {
     console.error(`error: plugin "${target.pluginId}" is not registered`);

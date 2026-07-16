@@ -1,6 +1,12 @@
 import pc from 'picocolors';
 import { useColor as useColorFn } from '../runtime';
 import { renderAppleLogo } from './logo';
+import { visualWidth } from './width';
+
+// Re-exported so existing importers (ui/pager, ui/picker, tests) keep importing
+// visualWidth from ui/log; the implementation now lives in ui/width, shared
+// with the status bar so there is one ANSI-strip + width definition.
+export { visualWidth };
 
 // Lazy boolean read on every styled-glyph emit, so this module can be
 // imported before stdout/NO_COLOR are settled (e.g. in test harnesses).
@@ -124,65 +130,9 @@ export function error(msg: string): string {
   return `  ${SYM.error} ${useColorFn() ? pc.red(msg) : msg}`;
 }
 
-// ── Branded version display ─────────────────────────────────────
-
-export function versionBlock(opts: {
-  version: string;
-  description: string;
-  author: string;
-  homepage: string;
-}): string {
-  const lines: string[] = [];
-  // Logo wordmark: inverse-video bold green pill, e.g. " macup v1.0.0 "
-  const badgeText = ` macup v${opts.version} `;
-  const badge = useColorFn() ? pc.inverse(pc.bold(pc.green(badgeText))) : badgeText.trim();
-  lines.push('');
-  lines.push(`  ${badge}`);
-  lines.push('');
-  lines.push(`  ${useColorFn() ? pc.dim(opts.description) : opts.description}`);
-  lines.push('');
-  lines.push(`  ${SYM.bullet} Author:   ${opts.author}`);
-  lines.push(
-    `  ${SYM.bullet} Homepage: ${useColorFn() ? pc.underline(opts.homepage) : opts.homepage}`,
-  );
-  lines.push('');
-  return lines.join('\n');
-}
-
 export { SYM };
 
 // ── Layout helpers ──────────────────────────────────────────────
-
-const ANSI_RE = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, 'g');
-
-/**
- * Visual cell width of a string after stripping ANSI, counting basic
- * CJK/fullwidth codepoints as 2 cells so our logo aligns correctly.
- * Not a full Unicode width implementation — just enough for the chars
- * this project uses.
- */
-export function visualWidth(s: string): number {
-  const stripped = s.replace(ANSI_RE, '');
-  let w = 0;
-  for (const ch of stripped) {
-    const cp = ch.codePointAt(0) ?? 0;
-    // Rough fullwidth ranges: CJK symbols/punct, CJK unified, fullwidth forms.
-    const fullwidth =
-      (cp >= 0x1100 && cp <= 0x115f) ||
-      (cp >= 0x2e80 && cp <= 0x303f) ||
-      (cp >= 0x3041 && cp <= 0x33ff) ||
-      (cp >= 0x3400 && cp <= 0x4dbf) ||
-      (cp >= 0x4e00 && cp <= 0x9fff) ||
-      (cp >= 0xa000 && cp <= 0xa4cf) ||
-      (cp >= 0xac00 && cp <= 0xd7a3) ||
-      (cp >= 0xf900 && cp <= 0xfaff) ||
-      (cp >= 0xfe30 && cp <= 0xfe4f) ||
-      (cp >= 0xff00 && cp <= 0xff60) ||
-      (cp >= 0xffe0 && cp <= 0xffe6);
-    w += fullwidth ? 2 : 1;
-  }
-  return w;
-}
 
 /**
  * Zip two multi-line strings into two columns. Shorter block is padded

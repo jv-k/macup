@@ -65,7 +65,7 @@ async function fetchXcodeApp(ctx: PluginContext): Promise<PackageStatus | undefi
 }
 
 async function fetchCommandLineTools(ctx: PluginContext): Promise<PackageStatus> {
-  const selected = await ctx.exec.run('xcode-select', ['-p']);
+  const selected = await ctx.exec.run('xcode-select', ['-p'], { signal: ctx.signal });
   if (selected.exitCode !== 0) {
     return {
       ref: { kind: 'xcode-clt', name: 'Command Line Tools' },
@@ -73,7 +73,9 @@ async function fetchCommandLineTools(ctx: PluginContext): Promise<PackageStatus>
       outdated: false,
     };
   }
-  const info = await ctx.exec.run('pkgutil', ['--pkg-info=com.apple.pkg.CLTools_Executables']);
+  const info = await ctx.exec.run('pkgutil', ['--pkg-info=com.apple.pkg.CLTools_Executables'], {
+    signal: ctx.signal,
+  });
   const version = info.exitCode === 0 ? extractCltVersion(info.stdout) : undefined;
   const status: PackageStatus = {
     ref: { kind: 'xcode-clt', name: 'Command Line Tools' },
@@ -127,7 +129,10 @@ const xcode: Plugin = {
         continue;
       }
       if (ref.kind === 'xcode-clt') {
-        await ctx.exec.run('xcode-select', ['--install'], { kind: 'user-action' });
+        await ctx.exec.run('xcode-select', ['--install'], {
+          signal: ctx.signal,
+          kind: 'user-action',
+        });
       } else {
         const r = await ctx.exec.run('mas', ['install', ref.id ?? XCODE_ID], {
           signal: ctx.signal,

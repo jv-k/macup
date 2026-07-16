@@ -1,4 +1,5 @@
 import { defaultCheck } from '../src/plugins/defaults';
+import { filterOutdated, mutateRefs, safeParseJson } from '../src/plugins/helpers';
 import type {
   ListOptions,
   MutateOptions,
@@ -23,18 +24,8 @@ interface PnpmOutdatedEntry {
 
 type PnpmOutdatedResponse = Record<string, PnpmOutdatedEntry>;
 
-function safeParseJson<T>(text: string): T | undefined {
-  const trimmed = text.trim();
-  if (!trimmed) return undefined;
-  try {
-    return JSON.parse(trimmed) as T;
-  } catch {
-    return undefined;
-  }
-}
-
 async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<PackageStatus[]> {
-  const listResult = await ctx.exec.run('pnpm', ['list', '-g', '--json']);
+  const listResult = await ctx.exec.run('pnpm', ['list', '-g', '--json'], { signal: ctx.signal });
   if (listResult.exitCode !== 0) {
     // Surface the failure instead of silently reporting "no packages" — the
     // query can fail for reasons the user must fix (e.g. the global bin dir
@@ -46,7 +37,9 @@ async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<P
   const installed = listParsed?.[0]?.dependencies ?? {};
 
   // pnpm outdated exits 0 even when there ARE outdated packages (unlike npm).
-  const outdatedResult = await ctx.exec.run('pnpm', ['outdated', '-g', '--json']);
+  const outdatedResult = await ctx.exec.run('pnpm', ['outdated', '-g', '--json'], {
+    signal: ctx.signal,
+  });
   const outdatedParsed = safeParseJson<PnpmOutdatedResponse>(outdatedResult.stdout) ?? {};
 
   const result: PackageStatus[] = Object.entries(installed).map(([name, meta]) => {
@@ -63,30 +56,7 @@ async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<P
     return status;
   });
 
-  return onlyOutdated ? result.filter((s) => s.outdated) : result;
-}
-
-async function runAll(
-  ctx: PluginContext,
-  refs: readonly PackageRef[],
-  action: 'add' | 'update',
-  opts: MutateOptions,
-): Promise<void> {
-  for (const ref of refs) {
-    if (opts.dryRun) {
-      ctx.log.info(`[dry-run] pnpm ${action} -g ${ref.name}`);
-      continue;
-    }
-    const r = await ctx.exec.run('pnpm', [action, '-g', ref.name], {
-      signal: ctx.signal,
-      kind: 'user-action',
-    });
-    if (r.exitCode !== 0) {
-      throw new Error(
-        `pnpm ${action} -g ${ref.name} exited ${r.exitCode}: ${r.stderr.trim() || r.stdout.trim()}`,
-      );
-    }
-  }
+  return filterOutdated(result, onlyOutdated);
 }
 
 const pnpm: Plugin = {
@@ -118,7 +88,7 @@ const pnpm: Plugin = {
     refs: readonly PackageRef[],
     opts: MutateOptions,
   ): Promise<void> {
-    await runAll(ctx, refs, 'add', opts);
+    await mutateRefs(ctx, refs, opts, (ref) => ['pnpm', ['add', '-g', ref.name]]);
   },
 
   async update(
@@ -126,7 +96,7 @@ const pnpm: Plugin = {
     refs: readonly PackageRef[],
     opts: MutateOptions,
   ): Promise<void> {
-    await runAll(ctx, refs, 'update', opts);
+    await mutateRefs(ctx, refs, opts, (ref) => ['pnpm', ['update', '-g', ref.name]]);
   },
 };
 

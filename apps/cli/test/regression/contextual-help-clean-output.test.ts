@@ -45,14 +45,14 @@ describe('regression: contextual help contains no stray artefacts', () => {
     }
   });
 
-  it('brew plugin exposes list, install, update, add, remove, pin, unpin, skip, unskip as expected subcommands', () => {
+  it('brew plugin exposes list, install, update, track, untrack, pin, unpin, skip, unskip as expected subcommands', () => {
     const brew = BUILTIN_PLUGINS.find((p: Plugin) => p.manifest.id === 'brew');
     expect(brew).toBeDefined();
     expect(brew?.manifest.capabilities.list).toBe(true);
     expect(brew?.manifest.capabilities.install).toBe(true);
     expect(brew?.manifest.capabilities.update).toBe(true);
-    expect(brew?.manifest.capabilities.add).toBe(true);
-    expect(brew?.manifest.capabilities.remove).toBe(true);
+    expect(brew?.manifest.capabilities.track).toBe(true);
+    expect(brew?.manifest.capabilities.untrack).toBe(true);
     expect(brew?.manifest.configKeys.length).toBeGreaterThan(0);
   });
 });

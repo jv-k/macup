@@ -1,8 +1,8 @@
-// argv pre-processing run BEFORE citty parses, for two purposes:
+// argv pre-processing run BEFORE citty parses, for three purposes:
 //
 //   1) Rewrite `macup version` to `macup --version`, so both spellings of
 //      the one conventional flag work. Only the first positional gets
-//      rewritten — `macup brew add version` should not turn the trailing
+//      rewritten — `macup brew track version` should not turn the trailing
 //      word into a flag.
 //
 //   2) Strip --debug / -D / --verbose / -V from argv before citty sees
@@ -10,7 +10,12 @@
 //      subcommands shouldn't see them in `args` and shouldn't error on
 //      them either.
 //
-// Both are pure transforms over argv, exported so cli.ts and any future
+//   3) Rewrite the deprecated applist verbs `add` / `remove` to their
+//      `track` / `untrack` replacements (ADR 0031), so the aliases dispatch
+//      without being registered as citty subcommands — which keeps them out
+//      of per-plugin `--help` and the generated completions.
+//
+// All are pure transforms over argv, exported so cli.ts and any future
 // in-process tests can drive them deterministically without spawning.
 
 // `--version` is the canonical spelling here, unlike the command nouns:
@@ -37,6 +42,35 @@ export function rewriteFlagAliases(argv: string[]): void {
   if (typeof first === 'string' && (FLAG_COMMAND_ALIASES as readonly string[]).includes(first)) {
     argv[2] = `--${first}`;
   }
+}
+
+// The applist verbs renamed in ADR 0031: the deprecated spelling maps to the
+// replacement the CLI now documents. Removed when the aliases are dropped at
+// the next major.
+export const DEPRECATED_VERB_ALIASES: Readonly<Record<string, string>> = {
+  add: 'track',
+  remove: 'untrack',
+};
+
+// If argv spells `macup <plugin> add|remove …`, rewrite the verb in place to
+// its track/untrack replacement and return the one-line notice for cli.ts to
+// print to stderr; otherwise return null. Gated on `pluginIds` so an
+// `add`/`remove` that lands after a non-plugin command (or as a package name
+// further along) is left alone — only the verb slot, argv[3], is rewritten.
+export function rewriteDeprecatedVerbAliases(
+  argv: string[],
+  pluginIds: ReadonlySet<string>,
+): string | null {
+  // argv is [node, script, <plugin>, <verb>, …]; both positionals required.
+  if (argv.length < 4) return null;
+  const plugin = argv[2];
+  const verb = argv[3];
+  if (typeof plugin !== 'string' || !pluginIds.has(plugin)) return null;
+  if (typeof verb !== 'string') return null;
+  const replacement = DEPRECATED_VERB_ALIASES[verb];
+  if (!replacement) return null;
+  argv[3] = replacement;
+  return `${verb} is deprecated; use ${replacement}`;
 }
 
 // Return the flag-style tokens in `rawArgs` that aren't in `known`. Used to

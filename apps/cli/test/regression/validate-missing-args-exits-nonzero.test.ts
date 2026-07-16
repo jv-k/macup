@@ -1,7 +1,9 @@
 // Regression guard for bin/utils.zsh:419 — validate_package_names_required()
 // returned `exit 0` on failure, silently masking "missing packages" as success.
-// In the TS design, the `add` sub-command's run() handler explicitly checks
-// for zero package names and sets process.exitCode = 1.
+// In the TS design, the track sub-command's run() handler explicitly checks
+// for zero package names and sets process.exitCode = 1. Spelled here via the
+// deprecated `add` alias (ADR 0031), which routes to `track` — so this also
+// pins that the alias still enforces the required-args contract.
 
 import { exec as execCb } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';

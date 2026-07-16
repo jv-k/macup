@@ -137,7 +137,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         // For `list`, "no subtype flag" means "show every subtype" — so we
         // override the resolveSubtypeOrExit default (first subtype) with
         // undefined when neither --subtype nor a shortcut flag was set.
-        // install/add/remove keep the default-to-first behavior because
+        // install/track/untrack keep the default-to-first behavior because
         // they need a concrete subtype to act on.
         const userSpecifiedSubtype =
           (typeof args.subtype === 'string' && args.subtype !== '') ||
@@ -211,7 +211,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             // stderr rather than dropping it: piped output stays valid and the
             // hint still reaches a watching terminal.
             const notice = log.warning(
-              `No tracked packages. Showing all installed. Add with: macup ${manifest.id} add <name...>`,
+              `No tracked packages. Showing all installed. Track with: macup ${manifest.id} track <name...>`,
             );
             if (showJson) console.error(notice);
             else console.log(notice);
@@ -278,7 +278,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (refs.length === 0 && manifest.configKeys.length > 0) {
           const emptyKey = resolveConfigKey(plugin, subtype);
           console.log(log.info(`No packages tracked in ${emptyKey}.`));
-          console.log(log.trace(`macup ${manifest.id} add ${subtypeCliFlag(subtype)}<name>`));
+          console.log(log.trace(`macup ${manifest.id} track ${subtypeCliFlag(subtype)}<name>`));
           return;
         }
         if (plugin.install) {
@@ -479,36 +479,40 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
   }
 
-  if (manifest.capabilities.add) {
-    subCommands.add = defineCommand({
-      meta: { name: 'add', description: 'Add packages to the tracked applist (config-only).' },
+  if (manifest.capabilities.track) {
+    // The deprecated `add` alias dispatches here via argv rewriting in
+    // cli/argv.ts (ADR 0031): it prints a one-line stderr notice and is
+    // deliberately not registered as a subcommand, so it stays out of
+    // citty's per-plugin help and the generated completions.
+    subCommands.track = defineCommand({
+      meta: { name: 'track', description: 'Track packages in the applist (config-only).' },
       args: {
         ...subtypeArg,
         packages: {
           type: 'positional',
           required: true,
-          description: 'One or more package names to add.',
+          description: 'One or more package names to track.',
         },
       },
       async run({ args, rawArgs }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
         const subtype = resolved.subtype;
-        const names = requireNames(rawArgs, manifest.id, 'add');
+        const names = requireNames(rawArgs, manifest.id, 'track');
         if (!names) return;
         const store = await deps.getStore();
         const key = resolveConfigKey(plugin, subtype);
         const result = store.add(key, names);
-        const save = await trySave(store, 'add');
+        const save = await trySave(store, 'track');
         if (!save) return;
         if (result.added.length > 0) {
-          console.log(log.success(`Added to ${key}: ${result.added.join(', ')}`));
+          console.log(log.success(`Tracked in ${key}: ${result.added.join(', ')}`));
           if (result.skipped.length > 0) {
             console.log(log.info(`Already tracked: ${result.skipped.join(', ')}`));
           }
         } else {
           // Every name was already tracked. Echo them and suggest install
-          // (the action a user typing `add <name>` is most likely after).
+          // (the action a user typing `track <name>` is most likely after).
           console.log(log.info(`Already tracked in ${key}: ${result.skipped.join(', ')}`));
           if (manifest.capabilities.install) {
             console.log(
@@ -523,33 +527,34 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
   }
 
-  if (manifest.capabilities.remove) {
-    subCommands.remove = defineCommand({
+  if (manifest.capabilities.untrack) {
+    // Deprecated `remove` alias: see the argv-rewrite note on `track` above.
+    subCommands.untrack = defineCommand({
       meta: {
-        name: 'remove',
-        description: 'Remove packages from the tracked applist (config-only).',
+        name: 'untrack',
+        description: 'Untrack packages from the applist (config-only).',
       },
       args: {
         ...subtypeArg,
         packages: {
           type: 'positional',
           required: true,
-          description: 'One or more package names to remove.',
+          description: 'One or more package names to untrack.',
         },
       },
       async run({ args, rawArgs }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
         const subtype = resolved.subtype;
-        const names = requireNames(rawArgs, manifest.id, 'remove');
+        const names = requireNames(rawArgs, manifest.id, 'untrack');
         if (!names) return;
         const store = await deps.getStore();
         const key = resolveConfigKey(plugin, subtype);
         const result = store.remove(key, names);
-        const save = await trySave(store, 'remove');
+        const save = await trySave(store, 'untrack');
         if (!save) return;
         if (result.removed.length > 0) {
-          console.log(log.success(`Removed from ${key}: ${result.removed.join(', ')}`));
+          console.log(log.success(`Untracked from ${key}: ${result.removed.join(', ')}`));
           if (result.missing.length > 0) {
             console.log(log.info(`Not present: ${result.missing.join(', ')}`));
           }

@@ -137,8 +137,8 @@ const brew: Plugin = {
       list: true,
       install: true,
       update: true,
-      add: true,
-      remove: true,
+      track: true,
+      untrack: true,
       outdated: true,
     },
     configKeyFor(subtype) {

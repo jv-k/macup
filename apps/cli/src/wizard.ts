@@ -61,7 +61,7 @@ export interface WizardDeps {
    * "Search & add": prompt for a query, search the backend, and return the
    * package names the user chose to track — or null to nav back. Required
    * only when the search-add action is offered, i.e. when the plugin exposes
-   * `search` AND can track additions (add capability + a configKey).
+   * `search` AND can track additions (track capability + a configKey).
    */
   readonly searchAndPick?: (target: Target) => Promise<readonly string[] | null>;
   /** Reads current tracked names for the given target. Required when sync-tracked is offered. */
@@ -144,8 +144,8 @@ export async function pickTarget(deps: WizardDeps): Promise<Target | null> {
 const ACTION_LABELS: Record<WizardActionOption, string> = {
   list: 'List tracked',
   update: 'Update tracked',
-  'sync-tracked': 'Add/Remove',
-  'search-add': 'Search & add',
+  'sync-tracked': 'Track/Untrack',
+  'search-add': 'Search & track',
   'update-selected': 'Update selectively',
   install: 'Install tracked',
 };
@@ -156,9 +156,9 @@ function actionsFor(plugin: Plugin): WizardActionOption[] {
   const opts: WizardActionOption[] = [];
   if (cap.list) opts.push('list');
   if (cap.update) opts.push('update');
-  if (cap.add && cap.remove && hasConfigKey) opts.push('sync-tracked');
+  if (cap.track && cap.untrack && hasConfigKey) opts.push('sync-tracked');
   // Search-add needs somewhere to record the pick and a backend to query.
-  if (cap.add && hasConfigKey && typeof plugin.search === 'function') opts.push('search-add');
+  if (cap.track && hasConfigKey && typeof plugin.search === 'function') opts.push('search-add');
   if (cap.update && cap.outdated) opts.push('update-selected');
   if (cap.install) opts.push('install');
   return opts;

@@ -55,12 +55,12 @@ function printAboutScreen(color: boolean): void {
   lines.push('');
   lines.push(head('How to use the wizard'));
   lines.push(`  ${dim('1.')} Pick a category (Homebrew, Node.js, macOS, …)`);
-  lines.push(`  ${dim('2.')} Pick an action (List, Update, Install, Add/Remove tracked, …)`);
+  lines.push(`  ${dim('2.')} Pick an action (List, Update, Install, Track/Untrack, …)`);
   lines.push(`  ${dim('3.')} Confirm — you'll see the exact command before it runs`);
   lines.push('');
   lines.push(head('Direct invocation'));
   lines.push(`  ${code('macup <plugin> <action>')}    e.g. ${code('macup brew list')}`);
-  lines.push(`  ${code('macup <plugin> add <pkg>')}   ${dim('track a new package')}`);
+  lines.push(`  ${code('macup <plugin> track <pkg>')}   ${dim('track a new package')}`);
   lines.push(`  ${code('macup <plugin> pin <pkg> <ver>')}  ${dim('pin to max version')}`);
   lines.push('');
   lines.push(head('Top-level commands'));

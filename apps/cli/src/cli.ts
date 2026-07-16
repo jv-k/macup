@@ -21,7 +21,12 @@
 
 import type { ArgsDef, CommandDef } from 'citty';
 import { defineCommand, runMain } from 'citty';
-import { extractVerbosityFlags, findUnknownTopLevelFlags, rewriteFlagAliases } from './cli/argv';
+import {
+  extractVerbosityFlags,
+  findUnknownTopLevelFlags,
+  rewriteDeprecatedVerbAliases,
+  rewriteFlagAliases,
+} from './cli/argv';
 import { bootstrap } from './cli/bootstrap';
 import { printVersionSplash, showCustomHelp } from './cli/help';
 import type { ActionCommand } from './cli/types';
@@ -51,6 +56,14 @@ import { runWizard } from './wizard-runner';
 export { detectShellFromEnv } from './commands/shell';
 
 rewriteFlagAliases(process.argv);
+// Deprecated `add`/`remove` verbs → `track`/`untrack` (ADR 0031). Rewritten
+// in argv (not registered as citty subcommands) so the aliases dispatch but
+// stay out of `--help` and completions; the notice goes to stderr.
+const deprecatedVerbNotice = rewriteDeprecatedVerbAliases(
+  process.argv,
+  new Set(BUILTIN_PLUGINS.map((p) => p.manifest.id)),
+);
+if (deprecatedVerbNotice) console.warn(logui.warning(deprecatedVerbNotice));
 const flags = extractVerbosityFlags(process.argv);
 const deps = bootstrap(flags);
 

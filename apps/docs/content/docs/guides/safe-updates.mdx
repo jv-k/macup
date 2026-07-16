@@ -57,8 +57,8 @@ overwriting it. The operations that trigger a backup are `add`, `remove`,
 
 ```bash
 # Each writes applist_<op>_<timestamp>.yaml before saving
-macup brew add cmake ripgrep
-macup brew remove legacy-dep
+macup brew track cmake ripgrep
+macup brew untrack legacy-dep
 macup brew pin node 22
 macup brew skip flaky-tool
 ```

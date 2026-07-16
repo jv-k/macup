@@ -29,8 +29,8 @@ function fakePlugin(
       list: true,
       install: false,
       update: false,
-      add: false,
-      remove: false,
+      track: false,
+      untrack: false,
       outdated: true,
     },
   };

@@ -85,7 +85,7 @@ export interface FormatOptions {
  *
  *   plugins: 6 / 7 available
  *
- *     ✓ brew       Homebrew              list, install, update, add, remove  [formulas|casks]
+ *     ✓ brew       Homebrew              list, install, update, track, untrack  [formulas|casks]
  *     ✗ appstore   App Store (mas)       missing: mas
  *     ✓ all        All (composite)       list, install, update
  */
@@ -117,8 +117,8 @@ export function formatPluginsReport(report: PluginsReport, opts: FormatOptions =
       if (s.capabilities.list) cmds.push('list');
       if (s.capabilities.install) cmds.push('install');
       if (s.capabilities.update) cmds.push('update');
-      if (s.capabilities.add) cmds.push('add');
-      if (s.capabilities.remove) cmds.push('remove');
+      if (s.capabilities.track) cmds.push('track');
+      if (s.capabilities.untrack) cmds.push('untrack');
       trailing = dim(cmds.join(', '));
       if (s.subtypes && s.subtypes.length > 1) {
         trailing += dim(`  [${s.subtypes.join('|')}]`);

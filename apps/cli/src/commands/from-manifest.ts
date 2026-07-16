@@ -40,6 +40,27 @@ async function trySave(store: ConfigStore, operation: string): Promise<SaveResul
   }
 }
 
+/**
+ * The mutate → save → report protocol every config verb (track, untrack, pin,
+ * unpin, skip, unskip) runs: load the store, apply the mutation, save with a
+ * friendly error, then report success and echo the backup path. Callers supply
+ * only the mutation and how to describe its result; the invariant tail lived in
+ * all six verbs before.
+ */
+async function commitMutation<T>(
+  deps: CommandDeps,
+  operation: string,
+  apply: (store: ConfigStore) => T,
+  report: (result: T) => void,
+): Promise<void> {
+  const store = await deps.getStore();
+  const result = apply(store);
+  const save = await trySave(store, operation);
+  if (!save) return;
+  report(result);
+  if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
+}
+
 async function runHealthCheck(
   deps: SpinnerDeps,
   pluginId: string,
@@ -500,29 +521,31 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const subtype = resolved.subtype;
         const names = requireNames(rawArgs, manifest.id, 'track');
         if (!names) return;
-        const store = await deps.getStore();
         const key = resolveConfigKey(plugin, subtype);
-        const result = store.add(key, names);
-        const save = await trySave(store, 'track');
-        if (!save) return;
-        if (result.added.length > 0) {
-          console.log(log.success(`Tracked in ${key}: ${result.added.join(', ')}`));
-          if (result.skipped.length > 0) {
-            console.log(log.info(`Already tracked: ${result.skipped.join(', ')}`));
-          }
-        } else {
-          // Every name was already tracked. Echo them and suggest install
-          // (the action a user typing `track <name>` is most likely after).
-          console.log(log.info(`Already tracked in ${key}: ${result.skipped.join(', ')}`));
-          if (manifest.capabilities.install) {
-            console.log(
-              log.trace(
-                `macup ${manifest.id} install ${subtypeCliFlag(subtype)}${result.skipped.join(' ')}`,
-              ),
-            );
-          }
-        }
-        if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
+        await commitMutation(
+          deps,
+          'track',
+          (store) => store.add(key, names),
+          (result) => {
+            if (result.added.length > 0) {
+              console.log(log.success(`Tracked in ${key}: ${result.added.join(', ')}`));
+              if (result.skipped.length > 0) {
+                console.log(log.info(`Already tracked: ${result.skipped.join(', ')}`));
+              }
+            } else {
+              // Every name was already tracked. Echo them and suggest install
+              // (the action a user typing `track <name>` is most likely after).
+              console.log(log.info(`Already tracked in ${key}: ${result.skipped.join(', ')}`));
+              if (manifest.capabilities.install) {
+                console.log(
+                  log.trace(
+                    `macup ${manifest.id} install ${subtypeCliFlag(subtype)}${result.skipped.join(' ')}`,
+                  ),
+                );
+              }
+            }
+          },
+        );
       },
     });
   }
@@ -548,27 +571,29 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const subtype = resolved.subtype;
         const names = requireNames(rawArgs, manifest.id, 'untrack');
         if (!names) return;
-        const store = await deps.getStore();
         const key = resolveConfigKey(plugin, subtype);
-        const result = store.remove(key, names);
-        const save = await trySave(store, 'untrack');
-        if (!save) return;
-        if (result.removed.length > 0) {
-          console.log(log.success(`Untracked from ${key}: ${result.removed.join(', ')}`));
-          if (result.missing.length > 0) {
-            console.log(log.info(`Not present: ${result.missing.join(', ')}`));
-          }
-        } else {
-          // Nothing matched. Echo the names so the user sees what they
-          // typed and point at `list` to find the tracked equivalents.
-          console.log(log.info(`Not tracked in ${key}: ${result.missing.join(', ')}`));
-          if (manifest.capabilities.list) {
-            console.log(
-              log.trace(`macup ${manifest.id} list ${subtypeCliFlag(subtype)}`.trimEnd()),
-            );
-          }
-        }
-        if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
+        await commitMutation(
+          deps,
+          'untrack',
+          (store) => store.remove(key, names),
+          (result) => {
+            if (result.removed.length > 0) {
+              console.log(log.success(`Untracked from ${key}: ${result.removed.join(', ')}`));
+              if (result.missing.length > 0) {
+                console.log(log.info(`Not present: ${result.missing.join(', ')}`));
+              }
+            } else {
+              // Nothing matched. Echo the names so the user sees what they
+              // typed and point at `list` to find the tracked equivalents.
+              console.log(log.info(`Not tracked in ${key}: ${result.missing.join(', ')}`));
+              if (manifest.capabilities.list) {
+                console.log(
+                  log.trace(`macup ${manifest.id} list ${subtypeCliFlag(subtype)}`.trimEnd()),
+                );
+              }
+            }
+          },
+        );
       },
     });
   }
@@ -592,12 +617,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           return;
         }
         const [name, version] = positionals as [string, string];
-        const store = await deps.getStore();
-        store.pin(manifest.id, name, version);
-        const save = await trySave(store, 'pin');
-        if (!save) return;
-        console.log(log.success(`Pinned ${name} to ${version} (${manifest.id})`));
-        if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
+        await commitMutation(
+          deps,
+          'pin',
+          (store) => store.pin(manifest.id, name, version),
+          () => console.log(log.success(`Pinned ${name} to ${version} (${manifest.id})`)),
+        );
       },
     });
 
@@ -609,12 +634,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
       async run({ rawArgs }) {
         const names = requireNames(rawArgs, manifest.id, 'unpin');
         if (!names) return;
-        const store = await deps.getStore();
-        store.unpin(manifest.id, names[0] as string);
-        const save = await trySave(store, 'unpin');
-        if (!save) return;
-        console.log(log.success(`Unpinned ${names[0]} (${manifest.id})`));
-        if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
+        await commitMutation(
+          deps,
+          'unpin',
+          (store) => store.unpin(manifest.id, names[0] as string),
+          () => console.log(log.success(`Unpinned ${names[0]} (${manifest.id})`)),
+        );
       },
     });
 
@@ -626,12 +651,13 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
       async run({ rawArgs }) {
         const names = requireNames(rawArgs, manifest.id, 'skip');
         if (!names) return;
-        const store = await deps.getStore();
-        store.skip(manifest.id, names);
-        const save = await trySave(store, 'skip');
-        if (!save) return;
-        console.log(log.success(`Skipped from ${manifest.id} updates: ${names.join(', ')}`));
-        if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
+        await commitMutation(
+          deps,
+          'skip',
+          (store) => store.skip(manifest.id, names),
+          () =>
+            console.log(log.success(`Skipped from ${manifest.id} updates: ${names.join(', ')}`)),
+        );
       },
     });
 
@@ -643,12 +669,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
       async run({ rawArgs }) {
         const names = requireNames(rawArgs, manifest.id, 'unskip');
         if (!names) return;
-        const store = await deps.getStore();
-        store.unskip(manifest.id, names);
-        const save = await trySave(store, 'unskip');
-        if (!save) return;
-        console.log(log.success(`Unskipped (${manifest.id}): ${names.join(', ')}`));
-        if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
+        await commitMutation(
+          deps,
+          'unskip',
+          (store) => store.unskip(manifest.id, names),
+          () => console.log(log.success(`Unskipped (${manifest.id}): ${names.join(', ')}`)),
+        );
       },
     });
   }

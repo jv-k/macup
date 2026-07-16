@@ -1,4 +1,5 @@
 import { defaultCheck } from '../src/plugins/defaults';
+import { filterOutdated, mutateRefs, safeParseJson } from '../src/plugins/helpers';
 import type {
   ListOptions,
   MutateOptions,
@@ -23,12 +24,14 @@ type NpmOutdatedResponse = Record<string, NpmOutdatedEntry>;
 
 async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<PackageStatus[]> {
   // npm list may exit non-zero on peer-dep warnings; use run + parse manually.
-  const listResult = await ctx.exec.run('npm', ['list', '-g', '--json']);
+  const listResult = await ctx.exec.run('npm', ['list', '-g', '--json'], { signal: ctx.signal });
   const listParsed = safeParseJson<NpmListResponse>(listResult.stdout);
   const installed = listParsed?.dependencies ?? {};
 
   // npm outdated exits 1 when there ARE outdated packages. Don't treat as error.
-  const outdatedResult = await ctx.exec.run('npm', ['outdated', '-g', '--json']);
+  const outdatedResult = await ctx.exec.run('npm', ['outdated', '-g', '--json'], {
+    signal: ctx.signal,
+  });
   const outdatedParsed = safeParseJson<NpmOutdatedResponse>(outdatedResult.stdout) ?? {};
 
   const result: PackageStatus[] = Object.entries(installed).map(([name, meta]) => {
@@ -45,40 +48,7 @@ async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<P
     return status;
   });
 
-  return onlyOutdated ? result.filter((s) => s.outdated) : result;
-}
-
-function safeParseJson<T>(text: string): T | undefined {
-  const trimmed = text.trim();
-  if (!trimmed) return undefined;
-  try {
-    return JSON.parse(trimmed) as T;
-  } catch {
-    return undefined;
-  }
-}
-
-async function runAll(
-  ctx: PluginContext,
-  refs: readonly PackageRef[],
-  action: 'install' | 'update',
-  opts: MutateOptions,
-): Promise<void> {
-  for (const ref of refs) {
-    if (opts.dryRun) {
-      ctx.log.info(`[dry-run] npm ${action} -g ${ref.name}`);
-      continue;
-    }
-    const r = await ctx.exec.run('npm', [action, '-g', ref.name], {
-      signal: ctx.signal,
-      kind: 'user-action',
-    });
-    if (r.exitCode !== 0) {
-      throw new Error(
-        `npm ${action} -g ${ref.name} exited ${r.exitCode}: ${r.stderr.trim() || r.stdout.trim()}`,
-      );
-    }
-  }
+  return filterOutdated(result, onlyOutdated);
 }
 
 const npm: Plugin = {
@@ -110,7 +80,7 @@ const npm: Plugin = {
     refs: readonly PackageRef[],
     opts: MutateOptions,
   ): Promise<void> {
-    await runAll(ctx, refs, 'install', opts);
+    await mutateRefs(ctx, refs, opts, (ref) => ['npm', ['install', '-g', ref.name]]);
   },
 
   async update(
@@ -118,7 +88,7 @@ const npm: Plugin = {
     refs: readonly PackageRef[],
     opts: MutateOptions,
   ): Promise<void> {
-    await runAll(ctx, refs, 'update', opts);
+    await mutateRefs(ctx, refs, opts, (ref) => ['npm', ['update', '-g', ref.name]]);
   },
 
   async search(ctx: PluginContext, query: string): Promise<SearchResult[]> {

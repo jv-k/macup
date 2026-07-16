@@ -1,4 +1,5 @@
 import { defaultCheck } from '../src/plugins/defaults';
+import { filterOutdated, mutateRefs } from '../src/plugins/helpers';
 import type {
   ListOptions,
   MutateOptions,
@@ -42,12 +43,14 @@ function parseVersionsList(stdout: string): Array<{ name: string; version?: stri
 }
 
 async function fetchFormulas(ctx: PluginContext, onlyOutdated: boolean): Promise<PackageStatus[]> {
-  const installed = parseVersionsList((await ctx.exec.run('brew', ['list', '--versions'])).stdout);
-  const outdatedRaw = await ctx.exec.runJson<OutdatedResponse>('brew', [
-    'outdated',
-    '--json=v2',
-    '--formula',
-  ]);
+  const installed = parseVersionsList(
+    (await ctx.exec.run('brew', ['list', '--versions'], { signal: ctx.signal })).stdout,
+  );
+  const outdatedRaw = await ctx.exec.runJson<OutdatedResponse>(
+    'brew',
+    ['outdated', '--json=v2', '--formula'],
+    { signal: ctx.signal },
+  );
   const outdatedMap = new Map<string, string>();
   for (const o of outdatedRaw.formulae ?? []) outdatedMap.set(o.name, o.current_version);
 
@@ -64,7 +67,7 @@ async function fetchFormulas(ctx: PluginContext, onlyOutdated: boolean): Promise
     }
     return status;
   });
-  return onlyOutdated ? result.filter((s) => s.outdated) : result;
+  return filterOutdated(result, onlyOutdated);
 }
 
 async function fetchCasks(ctx: PluginContext, onlyOutdated: boolean): Promise<PackageStatus[]> {
@@ -73,16 +76,20 @@ async function fetchCasks(ctx: PluginContext, onlyOutdated: boolean): Promise<Pa
   // single broken cask hides every other one. If the versioned form fails,
   // fall back to the names-only `brew list --cask` and report installs
   // without versions — outdated state still comes from the JSON below.
-  const versioned = await ctx.exec.run('brew', ['list', '--cask', '--versions']);
+  const versioned = await ctx.exec.run('brew', ['list', '--cask', '--versions'], {
+    signal: ctx.signal,
+  });
   const installed =
     versioned.exitCode === 0
       ? parseVersionsList(versioned.stdout)
-      : parseVersionsList((await ctx.exec.run('brew', ['list', '--cask'])).stdout);
-  const outdatedRaw = await ctx.exec.runJson<OutdatedResponse>('brew', [
-    'outdated',
-    '--json=v2',
-    '--cask',
-  ]);
+      : parseVersionsList(
+          (await ctx.exec.run('brew', ['list', '--cask'], { signal: ctx.signal })).stdout,
+        );
+  const outdatedRaw = await ctx.exec.runJson<OutdatedResponse>(
+    'brew',
+    ['outdated', '--json=v2', '--cask'],
+    { signal: ctx.signal },
+  );
   const outdatedMap = new Map<string, string>();
   for (const o of outdatedRaw.casks ?? []) {
     if (o.name) outdatedMap.set(o.name, o.current_version);
@@ -101,28 +108,12 @@ async function fetchCasks(ctx: PluginContext, onlyOutdated: boolean): Promise<Pa
     }
     return status;
   });
-  return onlyOutdated ? result.filter((s) => s.outdated) : result;
+  return filterOutdated(result, onlyOutdated);
 }
 
-async function runAll(
-  ctx: PluginContext,
-  refs: readonly PackageRef[],
-  action: 'install' | 'upgrade',
-  opts: MutateOptions,
-): Promise<void> {
-  for (const ref of refs) {
-    if (opts.dryRun) {
-      ctx.log.info(`[dry-run] brew ${action} ${ref.kind === 'cask' ? '--cask ' : ''}${ref.name}`);
-      continue;
-    }
-    const args = ref.kind === 'cask' ? [action, '--cask', ref.name] : [action, ref.name];
-    const r = await ctx.exec.run('brew', args, { signal: ctx.signal, kind: 'user-action' });
-    if (r.exitCode !== 0) {
-      throw new Error(
-        `brew ${action} ${ref.name} exited ${r.exitCode}: ${r.stderr.trim() || r.stdout.trim()}`,
-      );
-    }
-  }
+// brew needs --cask for cask refs; formulas take the bare name.
+function brewArgs(action: string, ref: PackageRef): readonly [string, readonly string[]] {
+  return ['brew', ref.kind === 'cask' ? [action, '--cask', ref.name] : [action, ref.name]];
 }
 
 const brew: Plugin = {
@@ -168,7 +159,7 @@ const brew: Plugin = {
     refs: readonly PackageRef[],
     opts: MutateOptions,
   ): Promise<void> {
-    await runAll(ctx, refs, 'install', opts);
+    await mutateRefs(ctx, refs, opts, (ref) => brewArgs('install', ref));
   },
 
   async update(
@@ -176,7 +167,7 @@ const brew: Plugin = {
     refs: readonly PackageRef[],
     opts: MutateOptions,
   ): Promise<void> {
-    await runAll(ctx, refs, 'upgrade', opts);
+    await mutateRefs(ctx, refs, opts, (ref) => brewArgs('upgrade', ref));
   },
 
   async search(ctx: PluginContext, query: string, opts?: SearchOptions): Promise<SearchResult[]> {

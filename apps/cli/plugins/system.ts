@@ -20,7 +20,7 @@ function parseSoftwareUpdateList(stdout: string): string[] {
 }
 
 async function fetchUpdates(ctx: PluginContext): Promise<PackageStatus[]> {
-  const out = await ctx.exec.run('softwareupdate', ['-l']);
+  const out = await ctx.exec.run('softwareupdate', ['-l'], { signal: ctx.signal });
   const labels = parseSoftwareUpdateList(out.stdout);
   return labels.map((label) => ({
     ref: { kind: 'system', name: label },

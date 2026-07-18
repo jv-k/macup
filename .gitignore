@@ -11,3 +11,6 @@ apps/cli/LICENSE.md
 apps/docs/test-results/
 apps/docs/playwright-report/
 
+
+# Claude Code session worktrees (local scaffolding, never committed)
+.claude/worktrees/

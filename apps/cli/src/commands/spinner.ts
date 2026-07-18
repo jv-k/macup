@@ -24,36 +24,47 @@ export interface SpinnerDeps {
   readonly suppressBar: boolean;
 }
 
+/**
+ * The wrapped unit of work. `update` re-titles the live spinner (progress
+ * counters, current item); it's a no-op when no spinner is showing, so
+ * callers never have to gate on TTY themselves.
+ */
+type SpinnerWork<T> = (update: (message: string) => void) => Promise<T>;
+
+// Both trailing-ellipsis spellings, so the done/failed line reads
+// "Checking plugins done." whether the message ended "..." or "…".
+const TRAILING_ELLIPSIS = /(\.{3}|…)$/;
+
 async function runWithBar<T>(
   bar: StatusBar,
   message: string,
   options: { box?: boolean },
-  fn: () => Promise<T>,
+  fn: SpinnerWork<T>,
 ): Promise<T> {
   if (supportsScrollRegions()) {
     bar.start(message);
     if (options.box) bar.openBox(message);
     try {
-      const result = await fn();
+      const result = await fn((m) => bar.update(m));
       if (options.box) bar.closeBox();
       bar.stop();
-      console.log(log.success(`${message.replace(/\.{3}$/, '')} done.`));
+      console.log(log.success(`${message.replace(TRAILING_ELLIPSIS, '')} done.`));
       return result;
     } catch (err) {
       if (options.box) bar.closeBox();
       bar.stop();
-      console.log(log.error(`${message.replace(/\.{3}$/, '')} failed.`));
+      console.log(log.error(`${message.replace(TRAILING_ELLIPSIS, '')} failed.`));
       throw err;
     }
   }
   const s = spinner();
   s.start(message);
   try {
-    const result = await fn();
-    s.stop(`${message.replace(/\.{3}$/, '')} done.`);
+    const result = await fn((m) => s.message(m));
+    s.stop(`${message.replace(TRAILING_ELLIPSIS, '')} done.`);
     return result;
   } catch (err) {
-    s.stop(`${message.replace(/\.{3}$/, '')} failed.`);
+    s.stop(`${message.replace(TRAILING_ELLIPSIS, '')} failed.`);
     throw err;
   }
 }
@@ -61,17 +72,17 @@ async function runWithBar<T>(
 export async function withSpinner<T>(
   deps: SpinnerDeps,
   message: string,
-  fn: () => Promise<T>,
+  fn: SpinnerWork<T>,
 ): Promise<T> {
-  if (deps.suppressBar || !process.stdout.isTTY) return fn();
+  if (deps.suppressBar || !process.stdout.isTTY) return fn(() => {});
   return runWithBar(deps.bar, message, {}, fn);
 }
 
 export async function withUserActionSpinner<T>(
   deps: SpinnerDeps,
   message: string,
-  fn: () => Promise<T>,
+  fn: SpinnerWork<T>,
 ): Promise<T> {
-  if (deps.suppressBar || !process.stdout.isTTY) return fn();
+  if (deps.suppressBar || !process.stdout.isTTY) return fn(() => {});
   return runWithBar(deps.bar, message, { box: true }, fn);
 }

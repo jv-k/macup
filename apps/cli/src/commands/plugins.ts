@@ -1,6 +1,6 @@
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import type { Plugin, PluginCapabilities } from '../plugins/types';
-import { painter } from '../ui/color';
+import { GLYPHS, paint } from '../ui/log';
 
 export interface PluginStatus {
   id: string;
@@ -85,13 +85,13 @@ export interface FormatOptions {
  *
  *   plugins: 6 / 7 available
  *
- *     ✓ brew       Homebrew              list, install, update, track, untrack  [formulas|casks]
- *     ✗ appstore   App Store (mas)       missing: mas
- *     ✓ all        All (composite)       list, install, update
+ *     ✔ brew       Homebrew              list, install, update, track, untrack  [formulas|casks]
+ *     ✖ appstore   App Store (mas)       missing: mas
+ *     ✔ all        All (composite)       list, install, update
  */
 export function formatPluginsReport(report: PluginsReport, opts: FormatOptions = {}): string {
   const color = opts.color ?? false;
-  const { green, red, dim } = painter(color);
+  const { green, red, dim } = paint(color);
 
   const idPad = Math.max(4, ...report.statuses.map((s) => s.id.length));
   const namePad = Math.max(4, ...report.statuses.map((s) => s.displayName.length));
@@ -103,7 +103,7 @@ export function formatPluginsReport(report: PluginsReport, opts: FormatOptions =
   lines.push('');
 
   for (const s of report.statuses) {
-    const glyph = s.available ? green('✓') : red('✗');
+    const glyph = s.available ? green(GLYPHS.success) : red(GLYPHS.error);
     const id = s.id.padEnd(idPad);
     const name = s.displayName.padEnd(namePad);
 

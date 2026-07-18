@@ -48,12 +48,12 @@ async function runWithBar<T>(
       const result = await fn((m) => bar.update(m));
       if (options.box) bar.closeBox();
       bar.stop();
-      console.log(log.success(`${message.replace(TRAILING_ELLIPSIS, '')} done.`));
+      log.print(log.success(`${message.replace(TRAILING_ELLIPSIS, '')} done.`));
       return result;
     } catch (err) {
       if (options.box) bar.closeBox();
       bar.stop();
-      console.log(log.error(`${message.replace(TRAILING_ELLIPSIS, '')} failed.`));
+      log.print(log.error(`${message.replace(TRAILING_ELLIPSIS, '')} failed.`));
       throw err;
     }
   }

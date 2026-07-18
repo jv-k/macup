@@ -101,14 +101,14 @@ async function promptTrackedSetPicker(
 ): Promise<readonly string[] | null> {
   const plugin = deps.registry.find((p) => p.manifest.id === target.pluginId);
   if (!plugin) {
-    console.error(`error: plugin "${target.pluginId}" is not registered`);
+    logui.printErr(`error: plugin "${target.pluginId}" is not registered`);
     return null;
   }
   const configKey = plugin.manifest.configKeyFor
     ? plugin.manifest.configKeyFor(target.subtype)
     : plugin.manifest.configKeys[0];
   if (!configKey) {
-    console.error(`error: plugin "${target.pluginId}" has no tracked applist key`);
+    logui.printErr(`error: plugin "${target.pluginId}" has no tracked applist key`);
     return null;
   }
   const ctx: PluginContext = {
@@ -126,7 +126,7 @@ async function promptTrackedSetPicker(
       return plugin.list(ctx, { subtype: target.subtype });
     });
   } catch (err) {
-    console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+    logui.printErr(`error: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 
@@ -153,7 +153,7 @@ async function promptTrackedSetPicker(
   const packages = [...union.values()].sort((a, b) => a.name.localeCompare(b.name));
 
   if (packages.length === 0) {
-    console.log(logui.info(`No packages available for ${label}.`));
+    logui.print(logui.info(`No packages available for ${label}.`));
     return null;
   }
 
@@ -199,7 +199,7 @@ async function promptSearchAndPick(
 ): Promise<readonly string[] | null> {
   const plugin = deps.registry.find((p) => p.manifest.id === target.pluginId);
   if (!plugin?.search) {
-    console.error(`error: plugin "${target.pluginId}" does not support search`);
+    logui.printErr(`error: plugin "${target.pluginId}" does not support search`);
     return null;
   }
   const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
@@ -220,12 +220,12 @@ async function promptSearchAndPick(
       return plugin.search?.(ctx, query.trim(), { subtype: target.subtype }) ?? [];
     });
   } catch (err) {
-    console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+    logui.printErr(`error: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 
   if (results.length === 0) {
-    console.log(logui.info(`No ${label} packages matched “${query.trim()}”.`));
+    logui.print(logui.info(`No ${label} packages matched “${query.trim()}”.`));
     return null;
   }
 
@@ -267,18 +267,18 @@ async function applySyncTracked(
   const { target, adds, removes } = result;
   const plugin = deps.registry.find((p) => p.manifest.id === target.pluginId);
   if (!plugin) {
-    console.error(`error: plugin "${target.pluginId}" is not registered`);
+    logui.printErr(`error: plugin "${target.pluginId}" is not registered`);
     return;
   }
   const key = plugin.manifest.configKeyFor
     ? plugin.manifest.configKeyFor(target.subtype)
     : plugin.manifest.configKeys[0];
   if (!key) {
-    console.error(`error: plugin "${target.pluginId}" has no tracked applist key`);
+    logui.printErr(`error: plugin "${target.pluginId}" has no tracked applist key`);
     return;
   }
   if (adds.length === 0 && removes.length === 0) {
-    console.log(`\n${logui.header('TRACKED')} no changes`);
+    logui.print(`\n${logui.header('TRACKED')} no changes`);
     return;
   }
   const store = await deps.getStore();
@@ -291,7 +291,7 @@ async function applySyncTracked(
     // save the on-disk state and the wizard's view of "tracked" will
     // diverge for the rest of this session. Surface the error rather
     // than silently continuing.
-    console.error(
+    logui.printErr(
       `error: failed to save tracked-list changes (${err instanceof Error ? err.message : String(err)})`,
     );
     return;
@@ -299,7 +299,7 @@ async function applySyncTracked(
   const parts: string[] = [];
   for (const a of adds) parts.push(deps.color ? pc.green(`+${a}`) : `+${a}`);
   for (const r of removes) parts.push(deps.color ? pc.red(`-${r}`) : `-${r}`);
-  console.log(`\n${logui.header('TRACKED')} ${parts.join(' ')}`);
+  logui.print(`\n${logui.header('TRACKED')} ${parts.join(' ')}`);
 }
 
 // Sentinel for "a prompt threw" — distinct from `null`, which is the
@@ -310,8 +310,8 @@ export const PICKER_FAILED = Symbol('picker-failed');
 // user lands, then the cause. Never swallow the cause — a bug that unwinds
 // silently is a bug nobody reports.
 function reportPickerFailure(what: string, unwindsTo: string, err: unknown): void {
-  console.error(`\n${logui.error(`The ${what} failed — ${unwindsTo}.`)}`);
-  console.error(logui.traceError(err instanceof Error ? err.message : String(err)));
+  logui.printErr(`\n${logui.error(`The ${what} failed — ${unwindsTo}.`)}`);
+  logui.printErr(logui.traceError(err instanceof Error ? err.message : String(err)));
 }
 
 /**
@@ -375,6 +375,22 @@ export async function runWizard(
     }),
   );
 
+  // Frame mode (ADR 0042): from here to wizard exit, everything printed
+  // through log.print/printErr joins clack's gray gutter, so prompts and
+  // the output between them read as one continuous session transcript.
+  // Direct invocations never set this — their output stays flat.
+  logui.setFrame(true);
+  try {
+    await wizardLoop(deps, pluginSubCommands);
+  } finally {
+    logui.setFrame(false);
+  }
+}
+
+async function wizardLoop(
+  deps: CliDeps,
+  pluginSubCommands: Record<string, CommandDef>,
+): Promise<void> {
   // Two-level loop:
   //   outer: pickTarget → choose category (or Esc to exit)
   //   inner: pickAction → choose action, execute, repeat (Esc → outer)
@@ -425,7 +441,7 @@ export async function runWizard(
             // Sticky inverted-pill header — printed on every prompt
             // iteration so the user always sees which category they're
             // operating on.
-            console.log(`\n${logui.header(pluginCategoryFor(t, deps.registry))}`);
+            logui.print(`\n${logui.header(pluginCategoryFor(t, deps.registry))}`);
             const choice = await select({
               message: 'What do you want to do?',
               options: opts.map((o) => ({ label: o.label, value: o.value })),
@@ -455,7 +471,7 @@ export async function runWizard(
               if (statuses.length === 0) {
                 // Print BEFORE returning so the user sees the message
                 // before pickAction's loop re-renders the action prompt.
-                console.log(logui.info('Already up-to-date.'));
+                logui.print(logui.info('Already up-to-date.'));
                 return [];
               }
               return statuses.map((st) => ({
@@ -464,7 +480,7 @@ export async function runWizard(
                 latestVersion: st.latestVersion,
               }));
             } catch (err) {
-              console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+              logui.printErr(`error: ${err instanceof Error ? err.message : String(err)}`);
               return [];
             }
           },
@@ -525,11 +541,11 @@ export async function runWizard(
         : '';
       const label = `${result.target.pluginId} ${result.command}${subtypeFrag}${pkgFrag}`;
       const styledLabel = deps.color ? pc.bold(label) : label;
-      console.log(`\n${logui.badge('macup', deps.color)} ${styledLabel}`);
+      logui.print(`\n${logui.badge('macup', deps.color)} ${styledLabel}`);
 
       const cmd = pluginSubCommands[result.target.pluginId];
       if (!cmd) {
-        console.error(`error: plugin "${result.target.pluginId}" is not available`);
+        logui.printErr(`error: plugin "${result.target.pluginId}" is not available`);
         continue;
       }
       try {
@@ -546,11 +562,11 @@ export async function runWizard(
         const arrow = deps.color ? pc.dim('↳') : '↳';
         const lines = msg.split('\n');
         const head = lines[0] ?? msg;
-        console.error(
+        logui.printErr(
           `  ${arrow} ${dim(`${result.target.pluginId} ${result.command} failed: ${head}`)}`,
         );
         for (const line of lines.slice(1)) {
-          console.error(`    ${dim(line)}`);
+          logui.printErr(`    ${dim(line)}`);
         }
       }
       // Reset exit code between submenu actions so a previous failure

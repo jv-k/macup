@@ -69,3 +69,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0039](0039-uninstall-is-back-out-plumbing.md) | Uninstall is bundle back-out plumbing, not a user-facing verb | accepted |
 | [0040](0040-operation-scoped-elevation.md) | macup never runs as root, and elevates one declared operation at a time | accepted |
 | [0041](0041-bundle-schema.md) | A bundle shares the applist's package block and derives its target keys | accepted |
+| [0042](0042-one-tui-design-language.md) | One TUI design language, with wizard output joining clack's gutter | accepted |

@@ -55,10 +55,14 @@ export function bootstrap(input: BootstrapInput): CliDeps {
     : undefined;
   const exec = buildExecRunner({ baseExec, debug: input.debug, streamingSink, color });
 
+  // Frame-aware (ADR 0033): plugin warnings emitted mid-wizard must join
+  // the gutter like every other line, so the Logger writes through the
+  // theme's print seams. Outside the wizard framed() is the identity and
+  // these are plain console writes on the same streams as before.
   const log = {
-    info: (m: string) => console.log(m),
-    warn: (m: string) => console.warn(m),
-    error: (m: string) => console.error(m),
+    info: (m: string) => logui.print(m),
+    warn: (m: string) => console.warn(logui.framed(m)),
+    error: (m: string) => logui.printErr(m),
     debug: () => {},
   };
 

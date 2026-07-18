@@ -1,3 +1,4 @@
+import { S_BAR } from '@clack/prompts';
 import pc from 'picocolors';
 import { useColor as useColorFn } from '../runtime';
 import { renderAppleLogo } from './logo';
@@ -24,8 +25,8 @@ export const GLYPHS = {
   bullet: '•',
   arrow: '→',
   question: '?',
-  /** The clack gutter bar — matches @clack/prompts' S_BAR. */
-  bar: '│',
+  /** The clack gutter bar — clack's own constant, so the rail can't drift. */
+  bar: S_BAR,
 } as const;
 
 // Force-enabled palette. `paint()` gates on the resolved boolean instead of
@@ -73,25 +74,25 @@ export function paint(enabled: boolean = useColorFn()): Painter {
 // call site rather than caching at module load.
 const SYM = {
   get success() {
-    return useColorFn() ? pc.green(GLYPHS.success) : GLYPHS.success;
+    return useColorFn() ? forced.green(GLYPHS.success) : GLYPHS.success;
   },
   get warning() {
-    return useColorFn() ? pc.yellow(GLYPHS.warning) : GLYPHS.warning;
+    return useColorFn() ? forced.yellow(GLYPHS.warning) : GLYPHS.warning;
   },
   get error() {
-    return useColorFn() ? pc.red(GLYPHS.error) : GLYPHS.error;
+    return useColorFn() ? forced.red(GLYPHS.error) : GLYPHS.error;
   },
   get info() {
-    return useColorFn() ? pc.cyan(GLYPHS.info) : GLYPHS.info;
+    return useColorFn() ? forced.cyan(GLYPHS.info) : GLYPHS.info;
   },
   get bullet() {
-    return useColorFn() ? pc.magenta(GLYPHS.bullet) : GLYPHS.bullet;
+    return useColorFn() ? forced.magenta(GLYPHS.bullet) : GLYPHS.bullet;
   },
   get arrow() {
-    return useColorFn() ? pc.dim(GLYPHS.arrow) : GLYPHS.arrow;
+    return useColorFn() ? forced.dim(GLYPHS.arrow) : GLYPHS.arrow;
   },
   get question() {
-    return useColorFn() ? pc.yellow(GLYPHS.question) : GLYPHS.question;
+    return useColorFn() ? forced.yellow(GLYPHS.question) : GLYPHS.question;
   },
 };
 
@@ -172,7 +173,7 @@ export function setFrame(on: boolean): void {
  */
 export function framed(text: string): string {
   if (!frameOn) return text;
-  const bar = useColorFn() ? pc.gray(GLYPHS.bar) : GLYPHS.bar;
+  const bar = useColorFn() ? forced.gray(GLYPHS.bar) : GLYPHS.bar;
   return text
     .split('\n')
     .map((line) => (line.length > 0 ? `${bar}  ${line}` : bar))
@@ -202,63 +203,74 @@ export function versionTransition(
   latest: string,
   color: boolean = useColorFn(),
 ): string {
-  const c = paint(color);
-  return `${c.yellow(current)} ${c.dim(GLYPHS.arrow)} ${c.green(latest)}`;
+  // Styled inline (not via paint()) — this runs once per rendered row.
+  if (!color) return `${current} ${GLYPHS.arrow} ${latest}`;
+  return `${forced.yellow(current)} ${forced.dim(GLYPHS.arrow)} ${forced.green(latest)}`;
 }
 
 export function pkgUpToDate(name: string, version: string, pad: number): string {
   const padded = name.padEnd(pad);
-  return `  ${SYM.success} ${useColorFn() ? pc.bold(padded) : padded} ${useColorFn() ? pc.green(version) : version}`;
+  return `  ${SYM.success} ${useColorFn() ? forced.bold(padded) : padded} ${useColorFn() ? forced.green(version) : version}`;
 }
 
-export function pkgOutdated(name: string, current: string, latest: string, pad: number): string {
+/**
+ * `curPad` right-pads the current version so the `→` arrows of a block
+ * line up in a column; callers that render rows standalone leave it 0.
+ */
+export function pkgOutdated(
+  name: string,
+  current: string,
+  latest: string,
+  pad: number,
+  curPad = 0,
+): string {
   const padded = name.padEnd(pad);
-  return `  ${SYM.warning} ${useColorFn() ? pc.bold(padded) : padded} ${versionTransition(current, latest)}`;
+  return `  ${SYM.warning} ${useColorFn() ? forced.bold(padded) : padded} ${versionTransition(current.padEnd(curPad), latest)}`;
 }
 
 export function pkgNotInstalled(name: string, pad: number): string {
   const padded = name.padEnd(pad);
-  return `  ${SYM.error} ${useColorFn() ? pc.italic(pc.dim(padded)) : padded}`;
+  return `  ${SYM.error} ${useColorFn() ? forced.italic(forced.dim(padded)) : padded}`;
 }
 
 // ── Per-package progress counter ────────────────────────────────
 
 export function counter(idx: number, total: number, action: string, name: string): string {
-  const prefix = useColorFn() ? pc.dim(`${idx}/${total}`) : `${idx}/${total}`;
-  const styled = useColorFn() ? pc.green(name) : name;
+  const prefix = useColorFn() ? forced.dim(`${idx}/${total}`) : `${idx}/${total}`;
+  const styled = useColorFn() ? forced.green(name) : name;
   return `  ${prefix} ${action} ${styled}`;
 }
 
 // ── Verbose per-item trace (one dim line after the spinner) ─────
 
 export function trace(detail: string): string {
-  const arrow = useColorFn() ? pc.dim('↳') : '↳';
-  const body = useColorFn() ? pc.dim(detail) : detail;
+  const arrow = useColorFn() ? forced.dim('↳') : '↳';
+  const body = useColorFn() ? forced.dim(detail) : detail;
   return `    ${arrow} ${body}`;
 }
 
 export function traceError(detail: string): string {
-  const arrow = useColorFn() ? pc.red('↳') : '↳';
-  const body = useColorFn() ? pc.dim(detail) : detail;
+  const arrow = useColorFn() ? forced.red('↳') : '↳';
+  const body = useColorFn() ? forced.dim(detail) : detail;
   return `    ${arrow} ${body}`;
 }
 
 // ── Message types ───────────────────────────────────────────────
 
 export function info(msg: string): string {
-  return `  ${SYM.info} ${useColorFn() ? pc.cyan(msg) : msg}`;
+  return `  ${SYM.info} ${useColorFn() ? forced.cyan(msg) : msg}`;
 }
 
 export function success(msg: string): string {
-  return `  ${SYM.success} ${useColorFn() ? pc.green(msg) : msg}`;
+  return `  ${SYM.success} ${useColorFn() ? forced.green(msg) : msg}`;
 }
 
 export function warning(msg: string): string {
-  return `  ${SYM.warning} ${useColorFn() ? pc.yellow(msg) : msg}`;
+  return `  ${SYM.warning} ${useColorFn() ? forced.yellow(msg) : msg}`;
 }
 
 export function error(msg: string): string {
-  return `  ${SYM.error} ${useColorFn() ? pc.red(msg) : msg}`;
+  return `  ${SYM.error} ${useColorFn() ? forced.red(msg) : msg}`;
 }
 
 export { SYM };
@@ -428,8 +440,8 @@ export function splashBlock(opts: {
     : Math.max(24, termWidth - 2);
 
   const versionBadge = badge(`macup v${opts.version}`, color);
-  const homepage = color ? pc.underline(opts.homepage) : opts.homepage;
-  const descLines = wrapText(opts.description, rightWidth).map((l) => (color ? pc.dim(l) : l));
+  const homepage = color ? forced.underline(opts.homepage) : opts.homepage;
+  const descLines = wrapText(opts.description, rightWidth).map((l) => (color ? forced.dim(l) : l));
 
   const header = [
     versionBadge,

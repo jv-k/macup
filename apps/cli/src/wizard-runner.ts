@@ -13,7 +13,6 @@
 
 import { isCancel, note, select, text } from '@clack/prompts';
 import { type CommandDef, runCommand } from 'citty';
-import pc from 'picocolors';
 import type { CliDeps } from './cli/types';
 import { withSpinner } from './commands/spinner';
 import type { Plugin, PluginContext } from './plugins/types';
@@ -44,17 +43,17 @@ function pickerMaxItems(total: number): number {
 // summary. Keyboard hints (PgUp/PgDn, type-to-filter) live in the
 // picker's own dim help footer below the option list.
 function pickerMessage(title: string, summary: string, color: boolean): string {
-  if (!color) return `${title}  ·  ${summary}`;
-  return `${title}  ${pc.dim(`· ${summary}`)}`;
+  return `${title}  ${logui.paint(color).dim(`· ${summary}`)}`;
 }
 
 // "About macup" panel rendered via clack note() when the user picks the
 // Help row at the target prompt. Stays a one-shot — the wizard returns
 // to pickTarget() afterward.
 function printAboutScreen(color: boolean): void {
-  const dim = (t: string) => (color ? pc.dim(t) : t);
-  const code = (t: string) => (color ? pc.bold(t) : t);
-  const head = (t: string) => (color ? pc.bold(pc.cyan(t)) : t);
+  const c = logui.paint(color);
+  const dim = c.dim;
+  const code = c.bold;
+  const head = (t: string) => c.bold(c.cyan(t));
 
   const lines: string[] = [];
   lines.push('macup tracks and updates developer packages on macOS — Homebrew formulas/casks,');
@@ -297,9 +296,10 @@ async function applySyncTracked(
     );
     return;
   }
+  const c = logui.paint(deps.color);
   const parts: string[] = [];
-  for (const a of adds) parts.push(deps.color ? pc.green(`+${a}`) : `+${a}`);
-  for (const r of removes) parts.push(deps.color ? pc.red(`-${r}`) : `-${r}`);
+  for (const a of adds) parts.push(c.green(`+${a}`));
+  for (const r of removes) parts.push(c.red(`-${r}`));
   logui.print(`\n${logui.header('TRACKED')} ${parts.join(' ')}`);
 }
 
@@ -541,7 +541,7 @@ async function wizardLoop(
         ? ` ${result.packages.map((p) => (p.includes(' ') ? `'${p}'` : p)).join(' ')}`
         : '';
       const label = `${result.target.pluginId} ${result.command}${subtypeFrag}${pkgFrag}`;
-      const styledLabel = deps.color ? pc.bold(label) : label;
+      const styledLabel = logui.paint(deps.color).bold(label);
       logui.print(`\n${logui.badge('macup', deps.color)} ${styledLabel}`);
 
       const cmd = pluginSubCommands[result.target.pluginId];
@@ -559,8 +559,9 @@ async function wizardLoop(
         // command-content column; continuation lines (e.g. multi-line
         // stderr from brew's xcrun + Warning + Error blocks) sit one
         // indent deeper.
-        const dim = (s: string) => (deps.color ? pc.dim(s) : s);
-        const arrow = deps.color ? pc.dim('↳') : '↳';
+        const c = logui.paint(deps.color);
+        const dim = c.dim;
+        const arrow = c.dim('↳');
         const lines = msg.split('\n');
         const head = lines[0] ?? msg;
         logui.printErr(

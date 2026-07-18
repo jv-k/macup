@@ -41,6 +41,10 @@ async function runWithBar<T>(
   options: { box?: boolean },
   fn: SpinnerWork<T>,
 ): Promise<T> {
+  // One completion voice: "<title> done." / "<title> failed.". Leading
+  // whitespace is trimmed too — counter messages ("  1/2 Updating gh")
+  // carry indent for the bar, and log.success adds its own.
+  const title = message.replace(TRAILING_ELLIPSIS, '').trim();
   if (supportsScrollRegions()) {
     bar.start(message);
     if (options.box) bar.openBox(message);
@@ -48,12 +52,12 @@ async function runWithBar<T>(
       const result = await fn((m) => bar.update(m));
       if (options.box) bar.closeBox();
       bar.stop();
-      log.print(log.success(`${message.replace(TRAILING_ELLIPSIS, '')} done.`));
+      log.print(log.success(`${title} done.`));
       return result;
     } catch (err) {
       if (options.box) bar.closeBox();
       bar.stop();
-      log.print(log.error(`${message.replace(TRAILING_ELLIPSIS, '')} failed.`));
+      log.print(log.error(`${title} failed.`));
       throw err;
     }
   }
@@ -61,10 +65,10 @@ async function runWithBar<T>(
   s.start(message);
   try {
     const result = await fn((m) => s.message(m));
-    s.stop(`${message.replace(TRAILING_ELLIPSIS, '')} done.`);
+    s.stop(`${title} done.`);
     return result;
   } catch (err) {
-    s.stop(`${message.replace(TRAILING_ELLIPSIS, '')} failed.`);
+    s.stop(`${title} failed.`);
     throw err;
   }
 }

@@ -124,22 +124,20 @@ export interface FormatOptions {
  *
  *     11 packages outdated · run `macup all update` to upgrade
  */
-/**
- * The shared yellow OUTDATED pill (log.outdatedHeader), rendered as
- * `\n  <pill>\n` so it can be printed standalone above a spinner before
- * aggregation begins. `color` is explicit so callers (including tests)
- * don't have to monkey with NO_COLOR or TTY detection.
- */
-export function formatOutdatedHeader(opts: { color?: boolean } = {}): string {
-  return `\n  ${log.outdatedHeader('Outdated', undefined, opts.color ?? false)}\n`;
-}
-
 export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions = {}): string {
   const color = opts.color ?? false;
   const maxNames = opts.maxNames ?? 6;
   const { green, yellow, dim } = log.paint(color);
 
   const idPad = Math.max(4, ...report.plugins.map((p) => p.pluginId.length));
+  // Pad the "(N outdated)" column so the package-name lists start in one
+  // column across rows.
+  const countPad = Math.max(
+    0,
+    ...report.plugins.map((p) =>
+      p.outdated.length > 0 ? `(${p.outdated.length} outdated)`.length : 0,
+    ),
+  );
 
   const lines: string[] = [];
   for (const p of report.plugins) {
@@ -157,9 +155,8 @@ export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions
     const names = p.outdated.slice(0, maxNames).map((s) => s.ref.name);
     const more = p.outdated.length > maxNames ? ` +${p.outdated.length - maxNames}` : '';
     const namesStr = `${names.join(' · ')}${more}`;
-    lines.push(
-      `  ${yellow(log.GLYPHS.warning)} ${id}  ${yellow(`(${p.outdated.length} outdated)`)}  ${dim(namesStr)}`,
-    );
+    const count = `(${p.outdated.length} outdated)`.padEnd(countPad);
+    lines.push(`  ${yellow(log.GLYPHS.warning)} ${id}  ${yellow(count)}  ${dim(namesStr)}`);
   }
 
   lines.push('');
@@ -213,7 +210,7 @@ export function buildOutdatedCommand(deps: CliDeps) {
       // Print the pill upfront so it stays visible above the spinner
       // throughout aggregation (mirrors the wizard's sticky-category
       // pattern).
-      process.stdout.write(formatOutdatedHeader({ color: deps.color }));
+      process.stdout.write(`\n  ${log.outdatedHeader('Outdated', undefined, deps.color)}\n`);
 
       // Same spinner seam as every other wait (list/update/install): the
       // pinned status bar where supported, clack inline otherwise.

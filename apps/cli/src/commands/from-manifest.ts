@@ -495,7 +495,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           }
         }
         await runHealthCheck(deps, manifest.id, makeCtx(deps));
-        log.print(log.success(`Updated ${refs.length} package(s).`));
+        log.print(
+          log.success(`Updated ${refs.length} ${refs.length === 1 ? 'package' : 'packages'}.`),
+        );
       },
     });
   }

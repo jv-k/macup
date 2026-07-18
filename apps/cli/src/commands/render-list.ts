@@ -40,6 +40,8 @@ function renderStatusBlock(
 
   const outdatedBlock: string[] = [];
   if (showOutdated) {
+    // Pad current versions to the block's widest so the → arrows align.
+    const curWidth = Math.max(...outdated.map((s) => (s.installedVersion ?? '?').length), 0);
     outdatedBlock.push(`  ${log.outdatedHeader('Outdated', outdated.length)}`);
     for (const s of outdated) {
       outdatedBlock.push(
@@ -48,6 +50,7 @@ function renderStatusBlock(
           s.installedVersion ?? '?',
           s.latestVersion ?? '?',
           outdatedWidth,
+          curWidth,
         ),
       );
     }

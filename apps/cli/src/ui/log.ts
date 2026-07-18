@@ -24,6 +24,8 @@ export const GLYPHS = {
   bullet: '•',
   arrow: '→',
   question: '?',
+  /** The clack gutter bar — matches @clack/prompts' S_BAR. */
+  bar: '│',
 } as const;
 
 // Force-enabled palette. `paint()` gates on the resolved boolean instead of
@@ -142,6 +144,49 @@ export function dimmedHeader(text: string, count?: number, color: boolean = useC
 export function badge(text: string, color: boolean = useColorFn()): string {
   const label = ` ${text} `;
   return color ? forced.inverse(forced.bold(forced.green(label))) : label.trim();
+}
+
+// ── Wizard frame (ADR 0033) ─────────────────────────────────────
+// Inside a wizard session, static output joins clack's gutter so the
+// whole session reads as one continuous transcript: prompts (which draw
+// their own bars), spinner results, pills, counters, and dispatched
+// command output all hang off the same gray `│` rail. Direct commands
+// (`macup brew update`) never enable the frame and stay flat.
+//
+// The flag is module state, like the color decision: the wizard turns
+// it on for the session's lifetime, and `print`/`printErr` below apply
+// it at the write seam so command handlers don't need to know whether
+// they're running inside the wizard.
+
+let frameOn = false;
+
+/** Enable/disable the wizard gutter for subsequent print()/printErr() calls. */
+export function setFrame(on: boolean): void {
+  frameOn = on;
+}
+
+/**
+ * Prefix every line of `text` with the gray gutter bar when the frame is
+ * on; identity when off. Empty lines become a bare `│`, matching how
+ * clack renders vertical spacing inside a prompt flow.
+ */
+export function framed(text: string): string {
+  if (!frameOn) return text;
+  const bar = useColorFn() ? pc.gray(GLYPHS.bar) : GLYPHS.bar;
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `${bar}  ${line}` : bar))
+    .join('\n');
+}
+
+/** console.log through the frame. The one stdout seam for view output. */
+export function print(text: string): void {
+  console.log(framed(text));
+}
+
+/** console.error through the frame, so wizard-time errors keep the rail. */
+export function printErr(text: string): void {
+  console.error(framed(text));
 }
 
 // ── Package lines ───────────────────────────────────────────────

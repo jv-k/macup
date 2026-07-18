@@ -60,3 +60,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0030](0030-pin-is-a-version-ceiling.md) | A pin is a version ceiling, not an exact lock | accepted |
 | [0031](0031-track-untrack-verbs.md) | Applist verbs are track and untrack, not add and remove | accepted |
 | [0032](0032-execrunner-interface-and-path-lookup.md) | Keep the ExecRunner interface, move the PATH lookup to a leaf | accepted |
+| [0033](0033-one-tui-design-language.md) | One TUI design language, with wizard output joining clack's gutter | accepted |

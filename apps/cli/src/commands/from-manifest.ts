@@ -32,7 +32,7 @@ async function trySave(store: ConfigStore, operation: string): Promise<SaveResul
   try {
     return await store.save(operation);
   } catch (err) {
-    console.error(
+    log.printErr(
       `error: failed to save ${operation} changes (${err instanceof Error ? err.message : String(err)})`,
     );
     process.exitCode = 1;
@@ -58,7 +58,7 @@ async function commitMutation<T>(
   const save = await trySave(store, operation);
   if (!save) return;
   report(result);
-  if (save.backupPath) console.log(log.trace(`Backup: ${save.backupPath}`));
+  if (save.backupPath) log.print(log.trace(`Backup: ${save.backupPath}`));
 }
 
 async function runHealthCheck(
@@ -83,7 +83,7 @@ async function runHealthCheck(
 function requireNames(rawArgs: string[], pluginId: string, command: string): string[] | null {
   const names = rawArgs.filter((a) => !a.startsWith('-'));
   if (names.length === 0) {
-    console.error(`Usage: macup ${pluginId} ${command} <name...>`);
+    log.printErr(`Usage: macup ${pluginId} ${command} <name...>`);
     process.exitCode = 1;
     return null;
   }
@@ -235,7 +235,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
               `No tracked packages. Showing all installed. Track with: macup ${manifest.id} track <name...>`,
             );
             if (showJson) console.error(notice);
-            else console.log(notice);
+            else log.print(notice);
           }
         }
 
@@ -249,7 +249,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
               : statuses;
           console.log(JSON.stringify(payload, null, 2));
         } else {
-          console.log(renderList(manifest.displayName, statuses, Boolean(args['only-outdated'])));
+          log.print(renderList(manifest.displayName, statuses, Boolean(args['only-outdated'])));
         }
       },
     });
@@ -298,8 +298,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         }
         if (refs.length === 0 && manifest.configKeys.length > 0) {
           const emptyKey = resolveConfigKey(plugin, subtype);
-          console.log(log.info(`No packages tracked in ${emptyKey}.`));
-          console.log(log.trace(`macup ${manifest.id} track ${subtypeCliFlag(subtype)}<name>`));
+          log.print(log.info(`No packages tracked in ${emptyKey}.`));
+          log.print(log.trace(`macup ${manifest.id} track ${subtypeCliFlag(subtype)}<name>`));
           return;
         }
         if (plugin.install) {
@@ -313,21 +313,21 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
                 initialValue: true,
               });
               if (isCancel(ans) || !ans) {
-                console.log(log.warning('Install cancelled.'));
+                log.print(log.warning('Install cancelled.'));
                 return;
               }
             }
-            console.log('');
-            console.log(log.header(`Installing ${manifest.displayName}`));
-            console.log('');
+            log.print('');
+            log.print(log.header(`Installing ${manifest.displayName}`));
+            log.print('');
             await withUserActionSpinner(deps, `Installing ${manifest.displayName}…`, async () => {
               await plugin.install?.(makeCtx(deps), [], { dryRun: Boolean(args['dry-run']) });
             });
             return;
           }
-          console.log('');
-          console.log(log.header(`Installing ${manifest.displayName}`, refs.length));
-          console.log('');
+          log.print('');
+          log.print(log.header(`Installing ${manifest.displayName}`, refs.length));
+          log.print('');
           const verbose = Boolean(args.verbose);
           for (let i = 0; i < refs.length; i++) {
             const ref = refs[i] as PackageRef;
@@ -343,11 +343,11 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
                 },
               );
               if (verbose) {
-                console.log(log.trace(`${ref.kind} · ${Date.now() - started}ms`));
+                log.print(log.trace(`${ref.kind} · ${Date.now() - started}ms`));
               }
             } catch (err) {
               if (verbose) {
-                console.log(log.traceError(err instanceof Error ? err.message : String(err)));
+                log.print(log.traceError(err instanceof Error ? err.message : String(err)));
               }
               throw err;
             }
@@ -413,12 +413,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         );
         let filtered = upgradable;
         if (pinnedBlocked.length > 0) {
-          console.log(
+          log.print(
             `Pinned (skipping): ${pinnedBlocked.map((s) => `${s.ref.name}@${s.pinnedAt}`).join(', ')}`,
           );
         }
         if (skipped.length > 0) {
-          console.log(`Skipped: ${skipped.map((s) => s.ref.name).join(', ')}`);
+          log.print(`Skipped: ${skipped.map((s) => s.ref.name).join(', ')}`);
         }
 
         const explicitNames = rawArgs.filter((a) => !a.startsWith('-'));
@@ -444,13 +444,13 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const refs: PackageRef[] = filtered.map((s) => ({ kind, name: s.ref.name }));
         if (refs.length === 0) {
           if (explicitNames.length > 0) {
-            console.log(
+            log.print(
               log.info(
                 `No matching outdated packages for: ${explicitNames.join(', ')}. (Use \`${manifest.id} list --only-outdated\` to see what's outdated.)`,
               ),
             );
           } else {
-            console.log(log.success(`All ${manifest.displayName} packages are up-to-date!`));
+            log.print(log.success(`All ${manifest.displayName} packages are up-to-date!`));
           }
           return;
         }
@@ -462,14 +462,14 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             initialValue: true,
           });
           if (isCancel(ans) || !ans) {
-            console.log(log.warning('Update cancelled.'));
+            log.print(log.warning('Update cancelled.'));
             return;
           }
         }
 
-        console.log('');
-        console.log(log.header(`Updating ${manifest.displayName}`, refs.length));
-        console.log('');
+        log.print('');
+        log.print(log.header(`Updating ${manifest.displayName}`, refs.length));
+        log.print('');
         if (plugin.update) {
           const verbose = Boolean(args.verbose);
           for (let i = 0; i < refs.length; i++) {
@@ -484,18 +484,18 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
                 },
               );
               if (verbose) {
-                console.log(log.trace(`${ref.kind} · ${Date.now() - started}ms`));
+                log.print(log.trace(`${ref.kind} · ${Date.now() - started}ms`));
               }
             } catch (err) {
               if (verbose) {
-                console.log(log.traceError(err instanceof Error ? err.message : String(err)));
+                log.print(log.traceError(err instanceof Error ? err.message : String(err)));
               }
               throw err;
             }
           }
         }
         await runHealthCheck(deps, manifest.id, makeCtx(deps));
-        console.log(log.success(`Updated ${refs.length} package(s).`));
+        log.print(log.success(`Updated ${refs.length} package(s).`));
       },
     });
   }
@@ -528,16 +528,16 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           (store) => store.add(key, names),
           (result) => {
             if (result.added.length > 0) {
-              console.log(log.success(`Tracked in ${key}: ${result.added.join(', ')}`));
+              log.print(log.success(`Tracked in ${key}: ${result.added.join(', ')}`));
               if (result.skipped.length > 0) {
-                console.log(log.info(`Already tracked: ${result.skipped.join(', ')}`));
+                log.print(log.info(`Already tracked: ${result.skipped.join(', ')}`));
               }
             } else {
               // Every name was already tracked. Echo them and suggest install
               // (the action a user typing `track <name>` is most likely after).
-              console.log(log.info(`Already tracked in ${key}: ${result.skipped.join(', ')}`));
+              log.print(log.info(`Already tracked in ${key}: ${result.skipped.join(', ')}`));
               if (manifest.capabilities.install) {
-                console.log(
+                log.print(
                   log.trace(
                     `macup ${manifest.id} install ${subtypeCliFlag(subtype)}${result.skipped.join(' ')}`,
                   ),
@@ -578,16 +578,16 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           (store) => store.remove(key, names),
           (result) => {
             if (result.removed.length > 0) {
-              console.log(log.success(`Untracked from ${key}: ${result.removed.join(', ')}`));
+              log.print(log.success(`Untracked from ${key}: ${result.removed.join(', ')}`));
               if (result.missing.length > 0) {
-                console.log(log.info(`Not present: ${result.missing.join(', ')}`));
+                log.print(log.info(`Not present: ${result.missing.join(', ')}`));
               }
             } else {
               // Nothing matched. Echo the names so the user sees what they
               // typed and point at `list` to find the tracked equivalents.
-              console.log(log.info(`Not tracked in ${key}: ${result.missing.join(', ')}`));
+              log.print(log.info(`Not tracked in ${key}: ${result.missing.join(', ')}`));
               if (manifest.capabilities.list) {
-                console.log(
+                log.print(
                   log.trace(`macup ${manifest.id} list ${subtypeCliFlag(subtype)}`.trimEnd()),
                 );
               }
@@ -611,7 +611,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const positionals = requireNames(rawArgs, manifest.id, 'pin <name> <version>');
         if (!positionals || positionals.length < 2) {
           if (positionals) {
-            console.error(`Usage: macup ${manifest.id} pin <name> <version>`);
+            log.printErr(`Usage: macup ${manifest.id} pin <name> <version>`);
             process.exitCode = 1;
           }
           return;
@@ -621,7 +621,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           deps,
           'pin',
           (store) => store.pin(manifest.id, name, version),
-          () => console.log(log.success(`Pinned ${name} to ${version} (${manifest.id})`)),
+          () => log.print(log.success(`Pinned ${name} to ${version} (${manifest.id})`)),
         );
       },
     });
@@ -638,7 +638,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           deps,
           'unpin',
           (store) => store.unpin(manifest.id, names[0] as string),
-          () => console.log(log.success(`Unpinned ${names[0]} (${manifest.id})`)),
+          () => log.print(log.success(`Unpinned ${names[0]} (${manifest.id})`)),
         );
       },
     });
@@ -655,8 +655,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           deps,
           'skip',
           (store) => store.skip(manifest.id, names),
-          () =>
-            console.log(log.success(`Skipped from ${manifest.id} updates: ${names.join(', ')}`)),
+          () => log.print(log.success(`Skipped from ${manifest.id} updates: ${names.join(', ')}`)),
         );
       },
     });
@@ -673,7 +672,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           deps,
           'unskip',
           (store) => store.unskip(manifest.id, names),
-          () => console.log(log.success(`Unskipped (${manifest.id}): ${names.join(', ')}`)),
+          () => log.print(log.success(`Unskipped (${manifest.id}): ${names.join(', ')}`)),
         );
       },
     });

@@ -8,31 +8,88 @@ import { visualWidth } from './width';
 // with the status bar so there is one ANSI-strip + width definition.
 export { visualWidth };
 
+// ── Theme tokens ────────────────────────────────────────────────
+// This module is the single design language for every view: the glyph
+// vocabulary, the gated palette, the pill headers, and the package-row
+// grammar all live here. Renderers (list, outdated, plugins, picker,
+// wizard, status bar) compose these tokens rather than styling by hand,
+// so the three surfaces stay one app.
+
+/** The one glyph vocabulary. Every view uses these characters. */
+export const GLYPHS = {
+  success: '✔',
+  warning: '!',
+  error: '✖',
+  info: 'ℹ',
+  bullet: '•',
+  arrow: '→',
+  question: '?',
+} as const;
+
+// Force-enabled palette. `paint()` gates on the resolved boolean instead of
+// letting picocolors second-guess with its own TTY detection — that would
+// drop escapes when a pure formatter is asked for color under a pipe or in
+// tests. (Absorbed from the former ui/color.ts, so the palette and the rest
+// of the theme live in one module.)
+const forced = pc.createColors(true);
+
+export interface Painter {
+  green(s: string): string;
+  yellow(s: string): string;
+  red(s: string): string;
+  cyan(s: string): string;
+  dim(s: string): string;
+  bold(s: string): string;
+  inverse(s: string): string;
+}
+
+/**
+ * A colour painter gated on an already-resolved boolean. Pure formatters
+ * that receive the colour decision as data (`CliDeps.color`, resolved once
+ * in bootstrap) paint through this; ambient callers omit the argument and
+ * get the live `useColor()` answer.
+ */
+export function paint(enabled: boolean = useColorFn()): Painter {
+  const gate =
+    (fn: (s: string) => string) =>
+    (s: string): string =>
+      enabled ? fn(s) : s;
+  return {
+    green: gate(forced.green),
+    yellow: gate(forced.yellow),
+    red: gate(forced.red),
+    cyan: gate(forced.cyan),
+    dim: gate(forced.dim),
+    bold: gate(forced.bold),
+    inverse: gate(forced.inverse),
+  };
+}
+
 // Lazy boolean read on every styled-glyph emit, so this module can be
 // imported before stdout/NO_COLOR are settled (e.g. in test harnesses).
 // All references below use the local `useColor` boolean evaluated per
 // call site rather than caching at module load.
 const SYM = {
   get success() {
-    return useColorFn() ? pc.green('✔') : '✔';
+    return useColorFn() ? pc.green(GLYPHS.success) : GLYPHS.success;
   },
   get warning() {
-    return useColorFn() ? pc.yellow('!') : '!';
+    return useColorFn() ? pc.yellow(GLYPHS.warning) : GLYPHS.warning;
   },
   get error() {
-    return useColorFn() ? pc.red('✖') : '✖';
+    return useColorFn() ? pc.red(GLYPHS.error) : GLYPHS.error;
   },
   get info() {
-    return useColorFn() ? pc.cyan('ℹ') : 'ℹ';
+    return useColorFn() ? pc.cyan(GLYPHS.info) : GLYPHS.info;
   },
   get bullet() {
-    return useColorFn() ? pc.magenta('•') : '•';
+    return useColorFn() ? pc.magenta(GLYPHS.bullet) : GLYPHS.bullet;
   },
   get arrow() {
-    return useColorFn() ? pc.dim('→') : '→';
+    return useColorFn() ? pc.dim(GLYPHS.arrow) : GLYPHS.arrow;
   },
   get question() {
-    return useColorFn() ? pc.yellow('?') : '?';
+    return useColorFn() ? pc.yellow(GLYPHS.question) : GLYPHS.question;
   },
 };
 
@@ -44,34 +101,65 @@ const SYM = {
 function invertedLabel(
   text: string,
   count: number | undefined,
-  color: (s: string) => string,
+  tone: (s: string) => string,
+  color: boolean,
 ): string {
   const countStr = count !== undefined ? ` (${count})` : '';
   const label = ` ${text.toUpperCase()}${countStr} `;
-  return useColorFn() ? color(pc.inverse(pc.bold(label))) : label.trim();
+  return color ? tone(forced.inverse(forced.bold(label))) : label.trim();
 }
 
-export function header(text: string, count?: number): string {
-  return invertedLabel(text, count, pc.cyan);
+export function header(text: string, count?: number, color: boolean = useColorFn()): string {
+  return invertedLabel(text, count, forced.cyan, color);
 }
 
-export function subHeader(text: string, count?: number): string {
-  return invertedLabel(text, count, pc.green);
+export function subHeader(text: string, count?: number, color: boolean = useColorFn()): string {
+  return invertedLabel(text, count, forced.green, color);
 }
 
-export function outdatedHeader(text: string, count?: number): string {
-  return invertedLabel(text, count, pc.yellow);
+export function outdatedHeader(
+  text: string,
+  count?: number,
+  color: boolean = useColorFn(),
+): string {
+  return invertedLabel(text, count, forced.yellow, color);
 }
 
-export function errorHeader(text: string, count?: number): string {
-  return invertedLabel(text, count, pc.red);
+export function errorHeader(text: string, count?: number, color: boolean = useColorFn()): string {
+  return invertedLabel(text, count, forced.red, color);
 }
 
-export function dimmedHeader(text: string, count?: number): string {
-  return invertedLabel(text, count, pc.dim);
+export function dimmedHeader(text: string, count?: number, color: boolean = useColorFn()): string {
+  return invertedLabel(text, count, forced.dim, color);
+}
+
+/**
+ * Inverse-video command badge (` macup `), the sibling of the pill headers:
+ * same inverted-bold treatment, green tone. Used by the wizard's dispatch
+ * echo and the --version/--help splash so "this is a macup command" always
+ * looks the same.
+ */
+export function badge(text: string, color: boolean = useColorFn()): string {
+  const label = ` ${text} `;
+  return color ? forced.inverse(forced.bold(forced.green(label))) : label.trim();
 }
 
 // ── Package lines ───────────────────────────────────────────────
+
+/**
+ * The one rendering of "current → latest". Every surface that shows a
+ * version bump (list rows, picker hints, outdated summary) goes through
+ * this so the colours and the arrow always match: yellow current, dim
+ * arrow, green latest.
+ */
+export function versionTransition(
+  current: string,
+  latest: string,
+  color: boolean = useColorFn(),
+): string {
+  const c = paint(color);
+  return `${c.yellow(current)} ${c.dim(GLYPHS.arrow)} ${c.green(latest)}`;
+}
 
 export function pkgUpToDate(name: string, version: string, pad: number): string {
   const padded = name.padEnd(pad);
@@ -80,9 +168,7 @@ export function pkgUpToDate(name: string, version: string, pad: number): string 
 
 export function pkgOutdated(name: string, current: string, latest: string, pad: number): string {
   const padded = name.padEnd(pad);
-  const cur = useColorFn() ? pc.yellow(current) : current;
-  const lat = useColorFn() ? pc.green(latest) : latest;
-  return `  ${SYM.warning} ${useColorFn() ? pc.bold(padded) : padded} ${cur} ${SYM.arrow} ${lat}`;
+  return `  ${SYM.warning} ${useColorFn() ? pc.bold(padded) : padded} ${versionTransition(current, latest)}`;
 }
 
 export function pkgNotInstalled(name: string, pad: number): string {
@@ -308,13 +394,12 @@ export function splashBlock(opts: {
     ? Math.max(rightFloor, termWidth - logoWidth - gap - 2)
     : Math.max(24, termWidth - 2);
 
-  const badgeText = ` macup v${opts.version} `;
-  const badge = color ? pc.inverse(pc.bold(pc.green(badgeText))) : badgeText.trim();
+  const versionBadge = badge(`macup v${opts.version}`, color);
   const homepage = color ? pc.underline(opts.homepage) : opts.homepage;
   const descLines = wrapText(opts.description, rightWidth).map((l) => (color ? pc.dim(l) : l));
 
   const header = [
-    badge,
+    versionBadge,
     '',
     `${SYM.bullet} Author:   ${opts.author}`,
     `${SYM.bullet} Homepage: ${homepage}`,

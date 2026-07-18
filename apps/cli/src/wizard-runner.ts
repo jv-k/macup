@@ -11,10 +11,11 @@
 // promptTrackedSetPicker, applySyncTracked) sit together instead of
 // scattered through a 988-line file.
 
-import { isCancel, note, select, spinner, text } from '@clack/prompts';
+import { isCancel, note, select, text } from '@clack/prompts';
 import { type CommandDef, runCommand } from 'citty';
 import pc from 'picocolors';
 import type { CliDeps } from './cli/types';
+import { withSpinner } from './commands/spinner';
 import type { Plugin, PluginContext } from './plugins/types';
 import * as logui from './ui/log';
 import { pageableAutocompleteMultiselect } from './ui/picker';
@@ -116,18 +117,18 @@ async function promptTrackedSetPicker(
     signal: deps.signal,
   };
   const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
-  const s = spinner();
-  s.start(`Loading ${label} packages…`);
+  // Same spinner seam (and the same message voice) as `macup <plugin> list`,
+  // so a wait looks identical inside and outside the wizard.
   let statuses: Awaited<ReturnType<typeof plugin.list>>;
   try {
-    await plugin.check(ctx);
-    statuses = await plugin.list(ctx, { subtype: target.subtype });
+    statuses = await withSpinner(deps, `Fetching ${label} packages…`, async () => {
+      await plugin.check(ctx);
+      return plugin.list(ctx, { subtype: target.subtype });
+    });
   } catch (err) {
-    s.stop(`Couldn't load ${label} packages.`);
     console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
-  s.stop(`Loaded ${label} packages.`);
 
   const store = await deps.getStore();
   const trackedNames = store.list(configKey);
@@ -211,18 +212,17 @@ async function promptSearchAndPick(
   if (isCancel(query) || typeof query !== 'string') return null;
 
   const ctx: PluginContext = { exec: deps.exec, log: deps.log, signal: deps.signal };
-  const s = spinner();
-  s.start(`Searching ${label} for “${query.trim()}”…`);
   let results: Awaited<ReturnType<NonNullable<typeof plugin.search>>>;
   try {
-    await plugin.check(ctx);
-    results = await plugin.search(ctx, query.trim(), { subtype: target.subtype });
+    results = await withSpinner(deps, `Searching ${label} for “${query.trim()}”…`, async () => {
+      await plugin.check(ctx);
+      // plugin.search is guarded non-null above; re-narrow for the closure.
+      return plugin.search?.(ctx, query.trim(), { subtype: target.subtype }) ?? [];
+    });
   } catch (err) {
-    s.stop(`Search failed for ${label}.`);
     console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
-  s.stop(`Searched ${label}.`);
 
   if (results.length === 0) {
     console.log(logui.info(`No ${label} packages matched “${query.trim()}”.`));
@@ -440,15 +440,18 @@ export async function runWizard(
               log: deps.log,
               signal: deps.signal,
             };
-            const s = spinner();
-            s.start(`Checking ${plugin.manifest.displayName} for outdated packages…`);
             try {
-              await plugin.check(ctx);
-              const statuses = await plugin.list(ctx, {
-                subtype: t.subtype,
-                onlyOutdated: true,
-              });
-              s.stop(`Checked ${plugin.manifest.displayName}.`);
+              // Same message + spinner seam as `macup <plugin> update`'s
+              // pre-check, so the wizard's wait is indistinguishable from
+              // the direct command's.
+              const statuses = await withSpinner(
+                deps,
+                `Checking ${plugin.manifest.displayName} for outdated packages…`,
+                async () => {
+                  await plugin.check(ctx);
+                  return plugin.list(ctx, { subtype: t.subtype, onlyOutdated: true });
+                },
+              );
               if (statuses.length === 0) {
                 // Print BEFORE returning so the user sees the message
                 // before pickAction's loop re-renders the action prompt.
@@ -461,7 +464,6 @@ export async function runWizard(
                 latestVersion: st.latestVersion,
               }));
             } catch (err) {
-              s.stop(`Couldn't check ${plugin.manifest.displayName}.`);
               console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
               return [];
             }
@@ -476,7 +478,9 @@ export async function runWizard(
                   value: r.name,
                 };
                 if (r.currentVersion && r.latestVersion) {
-                  opt.hint = `${r.currentVersion} → ${r.latestVersion}`;
+                  // Same version-transition rendering as the list view's
+                  // outdated rows (yellow current, dim arrow, green latest).
+                  opt.hint = logui.versionTransition(r.currentVersion, r.latestVersion, deps.color);
                 }
                 return opt;
               }),
@@ -520,9 +524,8 @@ export async function runWizard(
         ? ` ${result.packages.map((p) => (p.includes(' ') ? `'${p}'` : p)).join(' ')}`
         : '';
       const label = `${result.target.pluginId} ${result.command}${subtypeFrag}${pkgFrag}`;
-      const badge = deps.color ? pc.inverse(pc.bold(pc.green(' macup '))) : 'macup';
       const styledLabel = deps.color ? pc.bold(label) : label;
-      console.log(`\n${badge} ${styledLabel}`);
+      console.log(`\n${logui.badge('macup', deps.color)} ${styledLabel}`);
 
       const cmd = pluginSubCommands[result.target.pluginId];
       if (!cmd) {

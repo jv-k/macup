@@ -140,7 +140,7 @@ async function runHealthCheck(
   const entry = checks[pluginId];
   if (!entry) return;
   const [cmd, args] = entry;
-  await withSpinner(deps, `Checking ${pluginId} health...`, async () => {
+  await withSpinner(deps, `Checking ${pluginId} health…`, async () => {
     await ctx.exec.run(cmd, args);
   });
 }
@@ -257,7 +257,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         // in CI. suppressBar is the existing seam for exactly this.
         let statuses = await withSpinner(
           showJson ? { ...deps, suppressBar: true } : deps,
-          `Fetching ${manifest.displayName} packages...`,
+          `Fetching ${manifest.displayName} packages…`,
           async () => {
             await plugin.check(listCtx);
             return plugin.list(listCtx, {
@@ -458,7 +458,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
 
         const statuses = await withSpinner(
           deps,
-          `Checking ${manifest.displayName} for outdated packages...`,
+          `Checking ${manifest.displayName} for outdated packages…`,
           async () => {
             await plugin.check(makeCtx(deps));
             return plugin.list(makeCtx(deps), { subtype, onlyOutdated: true });

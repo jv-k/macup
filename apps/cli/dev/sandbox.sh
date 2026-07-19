@@ -11,10 +11,12 @@
 # macup directly — non-interactive mode.
 #
 # Usage:
-#   ./dev/sandbox.sh                       # interactive subshell
-#   ./dev/sandbox.sh --plugins             # forward args to macup
-#   ./dev/sandbox.sh brew add git curl jq  # same
-#   ./dev/sandbox.sh --keep                # don't wipe the sandbox on exit
+#   ./dev/sandbox.sh                         # interactive subshell
+#   ./dev/sandbox.sh plugins                 # forward args to macup
+#   ./dev/sandbox.sh brew track git curl jq  # same
+#   ./dev/sandbox.sh --keep                  # don't wipe the sandbox on exit
+#   ./dev/sandbox.sh --fake-brew             # deterministic stand-in `brew`
+#                                            # + seeded applist, for recordings
 #
 # After a run with --keep you can `cd` into the printed path to poke around.
 
@@ -30,11 +32,13 @@ fi
 
 KEEP=0
 QUIET=0
+FAKE_BREW=0
 PASSTHROUGH=()
 while (( $# )); do
   case "$1" in
     -k|--keep) KEEP=1; shift ;;
     -q|--quiet) QUIET=1; shift ;;
+    --fake-brew) FAKE_BREW=1; shift ;;
     -h|--help-sandbox)
       # Pass -h / --help through to macup; print our own help only for
       # this long alias so we don't shadow macup's usage output.
@@ -80,6 +84,50 @@ exec node "$CLI_ENTRY" "\$@"
 EOF
 chmod +x "$SANDBOX_DIR/bin/macup"
 export PATH="$SANDBOX_DIR/bin:$PATH"
+
+# --fake-brew: shadow the real Homebrew with a deterministic stand-in and
+# seed the applist with tracked formulas, so recordings (dev/wizard.tape)
+# show a stable list/outdated/update flow without touching real packages —
+# and render identically on CI runners. Covers exactly the calls the brew
+# plugin makes (plugins/brew.ts); upgrades sleep so spinners are visible.
+if (( FAKE_BREW )); then
+  cat > "$SANDBOX_DIR/bin/brew" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  --version) echo "Homebrew 4.5.13" ;;
+  list)
+    if [[ "$*" == *"--cask"* ]]; then
+      echo "firefox 140.0.2"
+    else
+      printf '%s\n' "curl 8.14.1" "git 2.49.0" "jq 1.7.1" "wget 1.25.0"
+    fi
+  ;;
+  outdated)
+    if [[ "$*" == *"--cask"* ]]; then
+      echo '{"formulae":[],"casks":[]}'
+    else
+      echo '{"formulae":[{"name":"git","installed_versions":["2.49.0"],"current_version":"2.50.1"},{"name":"jq","installed_versions":["1.7.1"],"current_version":"1.8.1"}],"casks":[]}'
+    fi
+  ;;
+  upgrade)
+    shift
+    [ "$1" = "--cask" ] && shift
+    sleep 1
+    echo "==> Upgrading $1"
+    sleep 0.4
+  ;;
+  *)
+    echo "fake brew: unhandled call: brew $*" >&2
+    exit 1
+  ;;
+esac
+EOF
+  chmod +x "$SANDBOX_DIR/bin/brew"
+  cat > "$MACUP_CONFIG" <<'YAML'
+brew:
+  formulas: [curl, git, jq, wget]
+YAML
+fi
 
 # Give the subshell a clean, minimal prompt so screenshots don't leak the
 # user's custom PS1 (git status, hostname, emoji, etc). zsh reads from

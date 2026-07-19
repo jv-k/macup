@@ -3,7 +3,8 @@
 #
 # Uses dev/sandbox.sh, which seeds a temp MACUP_CONFIG and puts a `macup`
 # shim on PATH pointing at dist/cli.mjs. The sandbox boot is kept off-screen
-# (Hide/Show) so the viewer only sees macup's output.
+# (Hide/Show) so the viewer only sees macup's output. The finished config
+# frame is also saved as a still (img/demo-final.png) via Screenshot.
 
 Output img/demo.gif
 
@@ -34,21 +35,15 @@ Enter
 Sleep 500ms
 Show
 
-Type "macup --help"
-Sleep 300ms
-Enter
-Sleep 2500ms
-
-Type "clear"
-Enter
-Sleep 300ms
-
-Type "macup --plugins"
+# No `macup --help` here: on a TTY this short, help opens the in-process
+# pager (src/ui/pager.ts) and eats the next keystrokes. The help screen has
+# its own panel (help.tape → img/screenshot.png).
+Type "macup plugins"
 Sleep 200ms
 Enter
 Sleep 1500ms
 
-Type "macup brew add git curl jq"
+Type "macup brew track git curl jq"
 Sleep 200ms
 Enter
 Sleep 1200ms
@@ -58,7 +53,12 @@ Sleep 200ms
 Enter
 Sleep 1200ms
 
-Type "macup --config"
+Type "macup config"
 Sleep 200ms
 Enter
+# Hold the finished config frame so it reads comfortably, then save it as a
+# standalone still. The trailing Sleep keeps the clean frame on screen while
+# the Screenshot flushes.
 Sleep 2500ms
+Screenshot img/demo-final.png
+Sleep 1s

@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 #
-# dev/screenshots.sh — regenerate img/screenshot.png and img/demo.gif via vhs.
+# dev/screenshots.sh — regenerate the README/docs CLI visuals via vhs:
+# img/screenshot.png, img/demo.gif (+ demo-final.png), img/wizard.gif
+# (+ wizard-final.png).
 #
 # Usage:
-#   ./dev/screenshots.sh           # both
+#   ./dev/screenshots.sh           # all three
 #   ./dev/screenshots.sh help      # just the --help PNG
-#   ./dev/screenshots.sh demo      # just the sandbox demo GIF
+#   ./dev/screenshots.sh demo      # just the direct-CLI demo GIF
+#   ./dev/screenshots.sh wizard    # just the interactive-wizard GIF
 #
 # Requires: vhs (https://github.com/charmbracelet/vhs).  Install: brew install vhs
 # Also builds dist/cli.mjs first so the sandbox shim has something to invoke.
 
 set -eo pipefail
 
-# apps/cli/dev/screenshots.sh → ../../ is the monorepo root, where img/ lives.
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# apps/cli/dev/screenshots.sh → ../../../ is the monorepo root, where img/ lives.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO_ROOT"
 
 if ! command -v vhs >/dev/null 2>&1; then
@@ -57,18 +60,25 @@ case "$target" in
     vhs apps/cli/dev/help.tape
   ;;
   demo)
-    clean img/demo.gif
+    clean img/demo.gif img/demo-final.png
     vhs apps/cli/dev/demo.tape
     compress_gif img/demo.gif
   ;;
+  wizard)
+    clean img/wizard.gif img/wizard-final.png
+    vhs apps/cli/dev/wizard.tape
+    compress_gif img/wizard.gif
+  ;;
   all)
-    clean img/screenshot.png img/tmp/help.gif img/demo.gif
+    clean img/screenshot.png img/tmp/help.gif img/demo.gif img/demo-final.png img/wizard.gif img/wizard-final.png
     vhs apps/cli/dev/help.tape
     vhs apps/cli/dev/demo.tape
     compress_gif img/demo.gif
+    vhs apps/cli/dev/wizard.tape
+    compress_gif img/wizard.gif
   ;;
   *)
-    echo "screenshots: unknown target '$target' (expected: help | demo | all)" >&2
+    echo "screenshots: unknown target '$target' (expected: help | demo | wizard | all)" >&2
     exit 2
   ;;
 esac

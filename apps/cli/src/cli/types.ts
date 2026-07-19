@@ -20,14 +20,12 @@ import type { PathResolution } from '../config/paths';
 import type { ConfigStore } from '../config/store';
 import type { Plugin } from '../plugins/types';
 import type { ExecRunner, Logger } from '../plugins/types';
-import type { StatusBar } from '../ui/status-bar';
 
 export type ParsedArgs = Record<string, unknown>;
 
 export interface CliDeps {
   readonly exec: ExecRunner;
   readonly log: Logger;
-  readonly bar: StatusBar;
   readonly suppressBar: boolean;
   readonly verbose: boolean;
   readonly debug: boolean;

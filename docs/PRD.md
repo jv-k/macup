@@ -145,7 +145,7 @@ Running `macup` with no args drops into a TTY-aware `@clack/prompts` flow:
 2. **Pick a target**: plugins are grouped by `category` (e.g. "Node.js" for npm + pnpm, "macOS" for appstore/xcode/system) using a single-pick `select` whose category headers and inter-group spacers are disabled rows the cursor skips.
 3. **Pick an action**: capability-gated submenu (only actions the plugin advertises in its `manifest.capabilities` show up). The chosen target is rendered as a sticky pill above the prompt; Track/Untrack diffs are previewed inline before confirmation.
 4. **Pick packages** (for `track` / `untrack` / scoped `update`): paged autocomplete picker with PgUp/PgDn, page indicator, count summary, and a multi-column grid layout.
-5. **Execute**: subprocess output for `user-action` calls (install/upgrade) streams into the pinned `StatusBar`'s box pane (see section 5.6); `query`/`check` chatter (e.g. `--json` data fetches) stays silent unless it emits an `Error:` / `Warning:` line, which surfaces above the bar.
+5. **Execute**: subprocess output for `user-action` calls (install/upgrade) streams line-by-line into the gutter (see section 5.6, ADR 0043), so it reads as one transcript with the prompts above it; `query`/`check` chatter (e.g. `--json` data fetches) stays silent unless it emits an `Error:` / `Warning:` line, which surfaces as a one-line notice.
 
 Falls back to `--help` in non-TTY contexts.
 
@@ -161,9 +161,9 @@ Falls back to `--help` in non-TTY contexts.
 - **Context-aware help**: generated from plugin manifests, no dead arrays
 - **`--json` output**: structured output for `list` and `outdated` commands
 - **`--version`, `--config`, `--plugins`**: standard introspection (`--plugins` shows per-plugin availability with reasons when a binary is missing or the OS is unsupported)
-- **`--verbose` / `-V`**: curated user output. Subprocess chunks from `kind: 'user-action'` calls (install/upgrade flows) stream live to scrollback in addition to the boxed pane; query/check chatter stays hidden. The pinned status bar remains active.
-- **`--debug` / `-D`**: raw full trace via `TracingExecRunner`. Every shell call (kind included) annotated with `$ cmd args`, line-buffered live stdout/stderr, and a `↳ exit=N · Nms` summary on completion. Output goes to stderr so JSON-piped flows stay clean. Suppresses the bar.
-- **Pinned status bar + box pane** (TTY default on emulators that support DECSTBM scroll regions; opt out with `MACUP_STATUS_BAR=off`): the last terminal row is reserved for a pinned status line; install/upgrade flows additionally open an N-row bordered box pane just above it where subprocess output streams live. Adapts to SIGWINCH. Falls back to the clack inline spinner on dumb terms or under `--debug`.
+- **`--verbose` / `-V`**: curated user output; the seam kept for future extra detail beyond the default gutter stream.
+- **`--debug` / `-D`**: raw full trace via `TracingExecRunner`. Every shell call (kind included) annotated with `$ cmd args`, line-buffered live stdout/stderr, and a `↳ exit=N · Nms` summary on completion. Output goes to stderr so JSON-piped flows stay clean. Suppresses the activity feedback.
+- **Gutter-streamed activity feedback** (ADR 0043, supersedes the DECSTBM status bar): install/upgrade flows open with an activity header, stream their subprocess output as gutter lines, and close with one completion line; queries show a clack inline spinner. One append-only path (no reserved rows, no capability probe, no SIGWINCH handling), so it renders identically on every terminal, under a pipe, and in CI. On a non-TTY the stream is suppressed and only the result prints.
 
 ### 5.7 Distribution
 
@@ -331,9 +331,7 @@ apps/cli/src/exec/run.ts           — ExecaExecRunner (default subprocess runne
 apps/cli/src/exec/streaming.ts     — StreamingExecRunner decorator → UiSink (TTY default)
 apps/cli/src/exec/tracing.ts       — TracingExecRunner decorator (--debug)
 apps/cli/src/exec/build.ts         — Factory: picks the right runner from --debug / streaming
-apps/cli/src/ui/status-bar.ts      — Pinned bottom-row bar + DECSTBM box pane
-apps/cli/src/ui/status-bar-sink.ts — UiSink adapter: chunks → bar pane / notices
-apps/cli/src/ui/terminal-caps.ts   — Capability probe for scroll-region support
+apps/cli/src/ui/stream-sink.ts     — UiSink adapter: user-action chunks → gutter lines; query/check → notices (ADR 0043)
 apps/cli/src/runtime.ts            — Runtime predicates (single source of truth for color/TTY)
 
 apps/cli/src/commands/from-manifest.ts — Per-plugin citty subcommand factory
@@ -357,7 +355,7 @@ Bundles are a **layer above plugins**: they resolve per-plugin package lists and
 - **Runtime:** Node ≥ 20 primary; Bun ≥ 1.1 for dev + `--compile`
 - **CLI dispatch:** citty
 - **Interactive prompts:** @clack/prompts
-- **Live UI:** raw ANSI DECSTBM scroll regions for the pinned `StatusBar` + box pane (no third-party screen library) + picocolors
+- **Live UI:** gutter-streamed activity feedback through the `ui/log.ts` print seam (ADR 0043) + @clack/prompts inline spinner + picocolors (no third-party screen library, no reserved-row chrome)
 - **Subprocess:** execa (funnelled through `src/exec/run.ts`, decorated by streaming/tracing runners). `node-pty` is a `devDependency` used only by the pty integration tests in `test/integration/`.
 - **YAML:** `yaml` (CST for comment preservation)
 - **Schema:** zod
@@ -409,7 +407,7 @@ the headline arcs, not the full backlog.
 - 7 built-in plugins (brew, npm, pnpm, appstore, xcode, system, all)
 - Pins + skip lists, backup/restore, XDG paths, wizard, completions
 - `--dry-run` on `install`/`update` (#4); `--json` on `list`/`outdated` (#8)
-- Streaming progress: `StreamingExecRunner` routes user-action subprocess chunks into a pinned `StatusBar` box pane on TTY-capable emulators; `--verbose` tees them to scrollback; `--debug` swaps in `TracingExecRunner` for full annotated traces
+- Streaming progress: `StreamingExecRunner` routes user-action subprocess chunks through the gutter `StreamSink` so they stream as transcript lines on a TTY (ADR 0043); `--debug` swaps in `TracingExecRunner` for full annotated traces
 - CI pipeline active; release pipeline scaffolded but gated off (nothing is published to npm or Homebrew yet)
 
 ### 8.2 Near-term: v1.0.0 release gate, then v1.0.x polish

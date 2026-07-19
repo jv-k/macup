@@ -37,7 +37,7 @@ export function filterOutdated(
 /**
  * Run a mutating command once per package ref. The loop that used to live in
  * every plugin's `runAll` lives here: honour `dryRun`, pass the cancellation
- * signal, tag output as a `user-action` so it lands in the status-bar pane,
+ * signal, tag output as a `user-action` so it streams to the gutter,
  * and throw a uniform error on a non-zero exit. A plugin supplies only the
  * argv for a ref via `command`.
  */

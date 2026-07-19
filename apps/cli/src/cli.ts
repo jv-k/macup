@@ -2,7 +2,7 @@
 //
 // Layout:
 //   1. argv preprocessing (rewrite bare command words; strip global flags)
-//   2. bootstrap (assemble exec runner + status bar + registry + deps)
+//   2. bootstrap (assemble exec runner + stream sink + registry + deps)
 //   3. wire SIGINT → deps.abort()
 //   4. intercept --version / --help (citty's defaults are unstyled).
 //      Done before the registry availability probe so `macup --help`
@@ -13,7 +13,7 @@
 //
 // Real work lives elsewhere:
 //   - src/cli/argv.ts          — argv preprocessing
-//   - src/cli/bootstrap.ts     — runtime wiring (exec/bar/registry/store/log)
+//   - src/cli/bootstrap.ts     — runtime wiring (exec/sink/registry/store/log)
 //   - src/cli/help.ts          — printVersionSplash, showCustomHelp
 //   - src/cli/types.ts         — CliDeps + ActionCommand shapes
 //   - src/commands/<name>.ts   — each ActionCommand + per-plugin subcommand factory
@@ -169,7 +169,6 @@ for (const plugin of deps.registry) {
     exec: deps.exec,
     log: deps.log,
     getStore: deps.getStore,
-    bar: deps.bar,
     suppressBar: deps.suppressBar,
     signal: deps.signal,
     constituents: plugin.manifest.id === 'all' ? constituents : undefined,

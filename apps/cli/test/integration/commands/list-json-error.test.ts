@@ -5,7 +5,6 @@ import { commandsFromManifest } from '../../../src/commands/from-manifest';
 import type { ConfigStore } from '../../../src/config/store';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
 import type { Plugin, PluginContext, PluginManifest } from '../../../src/plugins/types';
-import { StatusBar } from '../../../src/ui/status-bar';
 
 // #51(b): a failing `list` query must be distinguishable from an empty one in
 // --json output. On failure the plugin warns via ctx.log.warn and returns [];
@@ -73,7 +72,6 @@ function build(plugin: Plugin) {
     exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake'] }),
     log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
     getStore: async () => ({}) as unknown as ConfigStore,
-    bar: new StatusBar(),
     suppressBar: true,
     signal: new AbortController().signal,
   });
@@ -96,7 +94,6 @@ function buildInteractive(plugin: Plugin, tracked: readonly string[] = []) {
     exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake'] }),
     log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
     getStore: async () => ({ list: () => [...tracked] }) as unknown as ConfigStore,
-    bar: new StatusBar(),
     // The real default on a terminal. build() sets true and hides the bug.
     suppressBar: false,
     signal: new AbortController().signal,

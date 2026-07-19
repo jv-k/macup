@@ -32,7 +32,7 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0002](0002-no-house-stack.md) | The playbook house stack does not apply to macup | superseded by ADR-0026 |
 | [0003](0003-plugin-as-host-architecture.md) | Plugin-as-host architecture | accepted |
 | [0004](0004-yaml-config-source-of-truth.md) | YAML manifest as the source of truth, validated by Zod | accepted |
-| [0005](0005-raw-decstbm-status-bar.md) | Raw DECSTBM status bar instead of a TUI library | accepted |
+| [0005](0005-raw-decstbm-status-bar.md) | Raw DECSTBM status bar instead of a TUI library | superseded by ADR-0043 |
 | [0006](0006-citty-cli-framework.md) | citty as the CLI framework | accepted |
 | [0007](0007-bun-compile-single-binary.md) | bun build --compile for single-binary distribution | accepted |
 | [0008](0008-darwin-only-scope.md) | darwin-only scope | accepted |
@@ -70,3 +70,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0040](0040-operation-scoped-elevation.md) | macup never runs as root, and elevates one declared operation at a time | accepted |
 | [0041](0041-bundle-schema.md) | A bundle shares the applist's package block and derives its target keys | accepted |
 | [0042](0042-one-tui-design-language.md) | One TUI design language, with wizard output joining clack's gutter | accepted |
+| [0043](0043-fold-live-output-into-the-gutter.md) | Fold live subprocess output into the gutter; retire the DECSTBM status bar | accepted |

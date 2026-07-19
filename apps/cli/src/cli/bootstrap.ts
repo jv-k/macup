@@ -18,9 +18,7 @@ import { ExecaExecRunner } from '../exec/run';
 import { defaultRegistry } from '../plugins/registry';
 import { useColor } from '../runtime';
 import * as logui from '../ui/log';
-import { StatusBar } from '../ui/status-bar';
-import { StatusBarSink } from '../ui/status-bar-sink';
-import { supportsScrollRegions } from '../ui/terminal-caps';
+import { StreamSink } from '../ui/stream-sink';
 import type { CliDeps } from './types';
 
 export interface BootstrapInput {
@@ -36,23 +34,16 @@ export function bootstrap(input: BootstrapInput): CliDeps {
   const home = input.home ?? homedir();
   const color = useColor();
 
-  // Streaming + pinned StatusBar are paired: the runner routes
-  // subprocess chunks through a UiSink, and the bar reserves the last
-  // row via DECSTBM. Default-on wherever a real TTY is detected; users
-  // with a flaky terminal can opt out with MACUP_STATUS_BAR=off.
-  const canPin = process.stdout.isTTY === true && supportsScrollRegions();
-  const useStreaming = !input.debug && canPin;
-  const bar = new StatusBar();
+  // Streaming feedback (ADR 0043): the runner routes subprocess chunks
+  // through a UiSink that prints them as gutter lines. On a real TTY (and
+  // not --debug) the sink is attached; under a pipe/CI it stays null so
+  // piped output isn't polluted, and under --debug the tracer owns output.
+  const useStreaming = !input.debug && process.stdout.isTTY === true;
 
   const registry = defaultRegistry();
   const sigintController = new AbortController();
   const baseExec = new ExecaExecRunner();
-  // user-action chunks always land in the bar's box pane. In --verbose
-  // they additionally tee to stdout so the user gets a grep-able copy
-  // in their scrollback above the box.
-  const streamingSink = useStreaming
-    ? new StatusBarSink(bar, { teeUserActionToStdout: input.verbose })
-    : undefined;
+  const streamingSink = useStreaming ? new StreamSink() : undefined;
   const exec = buildExecRunner({ baseExec, debug: input.debug, streamingSink, color });
 
   // Frame-aware (ADR 0033): plugin warnings emitted mid-wizard must join
@@ -87,7 +78,6 @@ export function bootstrap(input: BootstrapInput): CliDeps {
   return {
     exec,
     log,
-    bar,
     suppressBar: input.debug,
     verbose: input.verbose,
     debug: input.debug,

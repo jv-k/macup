@@ -66,32 +66,6 @@ open a new shell so `PATH` refreshes, then re-run `macup plugins` to confirm
 the plugin flips to `✓`. The [plugins reference](/docs/reference/plugins) lists
 each plugin's required binary.
 
-## Status-bar artifacts
-
-The pinned status bar leaves stray characters, a frozen line, or a broken
-scroll region. The bar relies on DECSTBM scroll regions, which a few terminals
-and CI runners do not implement correctly.
-
-Turn the bar off:
-
-```bash
-# Disable the pinned status bar for one run
-MACUP_STATUS_BAR=off macup all update
-```
-
-`MACUP_STATUS_BAR=off` disables the bar on every terminal. An empty or `dumb`
-`$TERM` disables it too. `MACUP_STATUS_BAR=force` keeps the bar on even under
-an empty or `dumb` `$TERM`.
-
-<Callout type="info">
-
-For unattended runs, prefer `--debug`, which suppresses the bar and routes the
-shell-call trace to stderr so stdout stays clean. See
-[Verbosity](/docs/guides/verbosity) and the
-[environment variables reference](/docs/reference/environment-variables).
-
-</Callout>
-
 ## A pin is not taking effect
 
 You pinned a package, but `update` upgrades it past the cap anyway. macup

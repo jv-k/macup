@@ -5,7 +5,6 @@ import { commandsFromManifest } from '../../../src/commands/from-manifest';
 import type { ConfigStore } from '../../../src/config/store';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
 import type { Plugin, PluginManifest } from '../../../src/plugins/types';
-import { StatusBar } from '../../../src/ui/status-bar';
 
 function fakePlugin(): Plugin {
   return {
@@ -66,7 +65,6 @@ describe('update subcommand — positional names', () => {
       exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake'] }),
       log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
       getStore: async () => emptyStore(),
-      bar: new StatusBar(),
       suppressBar: true,
       signal: new AbortController().signal,
     });
@@ -83,7 +81,6 @@ describe('update subcommand — positional names', () => {
       exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake'] }),
       log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
       getStore: async () => storeTracking(['alpha']),
-      bar: new StatusBar(),
       suppressBar: true,
       signal: new AbortController().signal,
     });
@@ -100,7 +97,6 @@ describe('update subcommand — positional names', () => {
       exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake'] }),
       log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
       getStore: async () => storeTracking(['alpha']), // beta is outdated but NOT tracked
-      bar: new StatusBar(),
       suppressBar: true,
       signal: new AbortController().signal,
     });
@@ -126,7 +122,6 @@ describe('update subcommand — positional names', () => {
       exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake'] }),
       log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
       getStore: async () => storeTracking(['Color Picker']),
-      bar: new StatusBar(),
       suppressBar: true,
       signal: new AbortController().signal,
     });
@@ -143,7 +138,6 @@ describe('update subcommand — positional names', () => {
       exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake'] }),
       log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
       getStore: async () => emptyStore(),
-      bar: new StatusBar(),
       suppressBar: true,
       signal: new AbortController().signal,
     });

@@ -1,6 +1,6 @@
 ---
 title: Use macup in CI
-description: Run macup unattended with JSON output, stable exit codes, and the status bar off.
+description: Run macup unattended with JSON output and stable exit codes.
 ---
 
 # Use macup in CI
@@ -50,21 +50,6 @@ interrupted. Branch on these, not on a subprocess's own status: a failing
 subprocess does not propagate its own exit code. The runner throws a generic
 error and macup exits `1`. The
 [exit codes reference](/docs/reference/exit-codes) is the canonical list.
-
-## Turn off the status bar
-
-The pinned status bar needs a TTY with scroll-region support. Force it off on
-runners that misbehave:
-
-```bash
-# Disable the pinned status bar
-MACUP_STATUS_BAR=off macup all update
-```
-
-[Disable the status bar](/docs/recipes/disable-the-status-bar) covers the
-variable in full, and the
-[environment variables reference](/docs/reference/environment-variables) lists
-every variable macup reads.
 
 ## Non-TTY behavior
 

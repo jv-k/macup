@@ -18,7 +18,6 @@ import brewPlugin from '../../plugins/brew';
 import { commandsFromManifest } from '../../src/commands/from-manifest';
 import type { ConfigStore } from '../../src/config/store';
 import { FixtureExecRunner } from '../../src/exec/fixtures';
-import { StatusBar } from '../../src/ui/status-bar';
 
 const exec = promisify(execCb);
 
@@ -101,7 +100,6 @@ describe('track / untrack subcommand registration (ADR 0031)', () => {
     exec: new FixtureExecRunner({ fixtures: [], onPath: ['brew'] }),
     log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
     getStore: async () => ({ list: () => [] }) as unknown as ConfigStore,
-    bar: new StatusBar(),
     suppressBar: true,
     signal: new AbortController().signal,
   });

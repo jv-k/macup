@@ -84,10 +84,10 @@ describe('docsMetadata', () => {
     }
   });
 
-  it('documents the status-bar and config environment variables', () => {
+  it('documents the color and config environment variables', () => {
     const meta = docsMetadata();
     expect(meta.envVars.map((v) => v.name)).toEqual(
-      expect.arrayContaining(['MACUP_STATUS_BAR', 'NO_COLOR', 'MACUP_CONFIG', 'XDG_CONFIG_HOME']),
+      expect.arrayContaining(['NO_COLOR', 'MACUP_CONFIG', 'XDG_CONFIG_HOME']),
     );
     for (const v of meta.envVars) {
       expect(v.description, v.name).not.toBe('');

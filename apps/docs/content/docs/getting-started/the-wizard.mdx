@@ -136,18 +136,13 @@ filter that set.
 
 ### 4. Execute
 
-For install and update actions, subprocess output streams live into a bordered
-box pinned just above the status bar. Lines matching `Error:`, `fatal:`, or
-`Warning:` surface as one-line notices above the bar. Other query output is
-dropped from the box.
+For install and update actions, subprocess output streams live as lines in the
+same gutter as the prompts, so the whole session reads as one transcript. Lines
+matching `Error:`, `fatal:`, or `Warning:` from internal queries surface as
+one-line notices. Other query output is dropped.
 
-The pinned bar reserves the bottom terminal rows using ANSI scroll regions and
-adapts when you resize the window. It is a no-op on non-TTY. Opt out if your
-terminal misbehaves:
-
-```bash
-# Disable the pinned bar and box pane
-MACUP_STATUS_BAR=off macup
-```
+This is a single append-only path (no reserved rows, no scroll regions), so it
+renders the same on every terminal and is a no-op on non-TTY (only the result
+prints). See [Verbosity](/docs/guides/verbosity) for the three output modes.
 
 See [Verbosity](/docs/guides/verbosity) for the output modes.

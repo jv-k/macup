@@ -252,9 +252,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           },
         };
 
-        // --json owns stdout, and the bar's "... done." lands there on a TTY,
-        // so a piped-to-jq run would break on an interactive terminal but pass
-        // in CI. suppressBar is the existing seam for exactly this.
+        // --json owns stdout, and the spinner's "... done." lands there on a
+        // TTY, so a piped-to-jq run would break on an interactive terminal but
+        // pass in CI. suppressBar is the existing seam for exactly this.
         let statuses = await withSpinner(
           showJson ? { ...deps, suppressBar: true } : deps,
           `Fetching ${manifest.displayName} packages…`,
@@ -748,8 +748,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           deps,
           'skip',
           (store) => store.skip(manifest.id, names, sub.subtype),
-          () =>
-            log.print(log.success(`Skipped from ${manifest.id} updates: ${names.join(', ')}`)),
+          () => log.print(log.success(`Skipped from ${manifest.id} updates: ${names.join(', ')}`)),
         );
       },
     });

@@ -4,16 +4,16 @@
 //   'query'        → ui.onQuery(chunk, source)        // usually a no-op
 //   'check'        → ui.onCheck(chunk, source)        // always a no-op
 //
-// The UI sink decides what to actually do with each kind — render to
-// box, log to scrollback, or drop. Plugins stay oblivious to the UI.
+// The UI sink decides what to actually do with each kind — stream to the
+// gutter, surface a notice, or drop. Plugins stay oblivious to the UI.
 
 import type { ExecResult, ExecRunKind, ExecRunOptions, ExecRunner } from '../plugins/types';
 
 export type StreamSource = 'stdout' | 'stderr';
 
 export interface UiSink {
-  // Output from a `user-action` exec call (install/update). In default
-  // mode this typically goes to the StatusBar's box pane.
+  // Output from a `user-action` exec call (install/update). Streams to the
+  // gutter line-by-line (ADR 0043).
   onUserAction(chunk: string, source: StreamSource): void;
   // Output from a `query` exec call (--json fetches, list, etc.).
   // Default: dropped. --debug routes it to scrollback.
@@ -41,7 +41,7 @@ export class StreamingExecRunner implements ExecRunner {
   }
 
   // Lets the host swap the sink at runtime — used during a single
-  // top-level command's lifetime to bind/unbind a StatusBar instance.
+  // top-level command's lifetime to bind/unbind a stream sink.
   setSink(sink: UiSink): void {
     this.sink = sink;
   }

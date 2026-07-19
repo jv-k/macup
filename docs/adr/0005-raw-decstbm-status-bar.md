@@ -1,6 +1,6 @@
 # ADR 0005: Raw DECSTBM status bar instead of a TUI library
 
-> Status: accepted · Date: 2026-06-17 · Deciders: John Valai
+> Status: superseded by ADR-0043 · Date: 2026-06-17 · Deciders: John Valai
 
 ## Context
 

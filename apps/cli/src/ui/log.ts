@@ -22,6 +22,9 @@ export const GLYPHS = {
   warning: '!',
   error: '✖',
   info: 'ℹ',
+  /** In-progress marker for the activity header (ADR 0043). Static — the
+   *  streamed output lines below it are the motion, not an animated glyph. */
+  activity: '◐',
   bullet: '•',
   arrow: '→',
   question: '?',
@@ -281,6 +284,25 @@ export function warning(msg: string): string {
 
 export function error(msg: string): string {
   return `  ${SYM.error} ${useColorFn() ? forced.red(msg) : msg}`;
+}
+
+// ── Activity + streamed output (ADR 0043) ───────────────────────
+// An install/update opens with an `activity()` header, streams the
+// subprocess's own lines through `streamLine()`, and closes with
+// `success()`/`error()`. All of it goes through print()/printErr(), so it
+// hangs off the gutter inside the wizard and stays flat for direct commands
+// — one path, no reserved rows.
+
+/** Opening line for a streamed operation: `◐ Updating homebrew…`. */
+export function activity(msg: string): string {
+  const glyph = useColorFn() ? forced.cyan(GLYPHS.activity) : GLYPHS.activity;
+  return `  ${glyph} ${msg}`;
+}
+
+/** One line of raw subprocess output, dimmed so it reads as subordinate
+ *  detail beneath the activity header and counters. */
+export function streamLine(line: string): string {
+  return `  ${useColorFn() ? forced.dim(line) : line}`;
 }
 
 export { SYM };

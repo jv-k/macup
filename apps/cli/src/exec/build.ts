@@ -9,8 +9,8 @@ export interface BuildExecRunnerOptions {
   // layering both would render the same output twice.
   readonly debug: boolean;
   // When set (and !debug), wraps the base runner in StreamingExecRunner
-  // so subprocess chunks route through the sink (e.g. the pinned status
-  // bar's box pane). Presence of a sink IS the "streaming on" signal.
+  // so subprocess chunks route through the sink (the gutter StreamSink,
+  // ADR 0043). Presence of a sink IS the "streaming on" signal.
   readonly streamingSink?: UiSink;
   readonly color: boolean;
 }

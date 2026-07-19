@@ -238,8 +238,8 @@ export function buildOutdatedCommand(deps: CliDeps) {
       // pattern).
       process.stdout.write(`\n  ${log.outdatedHeader('Outdated', undefined, deps.color)}\n`);
 
-      // Same spinner seam as every other wait (list/update/install): the
-      // pinned status bar where supported, clack inline otherwise.
+      // Same spinner seam as every other query wait (list/health): clack's
+      // inline spinner, which draws on the gutter (ADR 0043).
       const report = await withSpinner(deps, 'Checking plugins…', async (update) =>
         buildOutdatedReport({
           plugins: deps.registry,

@@ -282,11 +282,13 @@ export function splashBlock(opts: {
   author: string;
   homepage: string;
   color?: boolean;
+  /** Set false to omit the Apple logo and render the header block alone. */
+  logo?: boolean;
   /** Override terminal width (mostly for tests). Defaults to stdout.columns || 80. */
   termWidth?: number;
 }): string {
   const color = opts.color ?? useColorFn();
-  const logo = renderAppleLogo({ color, scale: 0.76 });
+  const logo = opts.logo === false ? '' : renderAppleLogo({ color, scale: 0.76 });
   const logoWidth = Math.max(0, ...logo.split('\n').map(visualWidth));
 
   const gap = 3;
@@ -319,6 +321,8 @@ export function splashBlock(opts: {
     '',
     ...descLines,
   ].join('\n');
+
+  if (opts.logo === false) return header;
 
   if (!sideBySideFits) {
     // Stacked: logo on top, blank line, then the header block. Keeps

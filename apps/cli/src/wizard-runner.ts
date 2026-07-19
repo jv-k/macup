@@ -17,7 +17,6 @@ import pc from 'picocolors';
 import type { CliDeps } from './cli/types';
 import type { Plugin, PluginContext } from './plugins/types';
 import * as logui from './ui/log';
-import { renderAppleLogo } from './ui/logo';
 import { pageableAutocompleteMultiselect } from './ui/picker';
 import { getVersion } from './version';
 import {
@@ -357,12 +356,11 @@ export async function runWizard(
   deps: CliDeps,
   pluginSubCommands: Record<string, CommandDef>,
 ): Promise<void> {
-  // Non-TTY: print logo + a hint and bail. The wizard needs interactive
-  // input; logging an empty splash to a pipe is friendlier than crashing
-  // on the first clack prompt.
+  // Non-TTY: print a hint and bail. The wizard needs interactive input;
+  // logging a hint to a pipe is friendlier than crashing on the first
+  // clack prompt.
   if (!process.stdin.isTTY) {
-    console.log(renderAppleLogo({ color: false }));
-    console.log(`\nmacup — ${deps.registry.length} plugin(s). Run with --help or a command.`);
+    console.log(`macup — ${deps.registry.length} plugin(s). Run with --help or a command.`);
     return;
   }
 
@@ -373,6 +371,7 @@ export async function runWizard(
       author: 'John Valai <git@jvk.to>',
       homepage: 'https://github.com/jv-k/macup',
       color: deps.color,
+      logo: false,
     }),
   );
 

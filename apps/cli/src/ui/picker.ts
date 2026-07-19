@@ -16,6 +16,7 @@ import {
 import pc from 'picocolors';
 import { visualWidth } from './log';
 import { PageableAutocompletePrompt } from './pageable-prompt';
+import { clipAnsiToWidth } from './width';
 
 export interface PickerOption<Value> {
   value: Value;
@@ -49,6 +50,14 @@ function streamOpts(opts: {
     ...(opts.input ? { input: opts.input } : {}),
     ...(opts.output ? { output: opts.output } : {}),
   };
+}
+
+// The width of the stream the prompt actually renders into: the injected
+// output's columns when the caller passed one (tests), else the real
+// terminal's.
+function termColumns(output: Writable | undefined): number {
+  const cols = output && 'columns' in output ? (output as { columns?: number }).columns : undefined;
+  return cols ?? process.stdout.columns ?? 80;
 }
 
 const opt = (
@@ -100,6 +109,8 @@ interface GridLayout {
   rowsPerCol: number;
   /** Total visible items per page = cols × rowsPerCol. */
   pageItems: number;
+  /** Cell budget for one rendered row; rows are clipped to this so they never wrap. */
+  maxRowWidth: number;
 }
 
 /**
@@ -113,19 +124,19 @@ function gridLayout(
   rowsPerCol: number,
   termWidth: number,
 ): GridLayout {
-  if (options.length === 0) {
-    return { cols: 1, rowsPerCol, pageItems: rowsPerCol };
-  }
   // Width budget: terminal minus prompt frame ("│  " ≈ 3) and a small
   // safety margin. Column separator costs 2 spaces between columns.
   const usable = Math.max(20, termWidth - 4);
+  if (options.length === 0) {
+    return { cols: 1, rowsPerCol, pageItems: rowsPerCol, maxRowWidth: usable };
+  }
   const colSep = 2;
   // Use the inactive-state rendered width — every column slot has the
   // same glyph + space + label structure, so this is the worst case
   // for any state the row might land in during navigation.
   const widest = Math.max(...options.map((o) => visualWidth(opt(o, 'inactive'))), 20);
   const cols = Math.max(1, Math.floor((usable + colSep) / (widest + colSep)));
-  return { cols, rowsPerCol, pageItems: cols * rowsPerCol };
+  return { cols, rowsPerCol, pageItems: cols * rowsPerCol, maxRowWidth: usable };
 }
 
 /**
@@ -170,11 +181,22 @@ function renderColumnGrid<Value>(
     for (let c = 0; c < cols; c++) {
       const i = c * rowsPerCol + r;
       if (i >= cells.length) break;
-      const cell = cells[i] ?? '';
-      const padding = (colWidths[c] ?? 0) - visualWidth(cell);
-      parts.push(cell + ' '.repeat(Math.max(0, padding)));
+      parts.push(cells[i] ?? '');
     }
-    if (parts.length > 0) rows.push(parts.join('  '));
+    if (parts.length === 0) continue;
+    // Pad every cell except the row's last — padding only exists to align
+    // the NEXT column, and padding the final cell to the widest label can
+    // push short rows past the terminal edge, wrapping each one into a
+    // phantom blank line. Then clip: one over-long label would otherwise
+    // wrap and throw off clack's line accounting when it redraws.
+    const row = parts
+      .map((cell, c) =>
+        c < parts.length - 1
+          ? cell + ' '.repeat(Math.max(0, (colWidths[c] ?? 0) - visualWidth(cell)))
+          : cell,
+      )
+      .join('  ');
+    rows.push(clipAnsiToWidth(row, layout.maxRowWidth));
   }
   return rows;
 }
@@ -203,7 +225,7 @@ export async function pageableAutocompleteMultiselect<Value>(
   // Mutable holder so the pageStep callback can read the latest layout
   // computed in render(). render() runs before any keypress, so by the
   // time PgUp/PgDn fires, this is populated.
-  let layout: GridLayout = { cols: 1, rowsPerCol, pageItems: rowsPerCol };
+  let layout: GridLayout = { cols: 1, rowsPerCol, pageItems: rowsPerCol, maxRowWidth: 76 };
 
   // clack tracks selection as VALUES, not options (see the submit render
   // and the return below), so rendering a picked row's label means
@@ -234,7 +256,7 @@ export async function pageableAutocompleteMultiselect<Value>(
     render(this: PageableAutocompletePrompt<PickerOption<Value>>) {
       // Recompute layout each render so terminal resizes and filter
       // changes (which alter the visible widest label) take effect.
-      layout = gridLayout(this.filteredOptions, rowsPerCol, process.stdout.columns ?? 80);
+      layout = gridLayout(this.filteredOptions, rowsPerCol, termColumns(opts.output));
 
       const titleLine = `${pc.gray(S_BAR)}\n${getStepSymbol(this.state)}  ${opts.message}${pageIndicator(
         this.cursor,
@@ -277,7 +299,7 @@ export async function pageableAutocompleteMultiselect<Value>(
               .map((line) => `${pc.gray(S_BAR)}  ${line}`)
               .join('\n');
 
-      const footer = renderHelpFooter();
+      const footer = renderHelpFooter(layout.maxRowWidth);
 
       const errorLine = this.error ? `\n${pc.yellow(S_BAR_END)}  ${pc.yellow(this.error)}` : '';
 
@@ -303,7 +325,7 @@ export async function pageableSelect<Value>(
   opts: Omit<PickerOptions<Value>, 'initialValues'> & { initialValue?: Value },
 ): Promise<Value | symbol> {
   const rowsPerCol = opts.maxItems ?? 10;
-  let layout: GridLayout = { cols: 1, rowsPerCol, pageItems: rowsPerCol };
+  let layout: GridLayout = { cols: 1, rowsPerCol, pageItems: rowsPerCol, maxRowWidth: 76 };
 
   const prompt: PageableAutocompletePrompt<PickerOption<Value>> = new PageableAutocompletePrompt<
     PickerOption<Value>
@@ -314,7 +336,7 @@ export async function pageableSelect<Value>(
     pageStep: () => layout.pageItems,
     ...streamOpts(opts),
     render(this: PageableAutocompletePrompt<PickerOption<Value>>) {
-      layout = gridLayout(this.filteredOptions, rowsPerCol, process.stdout.columns ?? 80);
+      layout = gridLayout(this.filteredOptions, rowsPerCol, termColumns(opts.output));
 
       const titleLine = `${pc.gray(S_BAR)}\n${getStepSymbol(this.state)}  ${opts.message}${pageIndicator(
         this.cursor,
@@ -343,7 +365,7 @@ export async function pageableSelect<Value>(
               .map((line) => `${pc.gray(S_BAR)}  ${line}`)
               .join('\n');
 
-      return `${titleLine}${filterLine}\n${body}\n${renderHelpFooter()}`;
+      return `${titleLine}${filterLine}\n${body}\n${renderHelpFooter(layout.maxRowWidth)}`;
     },
   });
 
@@ -380,8 +402,11 @@ function pageIndicator(cursor: number, total: number, maxItems: number | undefin
   return `  ${pc.dim(`(page ${page}/${pages})`)}`;
 }
 
-function renderHelpFooter(): string {
-  return `${pc.gray(S_BAR_END)}  ${pc.dim(
+function renderHelpFooter(maxCells: number): string {
+  // Clipped like the option rows: on a narrow terminal the full hint list
+  // would wrap and throw off clack's line accounting on redraw.
+  const hints = pc.dim(
     '↑/↓ next · PgUp/PgDn page · Home/End jump · space toggle · enter submit · type to filter',
-  )}`;
+  );
+  return `${pc.gray(S_BAR_END)}  ${clipAnsiToWidth(hints, maxCells)}`;
 }

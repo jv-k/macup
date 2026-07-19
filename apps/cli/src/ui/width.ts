@@ -67,3 +67,37 @@ export function clipToWidth(s: string, maxCells: number): string {
   }
   return `${out}…`;
 }
+
+/**
+ * ANSI-aware clipToWidth: escape sequences pass through at zero cost, so a
+ * styled string clips at the same cell as its plain twin. A cut can land
+ * mid-span (after an SGR open, before its reset), so when the input carried
+ * ANSI the ellipsis is followed by a full reset to stop the open style
+ * bleeding into whatever renders next.
+ */
+export function clipAnsiToWidth(s: string, maxCells: number): string {
+  if (visualWidth(s) <= maxCells) return s;
+  const budget = Math.max(0, maxCells - 1); // reserve one cell for the ellipsis
+  let width = 0;
+  let out = '';
+  let sawAnsi = false;
+  let i = 0;
+  while (i < s.length) {
+    if (s[i] === '\x1b' && s[i + 1] === '[') {
+      let j = i + 2;
+      while (j < s.length && !/[A-Za-z]/.test(s[j] as string)) j++;
+      out += s.slice(i, j + 1);
+      sawAnsi = true;
+      i = j + 1;
+      continue;
+    }
+    const cp = s.codePointAt(i) ?? 0;
+    const ch = String.fromCodePoint(cp);
+    const w = isFullwidth(cp) ? 2 : 1;
+    if (width + w > budget) break;
+    out += ch;
+    width += w;
+    i += ch.length;
+  }
+  return `${out}…${sawAnsi ? '\x1b[0m' : ''}`;
+}

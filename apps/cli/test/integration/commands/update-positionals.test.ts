@@ -111,6 +111,32 @@ describe('update subcommand — positional names', () => {
     expect(names).toEqual(['alpha']);
   });
 
+  it('preserves ref.id from list() in the refs passed to update() (#73)', async () => {
+    const plugin = fakePlugin();
+    plugin.list = async () => [
+      {
+        ref: { kind: 'fake', name: 'Color Picker', id: '1545870783' },
+        installed: true,
+        installedVersion: '2.1.4',
+        latestVersion: '2.2.2',
+        outdated: true,
+      },
+    ];
+    const cmd = commandsFromManifest(plugin, {
+      exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake'] }),
+      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      getStore: async () => storeTracking(['Color Picker']),
+      bar: new StatusBar(),
+      suppressBar: true,
+      signal: new AbortController().signal,
+    });
+    const subCmds = cmd.subCommands as SubCommandsDef;
+    await runCommand(subCmds.update as CommandDef, { rawArgs: [] });
+    expect(plugin.update).toHaveBeenCalledTimes(1);
+    const refs = (plugin.update as ReturnType<typeof vi.fn>).mock.calls[0]?.[1];
+    expect(refs).toEqual([{ kind: 'fake', name: 'Color Picker', id: '1545870783' }]);
+  });
+
   it('treats an unknown name as a no-op (filters to []), exits success', async () => {
     const plugin = fakePlugin();
     const cmd = commandsFromManifest(plugin, {

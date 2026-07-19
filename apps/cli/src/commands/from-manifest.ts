@@ -441,7 +441,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           filtered = filtered.filter((s) => tracked.has(s.ref.name));
         }
 
-        const refs: PackageRef[] = filtered.map((s) => ({ kind, name: s.ref.name }));
+        // Carry the whole plugin-reported ref (id included) — appstore
+        // mutations resolve by Adam ID / bundle ID, and a name-only ref
+        // makes `mas upgrade` fail on any app whose name isn't its ID.
+        const refs: PackageRef[] = filtered.map((s) => ({ ...s.ref, kind }));
         if (refs.length === 0) {
           if (explicitNames.length > 0) {
             console.log(

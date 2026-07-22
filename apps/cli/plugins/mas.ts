@@ -80,8 +80,11 @@ export function masEntryFromInfoPlist(plist: InfoPlistMinimal): MasEntry | null 
 // that isn't populated on every system. We enumerate `_MASReceipt`-bearing
 // `.app` bundles directly and read their `Info.plist`. The resulting
 // MasEntry uses the bundle identifier (e.g. `com.okatbest.boop`) in place
-// of the numeric Adam ID, which is fine for display and for `mas <cmd>
-// --bundle <id>` mutations.
+// of the numeric Adam ID. That id is fine for display and identity, but mas
+// upgrade/install take an Adam ID, not a bundle id — so a fallback-discovered
+// app's currency is undeterminable and the appstore plugin reports it as
+// `unknown` (ADR 0036), which keeps it out of the update set entirely rather
+// than shelling `mas upgrade <bundle-id>` into a guaranteed failure.
 const APP_BUNDLE_FROM_RECEIPT_RE = /^(.+\.app)\/Contents\/_MASReceipt\/?$/;
 
 export async function discoverInstalledMasApps(

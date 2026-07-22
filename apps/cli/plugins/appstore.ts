@@ -34,15 +34,25 @@ export const APP_STORE_SEARCH_DIRS: readonly string[] = [
 
 async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<PackageStatus[]> {
   const listOut = await runMas(ctx, ['list']);
-  let installed = parseMasList(listOut.stdout).filter((e) => !XCODE_IDS.has(e.id));
+  const listed = parseMasList(listOut.stdout).filter((e) => !XCODE_IDS.has(e.id));
 
-  // Fallback: mas v6 returns empty stdout when apps aren't Spotlight-
-  // indexed (`kMDItemAppStoreAdamID` missing). Walk the filesystem to
-  // recover the list — entries use bundle identifiers as `id`.
-  if (installed.length === 0) {
-    installed = (await discoverInstalledMasApps(ctx, APP_STORE_SEARCH_DIRS)).filter(
+  // Fallback: mas v6 returns empty stdout when apps aren't Spotlight-indexed
+  // (`kMDItemAppStoreAdamID` missing). We recover the list off the filesystem,
+  // but those entries carry bundle identifiers, and `mas outdated` is keyed by
+  // Adam id — so currency is undeterminable. Report 'unknown' rather than a
+  // false 'current' (ADR 0036). 'unknown' is not 'outdated', so an onlyOutdated
+  // query returns nothing, and there is no point querying `mas outdated`.
+  if (listed.length === 0) {
+    if (onlyOutdated) return [];
+    const fsApps = (await discoverInstalledMasApps(ctx, APP_STORE_SEARCH_DIRS)).filter(
       (e) => !XCODE_IDS.has(e.id),
     );
+    return fsApps.map((e) => ({
+      ref: { kind: 'appstore', name: e.name, id: e.id },
+      installed: true,
+      installedVersion: e.version,
+      updateStatus: 'unknown' as const,
+    }));
   }
 
   const outdatedOut = await runMas(ctx, ['outdated']);
@@ -51,7 +61,7 @@ async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<P
     if (!XCODE_IDS.has(o.id)) outdatedMap.set(o.id, o.latest);
   }
 
-  const result: PackageStatus[] = installed.map((e) => {
+  const result: PackageStatus[] = listed.map((e) => {
     const latest = outdatedMap.get(e.id);
     const status: PackageStatus = {
       ref: { kind: 'appstore', name: e.name, id: e.id },

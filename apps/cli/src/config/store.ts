@@ -374,7 +374,8 @@ export class ConfigStore {
     const existing = skipMap.get(pluginId);
     if (subtype === undefined) {
       if (existing instanceof YAMLMap) {
-        throw new Error(
+        throw new ErrInvalidConfig(
+          this.paths.applistPath,
           `${pluginId} has per-subtype skips; skip a specific subtype (e.g. --cask) or clear them first`,
         );
       }
@@ -384,7 +385,8 @@ export class ConfigStore {
       return seq;
     }
     if (existing instanceof YAMLSeq) {
-      throw new Error(
+      throw new ErrInvalidConfig(
+        this.paths.applistPath,
         `${pluginId} has a flat skip list; clear it before adding a per-subtype skip`,
       );
     }

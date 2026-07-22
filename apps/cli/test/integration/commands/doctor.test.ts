@@ -159,16 +159,18 @@ describe('doctor — orphaned skip/pins keys', () => {
   ];
   async function runIntegrity(applistYaml: string) {
     const dir = await mkdtemp(join(tmpdir(), 'macup-doctor-'));
-    const applistPath = join(dir, 'applist.yaml');
-    await writeFile(applistPath, applistYaml, 'utf8');
-    const section = await checkDataIntegrity(
-      makeDeps({
-        plugins: knownPlugins(),
-        paths: { applistPath, configDir: dir, backupDir: join(dir, 'b'), source: 'home-macup' },
-      }),
-    );
-    await rm(dir, { recursive: true, force: true });
-    return section;
+    try {
+      const applistPath = join(dir, 'applist.yaml');
+      await writeFile(applistPath, applistYaml, 'utf8');
+      return await checkDataIntegrity(
+        makeDeps({
+          plugins: knownPlugins(),
+          paths: { applistPath, configDir: dir, backupDir: join(dir, 'b'), source: 'home-macup' },
+        }),
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   }
 
   it('warns (never errors) on an unknown key, a bad skip.all id, and pins.all — not on real ids', async () => {

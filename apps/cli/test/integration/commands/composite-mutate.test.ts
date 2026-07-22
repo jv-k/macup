@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fanOutComposite } from '../../../src/commands/composite-mutate';
 import { ConfigStore } from '../../../src/config/store';
+import { ErrPluginUnavailable } from '../../../src/errors';
 import type {
   ListOptions,
   PackageRef,
@@ -137,5 +138,43 @@ describe('fanOutComposite — update', () => {
     expect(updated.brew).toEqual(['git']);
     expect(updated.npm).toBeUndefined();
     expect(outcomes.find((o) => o.pluginId === 'npm')?.status).toBe('error');
+  });
+
+  it('marks an unavailable backend distinctly from a real error', async () => {
+    const store = await storeWith('');
+    const mas: Plugin = {
+      ...fakePlugin('mas', [], {}),
+      check: async () => {
+        throw new ErrPluginUnavailable('mas', 'not signed in');
+      },
+    };
+    const outcomes = await fanOutComposite('update', [mas], store, makeCtx, {});
+    expect(outcomes.find((o) => o.pluginId === 'mas')?.status).toBe('unavailable');
+  });
+});
+
+describe('fanOutComposite — install', () => {
+  it('excludes a backend from install via skip.all', async () => {
+    const store = await storeWith('skip:\n  all:\n    - npm\n');
+    const installed: Record<string, string[]> = {};
+    // Not-installed rows so install has something to act on.
+    const notInstalled = (id: string, name: string): Plugin => ({
+      ...fakePlugin(id, [], installed),
+      list: async () => [{ ref: { kind: id, name }, installed: false, updateStatus: 'current' }],
+      install: async (_ctx, refs) => {
+        installed[id] = refs.map((r) => r.name);
+      },
+    });
+
+    await fanOutComposite(
+      'install',
+      [notInstalled('npm', 'left-pad'), notInstalled('brew', 'jq')],
+      store,
+      makeCtx,
+      {},
+    );
+
+    expect(installed.npm).toBeUndefined(); // excluded via skip.all
+    expect(installed.brew).toEqual(['jq']);
   });
 });

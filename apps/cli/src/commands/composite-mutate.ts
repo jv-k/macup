@@ -111,6 +111,13 @@ export async function fanOutComposite(
   return applyComposite(mode, plans, makeCtx, opts);
 }
 
+// Map a configKey to the PackageRef.kind its backend expects (brew.formulas →
+// formula, brew.casks → cask, else the key's last segment).
+function kindForConfigKey(key: string): string {
+  const seg = key.includes('.') ? key.slice(key.indexOf('.') + 1) : key;
+  return seg === 'formulas' ? 'formula' : seg === 'casks' ? 'cask' : seg;
+}
+
 async function selectRefs(
   mode: CompositeMode,
   plugin: Plugin,
@@ -129,8 +136,14 @@ async function selectRefs(
     );
     return [...upgradable, ...pinUnenforceable].map((s) => s.ref);
   }
-  // install: each constituent's not-installed set (matches the individual
-  // install command, which likewise does not apply per-package skip/pin).
-  const listed = await plugin.list(ctx, {});
-  return listed.filter((s) => !s.installed).map((s) => s.ref);
+  // install: each constituent's tracked applist set (matches the individual
+  // install command; the backend skips already-installed packages). Not
+  // list-based — plugin.list() enumerates only what is installed, so filtering
+  // it for not-installed is empty and `all install` would silently no-op.
+  const refs: PackageRef[] = [];
+  for (const key of plugin.manifest.configKeys) {
+    const kind = kindForConfigKey(key);
+    for (const name of store.list(key)) refs.push({ kind, name });
+  }
+  return refs;
 }

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fanOutComposite } from '../../../src/commands/composite-mutate';
+import type { ApplistKey } from '../../../src/config/schema';
 import { ConfigStore } from '../../../src/config/store';
 import { ErrPluginUnavailable } from '../../../src/errors';
 import type {
@@ -154,13 +155,31 @@ describe('fanOutComposite — update', () => {
 });
 
 describe('fanOutComposite — install', () => {
-  it('excludes a backend from install via skip.all', async () => {
-    const store = await storeWith('skip:\n  all:\n    - npm\n');
+  it('installs each constituent tracked set, excluding backends in skip.all', async () => {
+    // Install acts on the tracked applist (not plugin.list, which only
+    // enumerates installed packages); skip.all still drops a whole backend.
+    const store = await storeWith(
+      'brew:\n  formulas:\n    - jq\nnpm:\n  - left-pad\nskip:\n  all:\n    - npm\n',
+    );
     const installed: Record<string, string[]> = {};
-    // Not-installed rows so install has something to act on.
-    const notInstalled = (id: string, name: string): Plugin => ({
-      ...fakePlugin(id, [], installed),
-      list: async () => [{ ref: { kind: id, name }, installed: false, updateStatus: 'current' }],
+    const installFake = (id: string, configKeys: readonly ApplistKey[]): Plugin => ({
+      manifest: {
+        id,
+        displayName: id,
+        supportedOS: ['darwin'],
+        requires: [],
+        configKeys,
+        capabilities: {
+          list: true,
+          install: true,
+          update: true,
+          track: true,
+          untrack: true,
+          outdated: true,
+        },
+      },
+      check: async () => {},
+      list: async () => [],
       install: async (_ctx, refs) => {
         installed[id] = refs.map((r) => r.name);
       },
@@ -168,13 +187,13 @@ describe('fanOutComposite — install', () => {
 
     await fanOutComposite(
       'install',
-      [notInstalled('npm', 'left-pad'), notInstalled('brew', 'jq')],
+      [installFake('brew', ['brew.formulas']), installFake('npm', ['npm'])],
       store,
       makeCtx,
       {},
     );
 
-    expect(installed.npm).toBeUndefined(); // excluded via skip.all
     expect(installed.brew).toEqual(['jq']);
+    expect(installed.npm).toBeUndefined(); // excluded via skip.all
   });
 });

@@ -38,10 +38,14 @@ export function formatCheckSummary(report: OutdatedReport): string {
   const outdated = report.plugins
     .filter((p) => p.outdated.length > 0)
     .map((p) => `${p.outdated.length} ${p.pluginId}`);
+  const uncheckable = report.plugins
+    .filter((p) => p.uncheckable.length > 0)
+    .map((p) => `${p.uncheckable.length} ${p.pluginId}`);
   const failed = report.plugins.filter((p) => p.checkFailed).map((p) => p.pluginId);
 
   const segments: string[] = [];
   if (outdated.length > 0) segments.push(`${outdated.join(', ')} outdated`);
+  if (uncheckable.length > 0) segments.push(`${uncheckable.join(', ')} uncheckable`);
   if (failed.length > 0) segments.push(`${failed.join(', ')} check failed`);
   return segments.length > 0 ? segments.join('; ') : 'everything up to date';
 }
@@ -63,7 +67,8 @@ export function buildCheckCommand(deps: CliDeps) {
           signal: deps.signal,
         }),
       });
-      if (report.totalOutdated > 0 || hasCheckFailure(report)) process.exitCode = 1;
+      if (report.totalOutdated > 0 || report.totalUncheckable > 0 || hasCheckFailure(report))
+        process.exitCode = 1;
       if (!args.quiet) console.log(formatCheckSummary(report));
     },
   });

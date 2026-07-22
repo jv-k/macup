@@ -90,6 +90,15 @@ export function pkgNotInstalled(name: string, pad: number): string {
   return `  ${SYM.error} ${useColorFn() ? pc.italic(pc.dim(padded)) : padded}`;
 }
 
+// Installed, but currency couldn't be determined (updateStatus 'unknown').
+// A dimmed `?` marks it as "not verified", distinct from up-to-date (ADR 0036).
+export function pkgUncheckable(name: string, version: string, pad: number): string {
+  const padded = name.padEnd(pad);
+  const nm = useColorFn() ? pc.dim(padded) : padded;
+  const ver = useColorFn() ? pc.dim(version) : version;
+  return version ? `  ? ${nm} ${ver}` : `  ? ${nm}`;
+}
+
 // ── Per-package progress counter ────────────────────────────────
 
 export function counter(idx: number, total: number, action: string, name: string): string {

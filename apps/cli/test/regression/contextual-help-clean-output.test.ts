@@ -29,16 +29,19 @@ describe('regression: contextual help contains no stray artefacts', () => {
     }
   });
 
-  it('every plugin with capabilities.install provides the method', () => {
+  it('every non-composite plugin with capabilities.install provides the method', () => {
     for (const plugin of BUILTIN_PLUGINS) {
+      // The composite `all` declares install/update but the host provides them (ADR 0033).
+      if (plugin.manifest.id === 'all') continue;
       if (plugin.manifest.capabilities.install) {
         expect(typeof plugin.install).toBe('function');
       }
     }
   });
 
-  it('every plugin with capabilities.update provides the method', () => {
+  it('every non-composite plugin with capabilities.update provides the method', () => {
     for (const plugin of BUILTIN_PLUGINS) {
+      if (plugin.manifest.id === 'all') continue;
       if (plugin.manifest.capabilities.update) {
         expect(typeof plugin.update).toBe('function');
       }

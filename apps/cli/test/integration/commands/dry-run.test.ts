@@ -39,31 +39,6 @@ function fakePlugin(): Plugin {
   };
 }
 
-// configKeys: [] → composite (like `all`); install delegates once with [] refs.
-function compositePlugin(): Plugin {
-  return {
-    manifest: {
-      id: 'fakeall',
-      displayName: 'Fake All',
-      supportedOS: ['darwin'],
-      requires: [],
-      configKeys: [],
-      capabilities: {
-        list: true,
-        install: true,
-        update: true,
-        track: false,
-        untrack: false,
-        outdated: true,
-      },
-    } as PluginManifest,
-    check: async () => {},
-    list: async () => [],
-    install: vi.fn(async () => {}),
-    update: vi.fn(async () => {}),
-  };
-}
-
 function emptyStore(): ConfigStore {
   return {
     list: () => ['alpha'],
@@ -106,12 +81,7 @@ describe('--dry-run threads MutateOptions.dryRun to the plugin', () => {
     const opts = (plugin.install as ReturnType<typeof vi.fn>).mock.calls[0]?.[2];
     expect(opts).toEqual({ dryRun: true });
   });
-
-  it('install --dry-run (composite delegate path) threads dryRun: true', async () => {
-    const plugin = compositePlugin();
-    const subCmds = build(plugin).subCommands as SubCommandsDef;
-    await runCommand(subCmds.install as CommandDef, { rawArgs: ['--dry-run'] });
-    const opts = (plugin.install as ReturnType<typeof vi.fn>).mock.calls[0]?.[2];
-    expect(opts).toEqual({ dryRun: true });
-  });
 });
+// The composite `all` install/update dryRun threading is covered in
+// composite-mutate.test.ts, since the composite no longer routes through its
+// own plugin.install (the host fans out — ADR 0033).

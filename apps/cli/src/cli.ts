@@ -161,6 +161,9 @@ function subCommandFromAction(action: ActionCommand): CommandDef {
 }
 
 const pluginSubCommands: Record<string, ReturnType<typeof commandsFromManifest>> = {};
+// The composite `all` command fans out over the individual plugins in the host
+// (ADR 0033); hand it the constituents (everything but itself).
+const constituents = deps.registry.filter((p) => p.manifest.id !== 'all');
 for (const plugin of deps.registry) {
   pluginSubCommands[plugin.manifest.id] = commandsFromManifest(plugin, {
     exec: deps.exec,
@@ -169,6 +172,7 @@ for (const plugin of deps.registry) {
     bar: deps.bar,
     suppressBar: deps.suppressBar,
     signal: deps.signal,
+    constituents: plugin.manifest.id === 'all' ? constituents : undefined,
   });
 }
 

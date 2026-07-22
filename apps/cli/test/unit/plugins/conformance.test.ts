@@ -83,8 +83,10 @@ describe('plugin conformance — every builtin obeys the contract', () => {
       });
 
       it('declared install/update capabilities have matching methods', () => {
-        // Methods are optional on the interface; conformance is "if you
-        // claim the capability, you implement the method".
+        // Methods are optional on the interface; conformance is "if you claim
+        // the capability, you implement the method" (except the composite
+        // `all`, whose install/update are host-owned per ADR 0033, not methods).
+        if (manifest.id === 'all') return;
         if (manifest.capabilities.install) {
           expect(typeof plugin.install).toBe('function');
         }

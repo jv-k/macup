@@ -39,31 +39,6 @@ function fakePlugin(): Plugin {
   };
 }
 
-// configKeys: [] → composite (like `all`); install delegates once with [] refs.
-function compositePlugin(): Plugin {
-  return {
-    manifest: {
-      id: 'fakeall',
-      displayName: 'Fake All',
-      supportedOS: ['darwin'],
-      requires: [],
-      configKeys: [],
-      capabilities: {
-        list: true,
-        install: true,
-        update: true,
-        track: false,
-        untrack: false,
-        outdated: true,
-      },
-    } as PluginManifest,
-    check: async () => {},
-    list: async () => [],
-    install: vi.fn(async () => {}),
-    update: vi.fn(async () => {}),
-  };
-}
-
 function emptyStore(): ConfigStore {
   return {
     list: () => ['alpha'],
@@ -106,12 +81,44 @@ describe('--dry-run threads MutateOptions.dryRun to the plugin', () => {
     const opts = (plugin.install as ReturnType<typeof vi.fn>).mock.calls[0]?.[2];
     expect(opts).toEqual({ dryRun: true });
   });
+});
+// The composite `all` install/update dryRun threading is covered in
+// composite-mutate.test.ts, since the composite no longer routes through its
+// own plugin.install (the host fans out — ADR 0033).
 
-  it('install --dry-run (composite delegate path) threads dryRun: true', async () => {
-    const plugin = compositePlugin();
+describe('only `all` is the composite (configKeys-empty is not enough)', () => {
+  it('a system/xcode-like plugin (empty configKeys, id !== all) updates via its own update()', async () => {
+    // Regression: the composite gate is id === 'all', NOT configKeys.length ===
+    // 0. system and xcode also have empty configKeys but must invoke their own
+    // backend, not the (empty) host fan-out (ADR 0037: "stays fully available").
+    const plugin: Plugin = {
+      manifest: {
+        id: 'fakesys',
+        displayName: 'Fake Sys',
+        supportedOS: ['darwin'],
+        requires: [],
+        configKeys: [],
+        capabilities: {
+          list: true,
+          install: true,
+          update: true,
+          track: false,
+          untrack: false,
+          outdated: true,
+        },
+      } as PluginManifest,
+      check: async () => {},
+      list: async () => [
+        {
+          ref: { kind: 'fakesys', name: 'sys-update-1' },
+          installed: false,
+          updateStatus: 'outdated',
+        },
+      ],
+      update: vi.fn(async () => {}),
+    };
     const subCmds = build(plugin).subCommands as SubCommandsDef;
-    await runCommand(subCmds.install as CommandDef, { rawArgs: ['--dry-run'] });
-    const opts = (plugin.install as ReturnType<typeof vi.fn>).mock.calls[0]?.[2];
-    expect(opts).toEqual({ dryRun: true });
+    await runCommand(subCmds.update as CommandDef, { rawArgs: ['--dry-run'] });
+    expect((plugin.update as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0);
   });
 });

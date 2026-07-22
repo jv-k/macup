@@ -4,6 +4,7 @@ import type { ConfigStore, SaveResult } from '../config/store';
 import { resolveSelection } from '../plugins/selection';
 import type { ExecRunner, Logger, PackageRef, Plugin, PluginContext } from '../plugins/types';
 import * as log from '../ui/log';
+import { type CompositeMode, applyComposite, planComposite } from './composite-mutate';
 import { renderList } from './render-list';
 import { type SpinnerDeps, withSpinner, withUserActionSpinner } from './spinner';
 import { pluginHasSubtypes, resolveSubtypeOrExit } from './subtype';
@@ -14,6 +15,12 @@ export interface CommandDeps extends SpinnerDeps {
   readonly getStore: () => Promise<ConfigStore>;
   /** Process-wide cancellation signal — aborted on SIGINT by the caller. */
   readonly signal: AbortSignal;
+  /**
+   * The individual plugins the composite `all` command fans out over. Set only
+   * for the `all` command; the host owns this fan-out (ADR 0033), not the
+   * composite plugin.
+   */
+  readonly constituents?: readonly Plugin[];
 }
 
 function makeCtx(deps: CommandDeps): PluginContext {
@@ -22,6 +29,65 @@ function makeCtx(deps: CommandDeps): PluginContext {
     log: deps.log,
     signal: deps.signal,
   };
+}
+
+// One line for a constituent that did not act. 'planned'/'nothing' say nothing.
+function reportConstituentSkip(
+  pluginId: string,
+  status: 'planned' | 'nothing' | 'excluded' | 'unavailable' | 'error',
+  message?: string,
+): void {
+  if (status === 'excluded') {
+    console.log(log.info(`${pluginId}: excluded (skip.all)`));
+  } else if (status === 'unavailable') {
+    console.log(log.info(`${pluginId}: unavailable`));
+  } else if (status === 'error') {
+    console.log(log.warning(`${pluginId}: skipped: ${message}`));
+  }
+}
+
+// The composite `all` install/update: the host fans out over the constituents
+// (ADR 0033), honoring per-plugin skip/pin and skip.all backend exclusion (ADR
+// 0037), and isolates each backend's failure as a skip. Planning first (no
+// mutation) lets us prompt with a count and skip the prompt on a no-op.
+async function runCompositeMutation(
+  deps: CommandDeps,
+  displayName: string,
+  mode: CompositeMode,
+  dryRun: boolean,
+): Promise<void> {
+  const verb = mode === 'update' ? 'Updating' : 'Installing';
+  const store = await deps.getStore();
+  const plans = await planComposite(mode, deps.constituents ?? [], store, () => makeCtx(deps));
+  const total = plans.reduce((n, p) => n + p.refs.length, 0);
+
+  if (total === 0) {
+    for (const p of plans) reportConstituentSkip(p.plugin.manifest.id, p.status, p.message);
+    console.log(log.info(`Nothing to ${mode}.`));
+    return;
+  }
+
+  if (process.stdout.isTTY) {
+    const ans = await confirm({
+      message: `This ${mode}s ${total} package(s) across all managers. Continue?`,
+      initialValue: true,
+    });
+    if (isCancel(ans) || !ans) {
+      console.log(log.warning(`${verb} cancelled.`));
+      return;
+    }
+  }
+  console.log('');
+  console.log(log.header(`${verb} ${displayName}`));
+  console.log('');
+  const outcomes = await applyComposite(mode, plans, () => makeCtx(deps), { dryRun });
+  for (const o of outcomes) {
+    if (o.status === 'acted') {
+      console.log(log.success(`${o.pluginId}: ${o.refs.length} package(s)`));
+    } else {
+      reportConstituentSkip(o.pluginId, o.status, o.message);
+    }
+  }
 }
 
 // Wrapper around store.save() that turns disk/permissions failures into
@@ -255,7 +321,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
   }
 
-  if (manifest.capabilities.install && plugin.install) {
+  if (manifest.capabilities.install) {
     subCommands.install = defineCommand({
       meta: { name: 'install', description: 'Install packages via the plugin.' },
       args: {
@@ -276,6 +342,18 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args, rawArgs }) {
+        // `all` is the composite: host-owned fan-out (ADR 0033), not a per-ref
+        // loop. Only `all` is composite — system/xcode also have empty
+        // configKeys but are real plugins that run their own install below.
+        if (manifest.id === 'all') {
+          await runCompositeMutation(
+            deps,
+            manifest.displayName,
+            'install',
+            Boolean(args['dry-run']),
+          );
+          return;
+        }
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
         const subtype = resolved.subtype;
@@ -287,78 +365,55 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (packages.length > 0) {
           refs = packages.map((name) => ({ kind, name }));
         } else if (manifest.configKeys.length === 0) {
-          // Composite plugins (e.g. `all`) don't track packages themselves —
-          // their install() ignores caller refs and discovers tracked sets
-          // from constituents. Pass an empty list and let the plugin decide.
+          // No tracked applist (e.g. system, xcode): install acts on explicit
+          // package args only, so an argless invocation has nothing to do.
           refs = [];
         } else {
           const store = await deps.getStore();
           const key = resolveConfigKey(plugin, subtype);
           refs = [...store.list(key)].map((name) => ({ kind, name }));
         }
-        if (refs.length === 0 && manifest.configKeys.length > 0) {
-          const emptyKey = resolveConfigKey(plugin, subtype);
-          console.log(log.info(`No packages tracked in ${emptyKey}.`));
-          console.log(log.trace(`macup ${manifest.id} track ${subtypeCliFlag(subtype)}<name>`));
+        if (refs.length === 0) {
+          if (manifest.configKeys.length > 0) {
+            const emptyKey = resolveConfigKey(plugin, subtype);
+            console.log(log.info(`No packages tracked in ${emptyKey}.`));
+            console.log(log.trace(`macup ${manifest.id} track ${subtypeCliFlag(subtype)}<name>`));
+          }
           return;
         }
-        if (plugin.install) {
-          // Composite plugins (configKeys empty) ignore caller refs and
-          // discover their own work from constituents — delegate once and
-          // skip the per-ref loop (we have no refs to iterate anyway).
-          if (manifest.configKeys.length === 0) {
-            if (manifest.id === 'all' && process.stdout.isTTY) {
-              const ans = await confirm({
-                message: 'This installs tracked packages across all managers. Continue?',
-                initialValue: true,
-              });
-              if (isCancel(ans) || !ans) {
-                console.log(log.warning('Install cancelled.'));
-                return;
-              }
+        console.log('');
+        console.log(log.header(`Installing ${manifest.displayName}`, refs.length));
+        console.log('');
+        const verbose = Boolean(args.verbose);
+        for (let i = 0; i < refs.length; i++) {
+          const ref = refs[i] as PackageRef;
+          const started = Date.now();
+          try {
+            await withUserActionSpinner(
+              deps,
+              log.counter(i + 1, refs.length, 'Installing', ref.name),
+              async () => {
+                await plugin.install?.(makeCtx(deps), [ref], {
+                  dryRun: Boolean(args['dry-run']),
+                });
+              },
+            );
+            if (verbose) {
+              console.log(log.trace(`${ref.kind} · ${Date.now() - started}ms`));
             }
-            console.log('');
-            console.log(log.header(`Installing ${manifest.displayName}`));
-            console.log('');
-            await withUserActionSpinner(deps, `Installing ${manifest.displayName}...`, async () => {
-              await plugin.install?.(makeCtx(deps), [], { dryRun: Boolean(args['dry-run']) });
-            });
-            return;
-          }
-          console.log('');
-          console.log(log.header(`Installing ${manifest.displayName}`, refs.length));
-          console.log('');
-          const verbose = Boolean(args.verbose);
-          for (let i = 0; i < refs.length; i++) {
-            const ref = refs[i] as PackageRef;
-            const started = Date.now();
-            try {
-              await withUserActionSpinner(
-                deps,
-                log.counter(i + 1, refs.length, 'Installing', ref.name),
-                async () => {
-                  await plugin.install?.(makeCtx(deps), [ref], {
-                    dryRun: Boolean(args['dry-run']),
-                  });
-                },
-              );
-              if (verbose) {
-                console.log(log.trace(`${ref.kind} · ${Date.now() - started}ms`));
-              }
-            } catch (err) {
-              if (verbose) {
-                console.log(log.traceError(err instanceof Error ? err.message : String(err)));
-              }
-              throw err;
+          } catch (err) {
+            if (verbose) {
+              console.log(log.traceError(err instanceof Error ? err.message : String(err)));
             }
+            throw err;
           }
-          await runHealthCheck(deps, manifest.id, makeCtx(deps));
         }
+        await runHealthCheck(deps, manifest.id, makeCtx(deps));
       },
     });
   }
 
-  if (manifest.capabilities.update && plugin.update) {
+  if (manifest.capabilities.update) {
     subCommands.update = defineCommand({
       meta: { name: 'update', description: 'Upgrade outdated packages to latest.' },
       args: {
@@ -383,6 +438,18 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       async run({ args, rawArgs }) {
+        // Only `all` is the composite (ADR 0033); system/xcode also have empty
+        // configKeys but update via the generic outdated→update path below.
+        if (manifest.id === 'all') {
+          // Host-owned fan-out honoring skip/pin and skip.all (ADR 0033/0037).
+          await runCompositeMutation(
+            deps,
+            manifest.displayName,
+            'update',
+            Boolean(args['dry-run']),
+          );
+          return;
+        }
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
         const subtype = resolved.subtype;
@@ -435,10 +502,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           const wanted = new Set(explicitNames);
           filtered = filtered.filter((s) => wanted.has(s.ref.name));
         } else if (!args.all && manifest.configKeys.length > 0) {
-          // Default: scope updates to the tracked applist — consistent with
+          // Default: scope updates to the tracked applist, consistent with
           // `install` and `list` (D-1). `--all` upgrades everything outdated.
-          // The composite `all` plugin (no configKeys) is unaffected and stays
-          // system-wide, since it IS the "update everything" command.
+          // Plugins without a tracked applist (system, xcode) skip this and
+          // stay system-wide; the composite `all` took the fan-out path above.
           const tracked = new Set<string>();
           const keysToCheck =
             subtype !== undefined && manifest.configKeyFor
@@ -465,18 +532,6 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             console.log(log.success(`All ${manifest.displayName} packages are up-to-date!`));
           }
           return;
-        }
-
-        // Confirmation gate for bulk operations (matches zsh tool)
-        if (manifest.id === 'all' && process.stdout.isTTY) {
-          const ans = await confirm({
-            message: `This updates ${refs.length} package(s) across all managers. Continue?`,
-            initialValue: true,
-          });
-          if (isCancel(ans) || !ans) {
-            console.log(log.warning('Update cancelled.'));
-            return;
-          }
         }
 
         console.log('');

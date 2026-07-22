@@ -3,9 +3,15 @@ import { formatCheckSummary, hasCheckFailure } from '../../../src/commands/check
 import type { OutdatedReport } from '../../../src/commands/outdated';
 
 function report(
-  perPlugin: Array<{ id: string; count: number; available?: boolean; checkFailed?: boolean }>,
+  perPlugin: Array<{
+    id: string;
+    count: number;
+    uncheckable?: number;
+    available?: boolean;
+    checkFailed?: boolean;
+  }>,
 ): OutdatedReport {
-  const plugins = perPlugin.map(({ id, count, available, checkFailed }) => ({
+  const plugins = perPlugin.map(({ id, count, uncheckable, available, checkFailed }) => ({
     pluginId: id,
     displayName: id.toUpperCase(),
     available: available ?? true,
@@ -17,8 +23,18 @@ function report(
       latestVersion: '2',
       updateStatus: 'outdated' as const,
     })),
+    uncheckable: Array.from({ length: uncheckable ?? 0 }, (_, i) => ({
+      ref: { kind: id, name: `unk-${i}` },
+      installed: true,
+      installedVersion: '1',
+      updateStatus: 'unknown' as const,
+    })),
   }));
-  return { plugins, totalOutdated: plugins.reduce((s, p) => s + p.outdated.length, 0) };
+  return {
+    plugins,
+    totalOutdated: plugins.reduce((s, p) => s + p.outdated.length, 0),
+    totalUncheckable: plugins.reduce((s, p) => s + p.uncheckable.length, 0),
+  };
 }
 
 describe('formatCheckSummary', () => {
@@ -66,5 +82,15 @@ describe('formatCheckSummary', () => {
     ]);
     expect(formatCheckSummary(r)).toBe('2 brew outdated; npm check failed');
     expect(hasCheckFailure(r)).toBe(true);
+  });
+
+  it('reports uncheckable counts, between outdated and check-failed (ADR 0036)', () => {
+    const r = report([
+      { id: 'brew', count: 2 },
+      { id: 'appstore', count: 0, uncheckable: 3 },
+    ]);
+    expect(formatCheckSummary(r)).toBe('2 brew outdated; 3 appstore uncheckable');
+    // check must not report a clean bill of health when something is uncheckable
+    expect(r.totalUncheckable).toBe(3);
   });
 });

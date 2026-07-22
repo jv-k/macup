@@ -13,6 +13,7 @@ function renderStatusBlock(
 ): string[] {
   const upToDate = statuses.filter((s) => s.installed && s.updateStatus === 'current');
   const outdated = statuses.filter((s) => s.installed && s.updateStatus === 'outdated');
+  const uncheckable = statuses.filter((s) => s.installed && s.updateStatus === 'unknown');
   const notInstalled = statuses.filter((s) => !s.installed);
   // Per-column name widths: padding the up-to-date column to the widest
   // outdated name (or vice-versa) wastes horizontal space and pushes the
@@ -20,6 +21,7 @@ function renderStatusBlock(
   const upToDateWidth = Math.max(...upToDate.map((s) => s.ref.name.length), 0);
   const outdatedWidth = Math.max(...outdated.map((s) => s.ref.name.length), 0);
   const notInstalledWidth = Math.max(...notInstalled.map((s) => s.ref.name.length), 0);
+  const uncheckableWidth = Math.max(...uncheckable.map((s) => s.ref.name.length), 0);
   const lines: string[] = [];
 
   lines.push('');
@@ -89,6 +91,16 @@ function renderStatusBlock(
     lines.push(`  ${log.errorHeader('Not installed', notInstalled.length)}`);
     for (const s of notInstalled) {
       lines.push(log.pkgNotInstalled(s.ref.name, notInstalledWidth));
+    }
+  }
+
+  // Installed but currency undeterminable (ADR 0036) — surfaced as its own
+  // group so an uncheckable package never hides among the up-to-date ones.
+  if (!onlyOutdated && uncheckable.length > 0) {
+    lines.push('');
+    lines.push(`  ${log.dimmedHeader('Uncheckable', uncheckable.length)}`);
+    for (const s of uncheckable) {
+      lines.push(log.pkgUncheckable(s.ref.name, s.installedVersion ?? '', uncheckableWidth));
     }
   }
 

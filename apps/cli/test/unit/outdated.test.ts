@@ -9,6 +9,7 @@ import type { ListOptions, Plugin, PluginContext } from '../../src/plugins/types
 function mkPlugin(opts: {
   id: string;
   outdated?: string[];
+  uncheckable?: string[];
   failsCheck?: string;
 }): Plugin {
   return {
@@ -30,17 +31,22 @@ function mkPlugin(opts: {
     check: async () => {
       if (opts.failsCheck) throw new Error(opts.failsCheck);
     },
-    list: async (_ctx: PluginContext, listOpts: ListOptions) => {
-      // Only return rows when the report is asking for outdated; matches
-      // the contract every real plugin honours via plugin.list.
-      if (!listOpts.onlyOutdated) return [];
-      return (opts.outdated ?? []).map((name) => ({
+    list: async (_ctx: PluginContext, _listOpts: ListOptions) => {
+      // buildOutdatedReport lists fully and splits by updateStatus.
+      const outdated = (opts.outdated ?? []).map((name) => ({
         ref: { kind: opts.id, name },
         installed: true,
         installedVersion: '1.0.0',
         latestVersion: '2.0.0',
-        updateStatus: 'outdated',
+        updateStatus: 'outdated' as const,
       }));
+      const uncheckable = (opts.uncheckable ?? []).map((name) => ({
+        ref: { kind: opts.id, name },
+        installed: true,
+        installedVersion: '1.0.0',
+        updateStatus: 'unknown' as const,
+      }));
+      return [...outdated, ...uncheckable];
     },
   };
 }
@@ -106,7 +112,22 @@ describe('buildOutdatedReport', () => {
 
   it('returns an empty report when no plugins are registered', async () => {
     const report = await buildOutdatedReport({ plugins: [], makeCtx });
-    expect(report).toEqual<OutdatedReport>({ plugins: [], totalOutdated: 0 });
+    expect(report).toEqual<OutdatedReport>({ plugins: [], totalOutdated: 0, totalUncheckable: 0 });
+  });
+
+  it('splits list() into outdated and uncheckable (unknown) buckets', async () => {
+    const report = await buildOutdatedReport({
+      plugins: [
+        mkPlugin({ id: 'appstore', outdated: [], uncheckable: ['Boop', 'Things'] }),
+        mkPlugin({ id: 'brew', outdated: ['deno'] }),
+      ],
+      makeCtx,
+    });
+    expect(report.totalOutdated).toBe(1);
+    expect(report.totalUncheckable).toBe(2);
+    const appstore = report.plugins.find((p) => p.pluginId === 'appstore');
+    expect(appstore?.uncheckable.map((s) => s.ref.name)).toEqual(['Boop', 'Things']);
+    expect(appstore?.outdated).toEqual([]);
   });
 });
 
@@ -124,10 +145,12 @@ describe('formatOutdatedReport', () => {
         latestVersion: '2',
         updateStatus: 'outdated' as const,
       })),
+      uncheckable: [],
     }));
     return {
       plugins,
       totalOutdated: plugins.reduce((s, p) => s + p.outdated.length, 0),
+      totalUncheckable: 0,
     };
   }
 
@@ -172,6 +195,7 @@ describe('formatOutdatedReport', () => {
   it('renders unavailable plugins with the failure reason instead of a count', () => {
     const report: OutdatedReport = {
       totalOutdated: 0,
+      totalUncheckable: 0,
       plugins: [
         {
           pluginId: 'mas',
@@ -180,6 +204,7 @@ describe('formatOutdatedReport', () => {
           reason: '`mas` was not found on PATH',
           checkFailed: false,
           outdated: [],
+          uncheckable: [],
         },
       ],
     };
@@ -187,5 +212,31 @@ describe('formatOutdatedReport', () => {
     expect(out).toContain('mas');
     expect(out).toContain('unavailable');
     expect(out).toContain('not found on PATH');
+  });
+
+  it('does not claim "up to date" when only uncheckable packages exist (ADR 0036)', () => {
+    const report: OutdatedReport = {
+      totalOutdated: 0,
+      totalUncheckable: 2,
+      plugins: [
+        {
+          pluginId: 'appstore',
+          displayName: 'APPSTORE',
+          available: true,
+          checkFailed: false,
+          outdated: [],
+          uncheckable: ['Boop', 'Things'].map((name) => ({
+            ref: { kind: 'appstore', name },
+            installed: true,
+            installedVersion: '1',
+            updateStatus: 'unknown' as const,
+          })),
+        },
+      ],
+    };
+    const out = formatOutdatedReport(report);
+    expect(out).not.toContain('up to date');
+    expect(out).toContain('2 packages uncheckable');
+    expect(out).toContain('appstore');
   });
 });

@@ -9,6 +9,7 @@ function st(
     installed?: boolean;
     installedVersion?: string;
     latestVersion?: string;
+    updateStatus?: 'current' | 'outdated' | 'unknown';
   } = {},
 ): PackageStatus {
   return {
@@ -16,7 +17,7 @@ function st(
     installed: opts.installed ?? true,
     installedVersion: opts.installedVersion,
     latestVersion: opts.latestVersion,
-    updateStatus: opts.latestVersion !== undefined ? 'outdated' : 'current',
+    updateStatus: opts.updateStatus ?? (opts.latestVersion !== undefined ? 'outdated' : 'current'),
   };
 }
 
@@ -70,5 +71,26 @@ describe('renderList', () => {
   it('lists not-installed tracked packages', () => {
     const out = renderList('npm', [st('ghost', { installed: false })], false);
     expect(out).toContain('ghost');
+  });
+});
+
+describe('renderList — uncheckable (updateStatus unknown)', () => {
+  it('renders installed unknown packages in an Uncheckable group with a ? marker', () => {
+    const out = renderList(
+      'appstore',
+      [st('Boop', { installedVersion: '1.4.0', updateStatus: 'unknown' })],
+      false,
+    );
+    expect(out).toContain('UNCHECKABLE');
+    expect(out).toContain('? Boop');
+  });
+
+  it('does not silently drop an unknown package (regression: it must appear somewhere)', () => {
+    const out = renderList(
+      'appstore',
+      [st('Boop', { installedVersion: '1.4.0', updateStatus: 'unknown' })],
+      false,
+    );
+    expect(out).toContain('Boop');
   });
 });

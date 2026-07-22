@@ -22,11 +22,19 @@ export interface OutdatedPluginSummary {
   checkFailed: boolean;
   /** Outdated packages reported by the plugin (empty when up-to-date). */
   outdated: readonly PackageStatus[];
+  /**
+   * Packages whose currency the backend couldn't determine (updateStatus
+   * 'unknown', e.g. App Store apps mas can't see). Surfaced so `check` won't
+   * report a clean bill of health it couldn't actually verify (ADR 0036).
+   */
+  uncheckable: readonly PackageStatus[];
 }
 
 export interface OutdatedReport {
   /** Sum of `outdated.length` across all available plugins. */
   totalOutdated: number;
+  /** Sum of `uncheckable.length` across all available plugins. */
+  totalUncheckable: number;
   /** One row per plugin in registry order; the composite `all` is excluded. */
   plugins: readonly OutdatedPluginSummary[];
 }
@@ -55,10 +63,12 @@ export interface OutdatedReportDeps {
 }
 
 /**
- * Run `list({ onlyOutdated: true })` against every plugin in parallel,
- * isolating per-plugin failures so one missing binary doesn't kill the
- * whole report. The composite `all` plugin is filtered out — it would
- * double-count by aggregating its constituents.
+ * Run `list({})` against every plugin in parallel and split the result into
+ * outdated and uncheckable, isolating per-plugin failures so one missing
+ * binary doesn't kill the whole report. Listing fully (not `onlyOutdated`) is
+ * what lets `check` see uncheckable packages, which `onlyOutdated` filters out.
+ * The composite `all` plugin is filtered out — it would double-count by
+ * aggregating its constituents.
  */
 export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<OutdatedReport> {
   const constituents = deps.plugins.filter((p) => p.manifest.id !== 'all');
@@ -70,13 +80,14 @@ export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<Out
       const ctx = deps.makeCtx();
       try {
         await plugin.check(ctx);
-        const outdated = await plugin.list(ctx, { onlyOutdated: true });
+        const statuses = await plugin.list(ctx, {});
         return {
           pluginId: plugin.manifest.id,
           displayName: plugin.manifest.displayName,
           available: true,
           checkFailed: false,
-          outdated,
+          outdated: statuses.filter((s) => s.installed && s.updateStatus === 'outdated'),
+          uncheckable: statuses.filter((s) => s.installed && s.updateStatus === 'unknown'),
         };
       } catch (err) {
         return {
@@ -86,6 +97,7 @@ export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<Out
           reason: err instanceof Error ? err.message : String(err),
           checkFailed: !(err instanceof ErrPluginUnavailable),
           outdated: [],
+          uncheckable: [],
         };
       } finally {
         completed += 1;
@@ -100,7 +112,8 @@ export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<Out
   );
 
   const totalOutdated = summaries.reduce((sum, s) => sum + s.outdated.length, 0);
-  return { plugins: summaries, totalOutdated };
+  const totalUncheckable = summaries.reduce((sum, s) => sum + s.uncheckable.length, 0);
+  return { plugins: summaries, totalOutdated, totalUncheckable };
 }
 
 export interface FormatOptions {
@@ -153,7 +166,12 @@ export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions
       continue;
     }
     if (p.outdated.length === 0) {
-      lines.push(`  ${green('✓')} ${id}  ${dim('up to date')}`);
+      // Don't claim "up to date" when currency couldn't be verified (ADR 0036).
+      if (p.uncheckable.length > 0) {
+        lines.push(`  ${yellow('?')} ${id}  ${dim(`${p.uncheckable.length} uncheckable`)}`);
+      } else {
+        lines.push(`  ${green('✓')} ${id}  ${dim('up to date')}`);
+      }
       continue;
     }
     const names = p.outdated.slice(0, maxNames).map((s) => s.ref.name);
@@ -165,12 +183,18 @@ export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions
   }
 
   lines.push('');
-  if (report.totalOutdated === 0) {
+  if (report.totalOutdated === 0 && report.totalUncheckable === 0) {
     lines.push(`  ${green('Everything up to date.')}`);
+  } else if (report.totalOutdated === 0) {
+    const noun = report.totalUncheckable === 1 ? 'package' : 'packages';
+    lines.push(
+      `  ${yellow(`${report.totalUncheckable} ${noun} uncheckable`)}  ${dim('· currency could not be determined')}`,
+    );
   } else {
     const noun = report.totalOutdated === 1 ? 'package' : 'packages';
+    const unk = report.totalUncheckable > 0 ? `, ${report.totalUncheckable} uncheckable` : '';
     lines.push(
-      `  ${yellow(`${report.totalOutdated} ${noun} outdated`)}  ${dim('· run `macup all update` to upgrade')}`,
+      `  ${yellow(`${report.totalOutdated} ${noun} outdated${unk}`)}  ${dim('· run `macup all update` to upgrade')}`,
     );
   }
 

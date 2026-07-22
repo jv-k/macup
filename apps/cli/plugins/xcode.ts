@@ -38,7 +38,7 @@ async function fetchXcodeApp(ctx: PluginContext): Promise<PackageStatus | undefi
     return {
       ref: { kind: 'xcode-app', name: 'Xcode', id: XCODE_ID },
       installed: false,
-      outdated: false,
+      updateStatus: 'current',
     };
   }
 
@@ -46,7 +46,7 @@ async function fetchXcodeApp(ctx: PluginContext): Promise<PackageStatus | undefi
     ref: { kind: 'xcode-app', name: 'Xcode', id: XCODE_ID },
     installed: true,
     installedVersion: xcode.version,
-    outdated: false,
+    updateStatus: 'current',
   };
 
   // `mas outdated` only knows about apps that are in mas's Spotlight
@@ -57,7 +57,7 @@ async function fetchXcodeApp(ctx: PluginContext): Promise<PackageStatus | undefi
     const outdatedOut = await runMas(ctx, ['outdated']);
     const outdated = parseMasOutdated(outdatedOut.stdout).find((e) => e.id === XCODE_ID);
     if (outdated) {
-      status.outdated = true;
+      status.updateStatus = 'outdated';
       status.latestVersion = outdated.latest;
     }
   }
@@ -70,7 +70,7 @@ async function fetchCommandLineTools(ctx: PluginContext): Promise<PackageStatus>
     return {
       ref: { kind: 'xcode-clt', name: 'Command Line Tools' },
       installed: false,
-      outdated: false,
+      updateStatus: 'current',
     };
   }
   const info = await ctx.exec.run('pkgutil', ['--pkg-info=com.apple.pkg.CLTools_Executables'], {
@@ -80,7 +80,7 @@ async function fetchCommandLineTools(ctx: PluginContext): Promise<PackageStatus>
   const status: PackageStatus = {
     ref: { kind: 'xcode-clt', name: 'Command Line Tools' },
     installed: true,
-    outdated: false,
+    updateStatus: 'current',
   };
   if (version !== undefined) status.installedVersion = version;
   return status;
@@ -111,7 +111,9 @@ const xcode: Plugin = {
     const result: PackageStatus[] = [];
     if (app) result.push(app);
     result.push(clt);
-    return (opts.onlyOutdated ?? false) ? result.filter((s) => s.outdated) : result;
+    return (opts.onlyOutdated ?? false)
+      ? result.filter((s) => s.updateStatus === 'outdated')
+      : result;
   },
 
   async install(

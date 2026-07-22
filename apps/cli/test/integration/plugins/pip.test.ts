@@ -65,11 +65,11 @@ describe('pip plugin — list()', () => {
     expect(requests).toMatchObject({
       installed: true,
       installedVersion: '2.28.1',
-      outdated: true,
+      updateStatus: 'outdated',
       latestVersion: '2.31.0',
     });
     const ruff = statuses.find((s) => s.ref.name === 'ruff');
-    expect(ruff?.outdated).toBe(false);
+    expect(ruff?.updateStatus).toBe('current');
     expect(ruff?.latestVersion).toBeUndefined();
   });
 

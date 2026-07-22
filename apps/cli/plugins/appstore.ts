@@ -57,13 +57,13 @@ async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<P
       ref: { kind: 'appstore', name: e.name, id: e.id },
       installed: true,
       installedVersion: e.version,
-      outdated: latest !== undefined,
+      updateStatus: latest !== undefined ? 'outdated' : 'current',
     };
     if (latest !== undefined) status.latestVersion = latest;
     return status;
   });
 
-  return onlyOutdated ? result.filter((s) => s.outdated) : result;
+  return onlyOutdated ? result.filter((s) => s.updateStatus === 'outdated') : result;
 }
 
 const appstore: Plugin = {

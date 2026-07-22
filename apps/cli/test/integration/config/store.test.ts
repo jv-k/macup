@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ConfigStore } from '../../../src/config/store';
+import { ErrInvalidConfig } from '../../../src/errors';
 
 let workDir: string;
 let applistPath: string;
@@ -183,6 +184,58 @@ describe('ConfigStore — pins and skip', () => {
     await s2.load();
     const pol = s2.selectionFor('brew');
     expect(pol.skipped.has('legacy-dep')).toBe(true);
+  });
+
+  it('selectionFor exposes a subtype-nested skip under bySubtype, not the flat set', async () => {
+    // ADR 0035: skip.brew.casks binds only casks. The flat set stays empty so
+    // a same-named formula is untouched; resolveSelection reads the layer.
+    await seed('skip:\n  brew:\n    casks:\n      - docker\n');
+    const s = await store();
+    const pol = s.selectionFor('brew');
+    expect(pol.skipped.has('docker')).toBe(false);
+    expect(pol.bySubtype?.get('casks')?.skipped.has('docker')).toBe(true);
+  });
+
+  it('selectionFor exposes a subtype-nested pin under bySubtype', async () => {
+    await seed('pins:\n  brew:\n    casks:\n      docker: 4.30.0\n');
+    const s = await store();
+    const pol = s.selectionFor('brew');
+    expect(pol.pinned.has('docker')).toBe(false);
+    expect(pol.bySubtype?.get('casks')?.pinned.get('docker')).toBe('4.30.0');
+  });
+
+  it('skip/pin with a subtype write under the nested subtype block (round-trip)', async () => {
+    await seed('brew:\n  casks:\n    - docker\n');
+    const s = await store();
+    s.skip('brew', ['docker'], 'casks');
+    s.pin('brew', 'docker', '4.30.0', 'casks');
+    await s.save('skip');
+
+    const s2 = new ConfigStore({ applistPath, backupDir });
+    await s2.load();
+    const pol = s2.selectionFor('brew');
+    expect(pol.skipped.has('docker')).toBe(false);
+    expect(pol.pinned.has('docker')).toBe(false);
+    expect(pol.bySubtype?.get('casks')?.skipped.has('docker')).toBe(true);
+    expect(pol.bySubtype?.get('casks')?.pinned.get('docker')).toBe('4.30.0');
+  });
+
+  it('rejects mixing flat and per-subtype skip for one plugin (ErrInvalidConfig, exit 1)', async () => {
+    // ADR 0035 is either/or per plugin: a flat list and a subtype map can't
+    // coexist. Both directions must fail with a MacupError, not a bare Error.
+    await seed('skip:\n  brew:\n    - some-formula\n');
+    const flat = await store();
+    try {
+      flat.skip('brew', ['docker'], 'casks');
+      expect.unreachable('subtype skip over a flat list should throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ErrInvalidConfig);
+      expect((err as ErrInvalidConfig).exitCode).toBe(1);
+    }
+
+    await seed('skip:\n  brew:\n    casks:\n      - docker\n');
+    const nested = await store();
+    expect(() => nested.skip('brew', ['some-formula'])).toThrow(ErrInvalidConfig);
   });
 
   it('unpin removes a pin entry', async () => {

@@ -31,7 +31,7 @@ function fakePlugin(): Plugin {
         installed: true,
         installedVersion: '1.0.0',
         latestVersion: '1.1.0',
-        outdated: true,
+        updateStatus: 'outdated',
       },
     ],
     install: vi.fn(async () => {}),

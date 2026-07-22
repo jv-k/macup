@@ -25,7 +25,7 @@ async function fetchUpdates(ctx: PluginContext): Promise<PackageStatus[]> {
   return labels.map((label) => ({
     ref: { kind: 'system', name: label },
     installed: false,
-    outdated: true,
+    updateStatus: 'outdated',
   }));
 }
 

@@ -13,7 +13,7 @@ function status(
     installed: true,
     installedVersion: installed,
     latestVersion: latest,
-    outdated,
+    updateStatus: outdated ? 'outdated' : 'current',
   };
 }
 
@@ -25,6 +25,8 @@ describe('resolveSelection', () => {
       upgradable: [],
       pinnedBlocked: [],
       skipped: [],
+      pinUnenforceable: [],
+      uncheckable: [],
     });
   });
 
@@ -39,7 +41,7 @@ describe('resolveSelection', () => {
   it('does not crash with non-semver pin when using default comparator', () => {
     // Brew/mas/etc. ship date-based or build-id versions that aren't valid
     // semver. The default comparator must fall back gracefully instead of
-    // throwing — pin becomes effectively non-blocking.
+    // throwing — the pin is surfaced as unenforceable, not silently applied.
     const s = status('coolapp', '2024-01-01', '2024-06-15', true);
     expect(() =>
       resolveSelection([s], {
@@ -51,7 +53,20 @@ describe('resolveSelection', () => {
       pinned: new Map([['coolapp', '2024-03-01']]),
       skipped: new Set(),
     });
-    expect(r.upgradable.map((x) => x.ref.name)).toEqual(['coolapp']);
+    expect(r.pinUnenforceable.map((x) => x.ref.name)).toEqual(['coolapp']);
+  });
+
+  it('surfaces a pin that cannot be ordered as pinUnenforceable, not silent upgradable', () => {
+    // Both sides non-semver: the default comparator can't order latest vs pin,
+    // so the pin can't be enforced. It must be surfaced (ADR 0034), not dropped
+    // into upgradable as though the ceiling had been honored.
+    const s = status('coolapp', '2024-01-01', '2024-06-15', true);
+    const r = resolveSelection([s], {
+      pinned: new Map([['coolapp', '2024-03-01']]),
+      skipped: new Set(),
+    });
+    expect(r.pinUnenforceable.map((x) => x.ref.name)).toEqual(['coolapp']);
+    expect(r.upgradable).toEqual([]);
   });
 
   it('routes skipped names to the skipped bucket regardless of outdated state', () => {
@@ -114,7 +129,7 @@ describe('resolveSelection', () => {
     const s: PackageStatus = {
       ref: { kind: 'npm', name: 'mystery' },
       installed: true,
-      outdated: true,
+      updateStatus: 'outdated',
     };
     const r = resolveSelection([s], {
       pinned: new Map([['mystery', '1.0.0']]),
@@ -123,10 +138,53 @@ describe('resolveSelection', () => {
     expect(r.upgradable).toEqual([s]);
   });
 
+  it('scopes a subtype-layer skip to that subtype only (cask skip does not touch a formula)', () => {
+    // brew ships formula/cask name collisions (docker, wireshark). A skip under
+    // brew.casks must hit the cask and leave the same-named formula upgradable
+    // (ADR 0035).
+    const cask: PackageStatus = {
+      ref: { kind: 'cask', name: 'docker', subtype: 'casks' },
+      installed: true,
+      installedVersion: '1',
+      latestVersion: '2',
+      updateStatus: 'outdated',
+    };
+    const formula: PackageStatus = {
+      ref: { kind: 'formula', name: 'docker', subtype: 'formulas' },
+      installed: true,
+      installedVersion: '1',
+      latestVersion: '2',
+      updateStatus: 'outdated',
+    };
+    const policy: SelectionPolicy = {
+      pinned: new Map(),
+      skipped: new Set(),
+      bySubtype: new Map([['casks', { pinned: new Map(), skipped: new Set(['docker']) }]]),
+    };
+    const r = resolveSelection([cask, formula], policy);
+    expect(r.skipped.map((s) => s.ref.kind)).toEqual(['cask']);
+    expect(r.upgradable.map((s) => s.ref.kind)).toEqual(['formula']);
+  });
+
   it('excludes non-outdated packages from upgradable (nothing to do)', () => {
     const s = status('ripgrep', '14.0.0', '14.0.0', false);
     const r = resolveSelection([s], emptyPolicy);
     expect(r.upgradable).toEqual([]);
     expect(r.pinnedBlocked).toEqual([]);
+  });
+
+  it('routes an uncheckable package to the uncheckable bucket, never upgraded', () => {
+    // App Store fallback (and any degraded backend) can't determine currency,
+    // so it reports updateStatus: 'unknown'. macup must surface it, not
+    // silently treat it as up-to-date, and must never auto-upgrade what it
+    // couldn't verify (ADR 0036).
+    const s: PackageStatus = {
+      ref: { kind: 'appstore', name: 'Xcode' },
+      installed: true,
+      updateStatus: 'unknown',
+    };
+    const r = resolveSelection([s], emptyPolicy);
+    expect(r.uncheckable).toEqual([s]);
+    expect(r.upgradable).toEqual([]);
   });
 });

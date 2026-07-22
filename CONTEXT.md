@@ -23,7 +23,7 @@ An operation a plugin declares it supports in its manifest: `list`, `install`, `
 _Avoid_: feature, permission
 
 **Composite**:
-The `all` plugin: a plugin with no backend that fans out across the others, isolating each one's failure as a skip so one missing backend never aborts the run.
+The `all` surface: the single "do it across every backend" view for list/install/update. Each backend's failure is isolated as a skip, so one missing backend never aborts the run. The write fan-out is host-owned (ADR 0033) rather than performed by a backend-less plugin.
 _Avoid_: aggregate, meta-plugin
 
 ### Packages
@@ -57,15 +57,19 @@ A package is installed when it is present on the machine, as its backend reports
 _Avoid_: present
 
 **Outdated**:
-A package for which the backend reports a newer version than the one installed. A fact about versions, independent of pin or skip policy. (Whether an outdated package will actually be upgraded is a separate question: see Pinned and Skipped.)
+One of three update-status values (`updateStatus`, alongside `current` and `unknown`): the backend reports a newer version than the one installed. A fact about versions, independent of pin or skip policy. (Whether an outdated package will actually be upgraded is a separate question: see Pinned and Skipped.)
 _Avoid_: stale
+
+**Uncheckable**:
+The `unknown` update status: macup could not determine whether the package is current, because its backend couldn't report a version, e.g. an App Store app not visible to `mas` on the filesystem-fallback path. Distinct from up-to-date: an uncheckable package is surfaced as such and is never auto-upgraded (ADR 0036).
+_Avoid_: unknown (bare), unverified
 
 **Pinned**:
 A package held at a maximum allowed version. macup may upgrade it up to the pin but not past it. A pin is a version ceiling, not an exact lock.
 _Avoid_: locked, frozen
 
 **Skipped**:
-A package the user has taken out of update consideration entirely. Skip wins over everything: a skipped package is never upgraded, pinned or not, outdated or not. Precedence is skip over pin over outdated.
+A package the user has taken out of update consideration entirely. Skip wins over everything: a skipped package is never upgraded, pinned or not, outdated or not. Precedence is skip over pin over outdated. Under the `all` pseudo-plugin the same mechanism operates at backend granularity: `skip.all` lists constituent plugin ids to drop from the composite (not package names), keeping a backend like `system` out of `all update` while it stays runnable on its own (ADR 0037).
 _Avoid_: ignored, excluded
 
 ### Acting on packages

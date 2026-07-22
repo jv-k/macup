@@ -12,13 +12,13 @@ describe('--json list output contract', () => {
       installed: true,
       installedVersion: '2.40.0',
       latestVersion: '2.43.0',
-      outdated: true,
+      updateStatus: 'outdated',
     },
     {
       ref: { kind: 'formula', name: 'curl' },
       installed: true,
       installedVersion: '8.0.0',
-      outdated: false,
+      updateStatus: 'current',
     },
   ];
 
@@ -27,10 +27,10 @@ describe('--json list output contract', () => {
     const parsed = JSON.parse(json) as PackageStatus[];
     expect(parsed).toHaveLength(2);
     expect(parsed[0]?.ref.name).toBe('git');
-    expect(parsed[0]?.outdated).toBe(true);
+    expect(parsed[0]?.updateStatus).toBe('outdated');
     expect(parsed[0]?.latestVersion).toBe('2.43.0');
     expect(parsed[1]?.ref.name).toBe('curl');
-    expect(parsed[1]?.outdated).toBe(false);
+    expect(parsed[1]?.updateStatus).toBe('current');
     expect(parsed[1]?.latestVersion).toBeUndefined();
   });
 

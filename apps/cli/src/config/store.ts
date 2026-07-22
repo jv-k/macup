@@ -324,7 +324,9 @@ export class ConfigStore {
     return { removed, missing };
   }
 
-  pin(pluginId: string, name: string, maxVersion: string): void {
+  // The map that holds a plugin's pins: `pins[pluginId]` for a flat pin, or
+  // `pins[pluginId][subtype]` for a per-subtype pin (ADR 0035). Created lazily.
+  private pinTarget(pluginId: string, subtype?: string): YAMLMap {
     const doc = this.requireDoc();
     let pins = doc.get('pins');
     if (!(pins instanceof YAMLMap)) {
@@ -336,41 +338,92 @@ export class ConfigStore {
       pluginPins = new YAMLMap();
       (pins as YAMLMap).set(pluginId, pluginPins);
     }
-    (pluginPins as YAMLMap).set(name, maxVersion);
+    if (subtype === undefined) return pluginPins as YAMLMap;
+    let sub = (pluginPins as YAMLMap).get(subtype);
+    if (!(sub instanceof YAMLMap)) {
+      sub = new YAMLMap();
+      (pluginPins as YAMLMap).set(subtype, sub);
+    }
+    return sub as YAMLMap;
   }
 
-  unpin(pluginId: string, name: string): void {
+  pin(pluginId: string, name: string, maxVersion: string, subtype?: string): void {
+    this.pinTarget(pluginId, subtype).set(name, maxVersion);
+  }
+
+  unpin(pluginId: string, name: string, subtype?: string): void {
     const pins = this.requireDoc().get('pins');
     if (!(pins instanceof YAMLMap)) return;
     const pluginPins = pins.get(pluginId);
-    if (pluginPins instanceof YAMLMap) pluginPins.delete(name);
+    if (!(pluginPins instanceof YAMLMap)) return;
+    const target = subtype === undefined ? pluginPins : pluginPins.get(subtype);
+    if (target instanceof YAMLMap) target.delete(name);
   }
 
-  skip(pluginId: string, names: readonly string[]): void {
+  // The seq that holds a plugin's skips: `skip[pluginId]` flat, or
+  // `skip[pluginId][subtype]` per-subtype. A flat list and a subtype map can't
+  // coexist (ADR 0035 either/or), so mixing throws rather than silently drop.
+  private skipTarget(pluginId: string, subtype?: string): YAMLSeq {
     const doc = this.requireDoc();
     let skip = doc.get('skip');
     if (!(skip instanceof YAMLMap)) {
       skip = new YAMLMap();
       doc.set('skip', skip);
     }
-    let list = (skip as YAMLMap).get(pluginId);
-    if (!(list instanceof YAMLSeq)) {
-      list = new YAMLSeq();
-      (skip as YAMLMap).set(pluginId, list);
+    const skipMap = skip as YAMLMap;
+    const existing = skipMap.get(pluginId);
+    if (subtype === undefined) {
+      if (existing instanceof YAMLMap) {
+        throw new ErrInvalidConfig(
+          this.paths.applistPath,
+          `${pluginId} has per-subtype skips; skip a specific subtype (e.g. --cask) or clear them first`,
+        );
+      }
+      if (existing instanceof YAMLSeq) return existing;
+      const seq = new YAMLSeq();
+      skipMap.set(pluginId, seq);
+      return seq;
     }
-    const existing = new Set((list as YAMLSeq).items.map(scalarValue));
+    if (existing instanceof YAMLSeq) {
+      throw new ErrInvalidConfig(
+        this.paths.applistPath,
+        `${pluginId} has a flat skip list; clear it before adding a per-subtype skip`,
+      );
+    }
+    let sub = existing;
+    if (!(sub instanceof YAMLMap)) {
+      sub = new YAMLMap();
+      skipMap.set(pluginId, sub);
+    }
+    let seq = (sub as YAMLMap).get(subtype);
+    if (!(seq instanceof YAMLSeq)) {
+      seq = new YAMLSeq();
+      (sub as YAMLMap).set(subtype, seq);
+    }
+    return seq as YAMLSeq;
+  }
+
+  skip(pluginId: string, names: readonly string[], subtype?: string): void {
+    const seq = this.skipTarget(pluginId, subtype);
+    const existing = new Set(seq.items.map(scalarValue));
     for (const name of names) {
       if (!existing.has(name)) {
-        (list as YAMLSeq).add(name);
+        seq.add(name);
         existing.add(name);
       }
     }
   }
 
-  unskip(pluginId: string, names: readonly string[]): void {
+  unskip(pluginId: string, names: readonly string[], subtype?: string): void {
     const skip = this.requireDoc().get('skip');
     if (!(skip instanceof YAMLMap)) return;
-    const list = skip.get(pluginId);
+    const pluginSkip = skip.get(pluginId);
+    const list =
+      subtype === undefined
+        ? pluginSkip
+        : pluginSkip instanceof YAMLMap
+          ? pluginSkip.get(subtype)
+          : undefined;
     if (!(list instanceof YAMLSeq)) return;
     const toRemove = new Set(names);
     list.items = list.items.filter((node) => !toRemove.has(scalarValue(node)));
@@ -380,28 +433,54 @@ export class ConfigStore {
     const doc = this.requireDoc();
     const pinned = new Map<string, string>();
     const skipped = new Set<string>();
+    const bySubtype = new Map<string, { pinned: Map<string, string>; skipped: Set<string> }>();
+    const layer = (subtype: string) => {
+      let l = bySubtype.get(subtype);
+      if (!l) {
+        l = { pinned: new Map(), skipped: new Set() };
+        bySubtype.set(subtype, l);
+      }
+      return l;
+    };
 
+    // pins[pluginId] is a map whose values are EITHER scalars (flat
+    // name→version) OR maps (subtype→name→version). Detect per key so a
+    // legacy flat block and a subtype-nested one both parse (ADR 0035).
     const pins = doc.get('pins');
     if (pins instanceof YAMLMap) {
       const pluginPins = pins.get(pluginId);
       if (pluginPins instanceof YAMLMap) {
         for (const pair of pluginPins.items) {
-          const k = scalarValue(pair.key);
-          const v = scalarValue(pair.value);
-          pinned.set(k, v);
+          const key = scalarValue(pair.key);
+          if (pair.value instanceof YAMLMap) {
+            for (const inner of pair.value.items) {
+              layer(key).pinned.set(scalarValue(inner.key), scalarValue(inner.value));
+            }
+          } else {
+            pinned.set(key, scalarValue(pair.value));
+          }
         }
       }
     }
 
+    // skip[pluginId] is EITHER a seq (flat list of names) OR a map
+    // (subtype→list of names).
     const skip = doc.get('skip');
     if (skip instanceof YAMLMap) {
-      const list = skip.get(pluginId);
-      if (list instanceof YAMLSeq) {
-        for (const item of list.items) skipped.add(scalarValue(item));
+      const pluginSkip = skip.get(pluginId);
+      if (pluginSkip instanceof YAMLSeq) {
+        for (const item of pluginSkip.items) skipped.add(scalarValue(item));
+      } else if (pluginSkip instanceof YAMLMap) {
+        for (const pair of pluginSkip.items) {
+          if (pair.value instanceof YAMLSeq) {
+            const subtype = scalarValue(pair.key);
+            for (const item of pair.value.items) layer(subtype).skipped.add(scalarValue(item));
+          }
+        }
       }
     }
 
-    return { pinned, skipped };
+    return bySubtype.size > 0 ? { pinned, skipped, bySubtype } : { pinned, skipped };
   }
 
   async save(operation: string): Promise<SaveResult> {

@@ -31,7 +31,7 @@ export function filterOutdated(
   statuses: readonly PackageStatus[],
   onlyOutdated: boolean,
 ): PackageStatus[] {
-  return onlyOutdated ? statuses.filter((s) => s.outdated) : [...statuses];
+  return onlyOutdated ? statuses.filter((s) => s.updateStatus === 'outdated') : [...statuses];
 }
 
 /**

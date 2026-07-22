@@ -54,7 +54,7 @@ describe('npm plugin — list', () => {
     const ctx = await makeCtx();
     const result = await npmPlugin.list(ctx, {});
     const ts = result.find((p) => p.ref.name === 'typescript');
-    expect(ts?.outdated).toBe(true);
+    expect(ts?.updateStatus).toBe('outdated');
     expect(ts?.installedVersion).toBe('5.3.3');
     expect(ts?.latestVersion).toBe('5.4.0');
   });
@@ -63,7 +63,7 @@ describe('npm plugin — list', () => {
     const ctx = await makeCtx();
     const result = await npmPlugin.list(ctx, {});
     const nodemon = result.find((p) => p.ref.name === 'nodemon');
-    expect(nodemon?.outdated).toBe(false);
+    expect(nodemon?.updateStatus).toBe('current');
   });
 
   it('filters to only outdated with onlyOutdated=true', async () => {

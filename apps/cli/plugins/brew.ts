@@ -57,10 +57,10 @@ async function fetchFormulas(ctx: PluginContext, onlyOutdated: boolean): Promise
   const result: PackageStatus[] = installed.map((e) => {
     const latest = outdatedMap.get(e.name);
     const status: PackageStatus = {
-      ref: { kind: 'formula', name: e.name },
+      ref: { kind: 'formula', name: e.name, subtype: 'formulas' },
       installed: true,
       installedVersion: e.version,
-      outdated: latest !== undefined,
+      updateStatus: latest !== undefined ? 'outdated' : 'current',
     };
     if (latest !== undefined) {
       status.latestVersion = latest;
@@ -98,10 +98,10 @@ async function fetchCasks(ctx: PluginContext, onlyOutdated: boolean): Promise<Pa
   const result: PackageStatus[] = installed.map((e) => {
     const latest = outdatedMap.get(e.name);
     const status: PackageStatus = {
-      ref: { kind: 'cask', name: e.name },
+      ref: { kind: 'cask', name: e.name, subtype: 'casks' },
       installed: true,
       installedVersion: e.version,
-      outdated: latest !== undefined,
+      updateStatus: latest !== undefined ? 'outdated' : 'current',
     };
     if (latest !== undefined) {
       status.latestVersion = latest;

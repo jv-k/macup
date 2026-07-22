@@ -86,8 +86,8 @@ export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<Out
           displayName: plugin.manifest.displayName,
           available: true,
           checkFailed: false,
-          outdated: statuses.filter((s) => s.updateStatus === 'outdated'),
-          uncheckable: statuses.filter((s) => s.updateStatus === 'unknown'),
+          outdated: statuses.filter((s) => s.installed && s.updateStatus === 'outdated'),
+          uncheckable: statuses.filter((s) => s.installed && s.updateStatus === 'unknown'),
         };
       } catch (err) {
         return {
@@ -166,7 +166,12 @@ export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions
       continue;
     }
     if (p.outdated.length === 0) {
-      lines.push(`  ${green('✓')} ${id}  ${dim('up to date')}`);
+      // Don't claim "up to date" when currency couldn't be verified (ADR 0036).
+      if (p.uncheckable.length > 0) {
+        lines.push(`  ${yellow('?')} ${id}  ${dim(`${p.uncheckable.length} uncheckable`)}`);
+      } else {
+        lines.push(`  ${green('✓')} ${id}  ${dim('up to date')}`);
+      }
       continue;
     }
     const names = p.outdated.slice(0, maxNames).map((s) => s.ref.name);
@@ -178,12 +183,18 @@ export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions
   }
 
   lines.push('');
-  if (report.totalOutdated === 0) {
+  if (report.totalOutdated === 0 && report.totalUncheckable === 0) {
     lines.push(`  ${green('Everything up to date.')}`);
+  } else if (report.totalOutdated === 0) {
+    const noun = report.totalUncheckable === 1 ? 'package' : 'packages';
+    lines.push(
+      `  ${yellow(`${report.totalUncheckable} ${noun} uncheckable`)}  ${dim('· currency could not be determined')}`,
+    );
   } else {
     const noun = report.totalOutdated === 1 ? 'package' : 'packages';
+    const unk = report.totalUncheckable > 0 ? `, ${report.totalUncheckable} uncheckable` : '';
     lines.push(
-      `  ${yellow(`${report.totalOutdated} ${noun} outdated`)}  ${dim('· run `macup all update` to upgrade')}`,
+      `  ${yellow(`${report.totalOutdated} ${noun} outdated${unk}`)}  ${dim('· run `macup all update` to upgrade')}`,
     );
   }
 

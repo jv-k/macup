@@ -9,7 +9,7 @@ import npmPlugin from '../../../plugins/npm';
 import type { CliDeps } from '../../../src/cli/types';
 import { buildCheckCommand } from '../../../src/commands/check';
 import { type FixtureEntry, FixtureExecRunner, loadFixtures } from '../../../src/exec/fixtures';
-import type { ExecRunner } from '../../../src/plugins/types';
+import type { ExecRunner, Plugin } from '../../../src/plugins/types';
 
 // The committed npm recording reports eslint + typescript outdated (2).
 const OUTDATED_FIXTURE_PATH = join(__dirname, '../../fixtures/recordings/npm.json');
@@ -32,13 +32,44 @@ const CLEAN_FIXTURES: FixtureEntry[] = [
   },
 ];
 
-function mkDeps(exec: ExecRunner): CliDeps {
+function mkDeps(exec: ExecRunner, registry: Plugin[] = [npmPlugin]): CliDeps {
   return {
     exec,
     log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-    registry: [npmPlugin],
+    registry,
     signal: new AbortController().signal,
   } as unknown as CliDeps;
+}
+
+// A backend that reports an installed package of undeterminable currency
+// (updateStatus 'unknown') — e.g. an App Store app mas can't Spotlight-index.
+function fakeUncheckable(id: string): Plugin {
+  return {
+    manifest: {
+      id,
+      displayName: id,
+      supportedOS: ['darwin'],
+      requires: [],
+      configKeys: [],
+      capabilities: {
+        list: true,
+        install: false,
+        update: false,
+        track: false,
+        untrack: false,
+        outdated: true,
+      },
+    },
+    check: async () => {},
+    list: async () => [
+      {
+        ref: { kind: id, name: 'Boop' },
+        installed: true,
+        installedVersion: '1.4.0',
+        updateStatus: 'unknown' as const,
+      },
+    ],
+  } as unknown as Plugin;
 }
 
 async function runCheck(exec: ExecRunner, rawArgs: string[] = []): Promise<void> {
@@ -71,6 +102,15 @@ describe('macup check — exit code and summary (#9)', () => {
     await runCheck(new FixtureExecRunner({ fixtures: CLEAN_FIXTURES, onPath: ['npm'] }));
     expect(process.exitCode).toBe(savedExitCode);
     expect(logSpy).toHaveBeenCalledWith('everything up to date');
+  });
+
+  it('exits 1 and names uncheckable packages when a backend cannot determine currency', async () => {
+    const exec = new FixtureExecRunner({ fixtures: [], onPath: [] });
+    await runCommand(buildCheckCommand(mkDeps(exec, [fakeUncheckable('appstore')])) as CommandDef, {
+      rawArgs: [],
+    });
+    expect(process.exitCode).toBe(1);
+    expect(logSpy).toHaveBeenCalledWith('1 appstore uncheckable');
   });
 
   it('--quiet prints nothing but still exits 1 when outdated', async () => {

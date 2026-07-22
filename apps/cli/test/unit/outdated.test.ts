@@ -213,4 +213,30 @@ describe('formatOutdatedReport', () => {
     expect(out).toContain('unavailable');
     expect(out).toContain('not found on PATH');
   });
+
+  it('does not claim "up to date" when only uncheckable packages exist (ADR 0036)', () => {
+    const report: OutdatedReport = {
+      totalOutdated: 0,
+      totalUncheckable: 2,
+      plugins: [
+        {
+          pluginId: 'appstore',
+          displayName: 'APPSTORE',
+          available: true,
+          checkFailed: false,
+          outdated: [],
+          uncheckable: ['Boop', 'Things'].map((name) => ({
+            ref: { kind: 'appstore', name },
+            installed: true,
+            installedVersion: '1',
+            updateStatus: 'unknown' as const,
+          })),
+        },
+      ],
+    };
+    const out = formatOutdatedReport(report);
+    expect(out).not.toContain('up to date');
+    expect(out).toContain('2 packages uncheckable');
+    expect(out).toContain('appstore');
+  });
 });

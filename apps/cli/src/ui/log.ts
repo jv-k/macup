@@ -96,7 +96,7 @@ export function pkgUncheckable(name: string, version: string, pad: number): stri
   const padded = name.padEnd(pad);
   const nm = useColorFn() ? pc.dim(padded) : padded;
   const ver = useColorFn() ? pc.dim(version) : version;
-  return version ? `  ? ${nm} ${ver}` : `  ? ${nm}`;
+  return version ? `  ${SYM.question} ${nm} ${ver}` : `  ${SYM.question} ${nm}`;
 }
 
 // ── Per-package progress counter ────────────────────────────────

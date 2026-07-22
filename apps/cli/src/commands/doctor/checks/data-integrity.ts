@@ -154,6 +154,53 @@ async function verifyPlugin(
   return results;
 }
 
+// skip/pins are keyed by plugin id; the CLI can only ever write a real id, but
+// a hand-edited applist can carry a typo (`skip.bews`) or a bad `skip.all`
+// entry (a plugin id to exclude from the composite, ADR 0037). The per-plugin
+// loop only visits known plugins, so unknown keys are surfaced here or they
+// silently do nothing.
+function orphanedConfigKeys(applist: Applist, deps: CheckDeps): CheckResult[] {
+  const known = new Set(deps.plugins.map((p) => p.manifest.id));
+  const knownList = [...known].sort().join(', ');
+  const results: CheckResult[] = [];
+
+  for (const key of new Set([...Object.keys(applist.skip), ...Object.keys(applist.pins)])) {
+    if (key === 'all' || known.has(key)) continue;
+    results.push({
+      level: 'warn',
+      label: 'Unknown backend',
+      detail: `skip/pins key '${key}' is not a known plugin — it has no effect`,
+      hint: `known plugins: ${knownList}`,
+    });
+  }
+
+  // skip.all lists plugin ids to drop from the composite; each must be real, or
+  // the exclusion silently does nothing.
+  const skipAll = applist.skip.all;
+  if (Array.isArray(skipAll)) {
+    for (const id of skipAll) {
+      if (known.has(id)) continue;
+      results.push({
+        level: 'warn',
+        label: 'Unknown backend in skip.all',
+        detail: `skip.all lists '${id}', which is not a known plugin — it excludes nothing`,
+        hint: `known plugins: ${knownList}`,
+      });
+    }
+  }
+
+  // The composite owns no packages, so a pin under it can never apply.
+  if (applist.pins.all !== undefined) {
+    results.push({
+      level: 'warn',
+      label: 'Invalid pin',
+      detail: "pins.all has no effect — the composite 'all' owns no packages of its own",
+    });
+  }
+
+  return results;
+}
+
 export async function check(deps: CheckDeps): Promise<Section> {
   const title = 'Data integrity';
   const applist = await loadApplist(deps);
@@ -185,6 +232,7 @@ export async function check(deps: CheckDeps): Promise<Section> {
       .map((p) => verifyPlugin(p, applist, deps)),
   );
   const results = perPlugin.flat();
+  results.push(...orphanedConfigKeys(applist, deps));
   if (results.length === 0) {
     results.push({ level: 'ok', label: 'Tracked packages', detail: 'nothing tracked yet' });
   }

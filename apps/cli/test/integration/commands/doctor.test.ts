@@ -1,4 +1,8 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { check as checkDataIntegrity } from '../../../src/commands/doctor/checks/data-integrity';
 import { check as checkPlugins } from '../../../src/commands/doctor/checks/plugins';
 import type { CheckDeps } from '../../../src/commands/doctor/report';
 import { buildReport, exitCodeFor } from '../../../src/commands/doctor/report';
@@ -142,5 +146,30 @@ describe('doctor — probe cancellation', () => {
     });
     await checkPlugins(makeDeps({ exec, plugins: [plugin], signal: controller.signal }));
     expect(sawAbort).toBe(true);
+  });
+});
+
+describe('doctor — orphaned skip/pins keys', () => {
+  it('flags a skip/pins key that is not a known plugin, and a bad skip.all id', async () => {
+    // Hand-edited applist: `bews` is a typo (no such plugin), and skip.all
+    // lists `systm` (typo of `system`). The CLI can't produce these — only a
+    // manual edit — so doctor is where they surface (ADR 0037).
+    const dir = await mkdtemp(join(tmpdir(), 'macup-doctor-'));
+    const applistPath = join(dir, 'applist.yaml');
+    await writeFile(applistPath, 'skip:\n  bews:\n    - ffmpeg\n  all:\n    - systm\n', 'utf8');
+    const plugins = [
+      fakePlugin('brew', [], async () => []),
+      fakePlugin('system', [], async () => []),
+    ];
+    const section = await checkDataIntegrity(
+      makeDeps({
+        plugins,
+        paths: { applistPath, configDir: dir, backupDir: join(dir, 'b'), source: 'home-macup' },
+      }),
+    );
+    const details = section.results.map((r) => r.detail ?? '').join('\n');
+    expect(details).toContain('bews'); // unknown backend key
+    expect(details).toContain('systm'); // unknown id inside skip.all
+    await rm(dir, { recursive: true, force: true });
   });
 });

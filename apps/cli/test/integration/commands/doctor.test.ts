@@ -150,26 +150,53 @@ describe('doctor — probe cancellation', () => {
 });
 
 describe('doctor — orphaned skip/pins keys', () => {
-  it('flags a skip/pins key that is not a known plugin, and a bad skip.all id', async () => {
-    // Hand-edited applist: `bews` is a typo (no such plugin), and skip.all
-    // lists `systm` (typo of `system`). The CLI can't produce these — only a
-    // manual edit — so doctor is where they surface (ADR 0037).
+  // known plugins for these checks: brew, npm, system (no 'all' — it is the
+  // composite, excluded from deps.plugins as in production).
+  const knownPlugins = () => [
+    fakePlugin('brew', [], async () => []),
+    fakePlugin('npm', [], async () => []),
+    fakePlugin('system', [], async () => []),
+  ];
+  async function runIntegrity(applistYaml: string) {
     const dir = await mkdtemp(join(tmpdir(), 'macup-doctor-'));
     const applistPath = join(dir, 'applist.yaml');
-    await writeFile(applistPath, 'skip:\n  bews:\n    - ffmpeg\n  all:\n    - systm\n', 'utf8');
-    const plugins = [
-      fakePlugin('brew', [], async () => []),
-      fakePlugin('system', [], async () => []),
-    ];
+    await writeFile(applistPath, applistYaml, 'utf8');
     const section = await checkDataIntegrity(
       makeDeps({
-        plugins,
+        plugins: knownPlugins(),
         paths: { applistPath, configDir: dir, backupDir: join(dir, 'b'), source: 'home-macup' },
       }),
     );
-    const details = section.results.map((r) => r.detail ?? '').join('\n');
-    expect(details).toContain('bews'); // unknown backend key
-    expect(details).toContain('systm'); // unknown id inside skip.all
     await rm(dir, { recursive: true, force: true });
+    return section;
+  }
+
+  it('warns (never errors) on an unknown key, a bad skip.all id, and pins.all — not on real ids', async () => {
+    // The CLI can't produce these — only a hand edit of the dotfile-portable
+    // applist — so doctor is where they surface (ADR 0037).
+    const section = await runIntegrity(
+      'skip:\n  bews:\n    - ffmpeg\n  all:\n    - systm\n    - npm\npins:\n  all:\n    foo: "1.0"\n',
+    );
+    const details = section.results
+      .filter((r) => r.level === 'warn')
+      .map((r) => r.detail ?? '')
+      .join('\n');
+    expect(details).toContain("'bews'"); // unknown backend key
+    expect(details).toContain("'systm'"); // unknown id inside skip.all
+    expect(details).toContain('pins.all'); // meaningless pin on the composite
+    expect(details).not.toContain("'npm'"); // real plugin id in skip.all — accepted
+    expect(section.results.every((r) => r.level !== 'error')).toBe(true);
+  });
+
+  it('does not warn on a valid config (no false positives)', async () => {
+    const section = await runIntegrity('skip:\n  brew:\n    - git\n  all:\n    - system\n');
+    const orphaned = section.results.filter((r) => (r.detail ?? '').includes('not a known plugin'));
+    expect(orphaned).toEqual([]);
+  });
+
+  it('flags skip.all written as a nested map instead of a flat id list', async () => {
+    const section = await runIntegrity('skip:\n  all:\n    brew:\n      - git\n');
+    const details = section.results.map((r) => r.detail ?? '').join('\n');
+    expect(details).toContain('skip.all must be a flat list');
   });
 });

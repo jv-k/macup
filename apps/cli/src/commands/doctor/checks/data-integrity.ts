@@ -187,6 +187,14 @@ function orphanedConfigKeys(applist: Applist, deps: CheckDeps): CheckResult[] {
         hint: `known plugins: ${knownList}`,
       });
     }
+  } else if (skipAll !== undefined) {
+    // The union schema also accepts a subtype-nested map here, but skip.all is
+    // a flat list of plugin ids (ADR 0037); a map excludes nothing.
+    results.push({
+      level: 'warn',
+      label: 'Invalid skip.all',
+      detail: 'skip.all must be a flat list of plugin ids, not a nested map — it excludes nothing',
+    });
   }
 
   // The composite owns no packages, so a pin under it can never apply.

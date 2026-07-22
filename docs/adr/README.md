@@ -60,3 +60,8 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0030](0030-pin-is-a-version-ceiling.md) | A pin is a version ceiling, not an exact lock | accepted |
 | [0031](0031-track-untrack-verbs.md) | Applist verbs are track and untrack, not add and remove | accepted |
 | [0032](0032-execrunner-interface-and-path-lookup.md) | Keep the ExecRunner interface, move the PATH lookup to a leaf | accepted |
+| [0033](0033-host-owns-composite-fan-out.md) | The host owns the composite fan-out; `all` honors skip and pin | accepted |
+| [0034](0034-surface-unenforceable-pins.md) | Surface pins that can't be evaluated instead of silently upgrading | accepted |
+| [0035](0035-subtype-aware-skip-pin.md) | Skip and pin are subtype-aware, via a backward-compatible union | accepted |
+| [0036](0036-package-currency-tri-state.md) | Package currency is a tri-state (current, outdated, unknown), not a boolean | accepted |
+| [0037](0037-exclude-backend-from-all.md) | Exclude a backend from `all` via `skip.all` listing plugin ids | accepted |

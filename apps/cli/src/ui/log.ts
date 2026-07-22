@@ -91,7 +91,8 @@ export function pkgNotInstalled(name: string, pad: number): string {
 }
 
 // Installed, but currency couldn't be determined (updateStatus 'unknown').
-// A dimmed `?` marks it as "not verified", distinct from up-to-date (ADR 0036).
+// A yellow `?` (SYM.question) marks it as "not verified", distinct from the
+// green up-to-date glyph (ADR 0036).
 export function pkgUncheckable(name: string, version: string, pad: number): string {
   const padded = name.padEnd(pad);
   const nm = useColorFn() ? pc.dim(padded) : padded;

@@ -15,7 +15,7 @@ function report(
       installed: true,
       installedVersion: '1',
       latestVersion: '2',
-      outdated: true,
+      updateStatus: 'outdated' as const,
     })),
   }));
   return { plugins, totalOutdated: plugins.reduce((s, p) => s + p.outdated.length, 0) };

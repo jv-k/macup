@@ -66,11 +66,18 @@ describe('brew plugin — list', () => {
     expect(result).toHaveLength(6);
   });
 
+  it('tags each package with its subtype so skip/pin can scope per subtype', async () => {
+    const ctx = await makeCtx();
+    const result = await brewPlugin.list(ctx, {});
+    expect(result.find((p) => p.ref.name === 'git')?.ref.subtype).toBe('formulas');
+    expect(result.find((p) => p.ref.kind === 'cask')?.ref.subtype).toBe('casks');
+  });
+
   it('flags outdated packages with latestVersion from `brew outdated --json=v2`', async () => {
     const ctx = await makeCtx();
     const result = await brewPlugin.list(ctx, { subtype: 'formulas' });
     const git = result.find((p) => p.ref.name === 'git');
-    expect(git?.outdated).toBe(true);
+    expect(git?.updateStatus).toBe('outdated');
     expect(git?.installedVersion).toBe('2.40.0');
     expect(git?.latestVersion).toBe('2.43.0');
   });
@@ -79,7 +86,7 @@ describe('brew plugin — list', () => {
     const ctx = await makeCtx();
     const result = await brewPlugin.list(ctx, { subtype: 'formulas' });
     const curl = result.find((p) => p.ref.name === 'curl');
-    expect(curl?.outdated).toBe(false);
+    expect(curl?.updateStatus).toBe('current');
   });
 
   it('filters to only outdated with onlyOutdated=true', async () => {

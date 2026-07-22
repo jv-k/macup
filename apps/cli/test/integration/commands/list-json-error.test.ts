@@ -61,7 +61,7 @@ function healthyPlugin(): Plugin {
         ref: { kind: 'fake', name: 'alpha' },
         installed: true,
         installedVersion: '1.0.0',
-        outdated: false,
+        updateStatus: 'current',
       },
     ],
   };

@@ -406,15 +406,24 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         // rather than silently upgrading across them.
         const store = await deps.getStore();
         const policy = store.selectionFor(manifest.id);
-        const { upgradable, pinnedBlocked, skipped } = resolveSelection(
+        const { upgradable, pinnedBlocked, skipped, pinUnenforceable } = resolveSelection(
           statuses,
           policy,
           manifest.compareVersions,
         );
-        let filtered = upgradable;
+        // Unenforceable pins still upgrade (ADR 0023 stays permissive), but we
+        // say so first instead of applying them silently (ADR 0034).
+        let filtered = [...upgradable, ...pinUnenforceable];
         if (pinnedBlocked.length > 0) {
           console.log(
             `Pinned (skipping): ${pinnedBlocked.map((s) => `${s.ref.name}@${s.pinnedAt}`).join(', ')}`,
+          );
+        }
+        if (pinUnenforceable.length > 0) {
+          console.log(
+            `Pin not enforceable (upgrading anyway): ${pinUnenforceable
+              .map((s) => `${s.ref.name}@${s.pinnedAt}`)
+              .join(', ')}`,
           );
         }
         if (skipped.length > 0) {
@@ -604,13 +613,29 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
   // Pin/unpin/skip/unskip are config-only commands available to any plugin
   // with configKeys (i.e. any plugin that tracks packages in applist.yaml).
   if (manifest.configKeys.length > 0) {
+    // skip/pin default to the FLAT form (binds every subtype); a subtype scopes
+    // the write only when --cask/--formula/--subtype is given explicitly. This
+    // differs from track/update, which default to the first subtype (ADR 0035).
+    const configSubtype = (
+      args: Record<string, unknown>,
+    ): { ok: true; subtype: string | undefined } | { ok: false } => {
+      const resolved = resolveSubtypeOrExit(plugin, args);
+      if (!resolved.ok) return { ok: false };
+      const flagGiven =
+        Boolean(args.cask) ||
+        Boolean(args.formula) ||
+        (typeof args.subtype === 'string' && args.subtype !== '');
+      return { ok: true, subtype: flagGiven ? resolved.subtype : undefined };
+    };
+
     subCommands.pin = defineCommand({
       meta: { name: 'pin', description: 'Pin a package to a maximum version.' },
       args: {
+        ...subtypeArg,
         name: { type: 'positional', required: true, description: 'Package name.' },
         version: { type: 'positional', required: true, description: 'Maximum version.' },
       },
-      async run({ rawArgs }) {
+      async run({ args, rawArgs }) {
         const positionals = requireNames(rawArgs, manifest.id, 'pin <name> <version>');
         if (!positionals || positionals.length < 2) {
           if (positionals) {
@@ -619,11 +644,13 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           }
           return;
         }
+        const sub = configSubtype(args);
+        if (!sub.ok) return;
         const [name, version] = positionals as [string, string];
         await commitMutation(
           deps,
           'pin',
-          (store) => store.pin(manifest.id, name, version),
+          (store) => store.pin(manifest.id, name, version, sub.subtype),
           () => console.log(log.success(`Pinned ${name} to ${version} (${manifest.id})`)),
         );
       },
@@ -632,15 +659,18 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     subCommands.unpin = defineCommand({
       meta: { name: 'unpin', description: 'Remove a version pin.' },
       args: {
+        ...subtypeArg,
         name: { type: 'positional', required: true, description: 'Package name.' },
       },
-      async run({ rawArgs }) {
+      async run({ args, rawArgs }) {
         const names = requireNames(rawArgs, manifest.id, 'unpin');
         if (!names) return;
+        const sub = configSubtype(args);
+        if (!sub.ok) return;
         await commitMutation(
           deps,
           'unpin',
-          (store) => store.unpin(manifest.id, names[0] as string),
+          (store) => store.unpin(manifest.id, names[0] as string, sub.subtype),
           () => console.log(log.success(`Unpinned ${names[0]} (${manifest.id})`)),
         );
       },
@@ -649,15 +679,18 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     subCommands.skip = defineCommand({
       meta: { name: 'skip', description: 'Skip packages from future updates.' },
       args: {
+        ...subtypeArg,
         packages: { type: 'positional', required: true, description: 'Package name(s).' },
       },
-      async run({ rawArgs }) {
+      async run({ args, rawArgs }) {
         const names = requireNames(rawArgs, manifest.id, 'skip');
         if (!names) return;
+        const sub = configSubtype(args);
+        if (!sub.ok) return;
         await commitMutation(
           deps,
           'skip',
-          (store) => store.skip(manifest.id, names),
+          (store) => store.skip(manifest.id, names, sub.subtype),
           () =>
             console.log(log.success(`Skipped from ${manifest.id} updates: ${names.join(', ')}`)),
         );
@@ -667,15 +700,18 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     subCommands.unskip = defineCommand({
       meta: { name: 'unskip', description: 'Remove packages from the skip list.' },
       args: {
+        ...subtypeArg,
         packages: { type: 'positional', required: true, description: 'Package name(s).' },
       },
-      async run({ rawArgs }) {
+      async run({ args, rawArgs }) {
         const names = requireNames(rawArgs, manifest.id, 'unskip');
         if (!names) return;
+        const sub = configSubtype(args);
+        if (!sub.ok) return;
         await commitMutation(
           deps,
           'unskip',
-          (store) => store.unskip(manifest.id, names),
+          (store) => store.unskip(manifest.id, names, sub.subtype),
           () => console.log(log.success(`Unskipped (${manifest.id}): ${names.join(', ')}`)),
         );
       },

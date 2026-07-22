@@ -48,7 +48,7 @@ async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<P
       ref: { kind: 'pnpm', name },
       installed: true,
       installedVersion: meta.version,
-      outdated: outdated !== undefined,
+      updateStatus: outdated !== undefined ? 'outdated' : 'current',
     };
     if (outdated?.latest !== undefined) {
       status.latestVersion = outdated.latest;

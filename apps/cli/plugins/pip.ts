@@ -77,7 +77,7 @@ async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<P
       ref: { kind: 'pip', name: e.name },
       installed: true,
       installedVersion: e.version,
-      outdated: latestVersion !== undefined,
+      updateStatus: latestVersion !== undefined ? 'outdated' : 'current',
     };
     if (latestVersion !== undefined) status.latestVersion = latestVersion;
     return status;

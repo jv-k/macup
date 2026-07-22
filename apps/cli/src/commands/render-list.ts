@@ -11,8 +11,8 @@ function renderStatusBlock(
   statuses: PackageStatus[],
   onlyOutdated: boolean,
 ): string[] {
-  const upToDate = statuses.filter((s) => s.installed && !s.outdated);
-  const outdated = statuses.filter((s) => s.installed && s.outdated);
+  const upToDate = statuses.filter((s) => s.installed && s.updateStatus === 'current');
+  const outdated = statuses.filter((s) => s.installed && s.updateStatus === 'outdated');
   const notInstalled = statuses.filter((s) => !s.installed);
   // Per-column name widths: padding the up-to-date column to the widest
   // outdated name (or vice-versa) wastes horizontal space and pushes the

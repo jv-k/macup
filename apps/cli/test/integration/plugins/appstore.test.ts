@@ -126,7 +126,9 @@ describe('appstore plugin — list filesystem fallback', () => {
         ref: { kind: 'appstore', name: 'Boop', id: 'com.okatbest.boop' },
         installed: true,
         installedVersion: '1.4.0',
-        outdated: false,
+        // Fallback (bundle-id) path can't reach mas outdated → 'current' today.
+        // The appstore slice fixes this to 'unknown' (ADR 0036).
+        updateStatus: 'current',
       },
     ]);
   });

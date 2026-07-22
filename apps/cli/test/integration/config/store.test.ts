@@ -185,6 +185,40 @@ describe('ConfigStore — pins and skip', () => {
     expect(pol.skipped.has('legacy-dep')).toBe(true);
   });
 
+  it('selectionFor exposes a subtype-nested skip under bySubtype, not the flat set', async () => {
+    // ADR 0035: skip.brew.casks binds only casks. The flat set stays empty so
+    // a same-named formula is untouched; resolveSelection reads the layer.
+    await seed('skip:\n  brew:\n    casks:\n      - docker\n');
+    const s = await store();
+    const pol = s.selectionFor('brew');
+    expect(pol.skipped.has('docker')).toBe(false);
+    expect(pol.bySubtype?.get('casks')?.skipped.has('docker')).toBe(true);
+  });
+
+  it('selectionFor exposes a subtype-nested pin under bySubtype', async () => {
+    await seed('pins:\n  brew:\n    casks:\n      docker: 4.30.0\n');
+    const s = await store();
+    const pol = s.selectionFor('brew');
+    expect(pol.pinned.has('docker')).toBe(false);
+    expect(pol.bySubtype?.get('casks')?.pinned.get('docker')).toBe('4.30.0');
+  });
+
+  it('skip/pin with a subtype write under the nested subtype block (round-trip)', async () => {
+    await seed('brew:\n  casks:\n    - docker\n');
+    const s = await store();
+    s.skip('brew', ['docker'], 'casks');
+    s.pin('brew', 'docker', '4.30.0', 'casks');
+    await s.save('skip');
+
+    const s2 = new ConfigStore({ applistPath, backupDir });
+    await s2.load();
+    const pol = s2.selectionFor('brew');
+    expect(pol.skipped.has('docker')).toBe(false);
+    expect(pol.pinned.has('docker')).toBe(false);
+    expect(pol.bySubtype?.get('casks')?.skipped.has('docker')).toBe(true);
+    expect(pol.bySubtype?.get('casks')?.pinned.get('docker')).toBe('4.30.0');
+  });
+
   it('unpin removes a pin entry', async () => {
     await seed('pins:\n  npm:\n    typescript: 5.3.3\n');
     const s = await store();

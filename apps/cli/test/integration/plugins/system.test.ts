@@ -43,7 +43,7 @@ describe('system plugin — list', () => {
     const result = await systemPlugin.list(ctx, {});
     const names = result.map((p) => p.ref.name);
     expect(names).toEqual(['macOS Sequoia 15.4-24E5228e', 'Safari17.5-20H30SafariSeed1']);
-    expect(result.every((p) => p.outdated)).toBe(true);
+    expect(result.every((p) => p.updateStatus === 'outdated')).toBe(true);
   });
 
   it('returns an empty list when no updates are available', async () => {

@@ -66,9 +66,16 @@ async function verifyPlugin(
 ): Promise<CheckResult[]> {
   const m = plugin.manifest;
   const tracked = m.configKeys.flatMap((key) => [...trackedFor(applist, key)]);
-  const pins = applist.pins[m.id] ?? {};
-  const skips = applist.skip[m.id] ?? [];
-  if (tracked.length === 0 && Object.keys(pins).length === 0 && skips.length === 0) {
+  // Flatten both config shapes to leaf name→version / name entries. The
+  // subtype-precise checks (does this subtype exist? is skip.all a plugin-id
+  // list?) are a separate doctor concern; here we verify the names resolve.
+  const pinsRaw = applist.pins[m.id] ?? {};
+  const pins: [string, string][] = Object.entries(pinsRaw).flatMap(([k, v]) =>
+    typeof v === 'string' ? [[k, v] as [string, string]] : Object.entries(v),
+  );
+  const skipsRaw = applist.skip[m.id] ?? [];
+  const skips = Array.isArray(skipsRaw) ? skipsRaw : Object.values(skipsRaw).flat();
+  if (tracked.length === 0 && pins.length === 0 && skips.length === 0) {
     return [];
   }
 
@@ -106,7 +113,7 @@ async function verifyPlugin(
     });
   }
 
-  for (const [name, pin] of Object.entries(pins)) {
+  for (const [name, pin] of pins) {
     if (!trackedSet.has(name)) {
       results.push({
         level: 'warn',

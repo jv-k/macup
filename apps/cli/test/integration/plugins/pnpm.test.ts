@@ -91,7 +91,7 @@ describe('pnpm plugin — list', () => {
     const ctx = await makeCtx();
     const result = await pnpmPlugin.list(ctx, {});
     const ts = result.find((p) => p.ref.name === 'typescript');
-    expect(ts?.outdated).toBe(true);
+    expect(ts?.updateStatus).toBe('outdated');
     expect(ts?.installedVersion).toBe('5.3.3');
     expect(ts?.latestVersion).toBe('6.0.3');
   });
@@ -100,7 +100,7 @@ describe('pnpm plugin — list', () => {
     const ctx = await makeCtx();
     const result = await pnpmPlugin.list(ctx, {});
     const prettier = result.find((p) => p.ref.name === 'prettier');
-    expect(prettier?.outdated).toBe(false);
+    expect(prettier?.updateStatus).toBe('current');
   });
 
   it('filters to only outdated', async () => {

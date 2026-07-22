@@ -39,7 +39,7 @@ function mkPlugin(opts: {
         installed: true,
         installedVersion: '1.0.0',
         latestVersion: '2.0.0',
-        outdated: true,
+        updateStatus: 'outdated',
       }));
     },
   };
@@ -122,7 +122,7 @@ describe('formatOutdatedReport', () => {
         installed: true,
         installedVersion: '1',
         latestVersion: '2',
-        outdated: true,
+        updateStatus: 'outdated' as const,
       })),
     }));
     return {

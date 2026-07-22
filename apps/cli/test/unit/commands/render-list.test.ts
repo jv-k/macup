@@ -16,7 +16,7 @@ function st(
     installed: opts.installed ?? true,
     installedVersion: opts.installedVersion,
     latestVersion: opts.latestVersion,
-    outdated: opts.latestVersion !== undefined,
+    updateStatus: opts.latestVersion !== undefined ? 'outdated' : 'current',
   };
 }
 

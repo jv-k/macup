@@ -30,6 +30,18 @@ export type ApplistKey = z.infer<typeof ApplistKeySchema>;
 
 const StringList = z.array(z.string()).default([]);
 
+// A plugin's skip entry is EITHER a flat list of names (binds every subtype)
+// OR a subtype→names map for per-subtype precision (ADR 0035). The `all`
+// pseudo-plugin uses the flat form to list plugin ids to exclude (ADR 0037).
+const SkipEntry = z.union([z.array(z.string()), z.record(z.string(), z.array(z.string()))]);
+
+// A plugin's pin entry is EITHER a flat name→version map OR a
+// subtype→(name→version) map (ADR 0035).
+const PinEntry = z.union([
+  z.record(z.string(), z.string()),
+  z.record(z.string(), z.record(z.string(), z.string())),
+]);
+
 export const BrewListSchema = z
   .object({
     formulas: StringList,
@@ -48,8 +60,8 @@ export const ApplistSchema = z.object({
   pnpm: StringList,
   pip: StringList,
   brew: BrewListSchema,
-  pins: z.record(z.string(), z.record(z.string(), z.string())).default({}),
-  skip: z.record(z.string(), z.array(z.string())).default({}),
+  pins: z.record(z.string(), PinEntry).default({}),
+  skip: z.record(z.string(), SkipEntry).default({}),
 });
 
 export type Applist = z.infer<typeof ApplistSchema>;

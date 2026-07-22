@@ -38,7 +38,7 @@ describe('xcode plugin — list', () => {
     const app = result.find((p) => p.ref.kind === 'xcode-app');
     expect(app?.installedVersion).toBe('15.2');
     expect(app?.latestVersion).toBe('15.4');
-    expect(app?.outdated).toBe(true);
+    expect(app?.updateStatus).toBe('outdated');
   });
 
   it('reports Command Line Tools via pkgutil version string', async () => {

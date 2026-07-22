@@ -56,12 +56,16 @@ describe('createAllPlugin — list', () => {
     const p1: Plugin = {
       manifest: mkManifest('a'),
       check: async () => {},
-      list: async () => [{ ref: { kind: 'a', name: 'x' }, installed: true, outdated: false }],
+      list: async () => [
+        { ref: { kind: 'a', name: 'x' }, installed: true, updateStatus: 'current' },
+      ],
     };
     const p2: Plugin = {
       manifest: mkManifest('b'),
       check: async () => {},
-      list: async () => [{ ref: { kind: 'b', name: 'y' }, installed: true, outdated: false }],
+      list: async () => [
+        { ref: { kind: 'b', name: 'y' }, installed: true, updateStatus: 'current' },
+      ],
     };
     const all = createAllPlugin([p1, p2]);
     const result = await all.list(makeCtx(), {});
@@ -73,7 +77,9 @@ describe('createAllPlugin — list', () => {
     const good: Plugin = {
       manifest: mkManifest('good'),
       check: async () => {},
-      list: async () => [{ ref: { kind: 'g', name: 'ok' }, installed: true, outdated: false }],
+      list: async () => [
+        { ref: { kind: 'g', name: 'ok' }, installed: true, updateStatus: 'current' },
+      ],
     };
     const bad: Plugin = {
       manifest: mkManifest('bad'),
@@ -107,7 +113,7 @@ describe('createAllPlugin — update', () => {
             {
               ref: { kind: 'a', name: 'x' },
               installed: true,
-              outdated: true,
+              updateStatus: 'outdated',
               latestVersion: '2',
             },
           ];
@@ -137,7 +143,9 @@ describe('createAllPlugin — update', () => {
     const bad: Plugin = {
       manifest: mkManifest('bad'),
       check: async () => {},
-      list: async () => [{ ref: { kind: 'b', name: 'b1' }, installed: true, outdated: true }],
+      list: async () => [
+        { ref: { kind: 'b', name: 'b1' }, installed: true, updateStatus: 'outdated' },
+      ],
       update: async () => {
         throw new Error('brew fail');
       },
@@ -145,7 +153,9 @@ describe('createAllPlugin — update', () => {
     const good: Plugin = {
       manifest: mkManifest('good'),
       check: async () => {},
-      list: async () => [{ ref: { kind: 'g', name: 'g1' }, installed: true, outdated: true }],
+      list: async () => [
+        { ref: { kind: 'g', name: 'g1' }, installed: true, updateStatus: 'outdated' },
+      ],
       update: async (_ctx, refs: readonly PackageRef[]) => {
         calls.push(...refs.map((r) => r.name));
       },

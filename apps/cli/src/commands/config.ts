@@ -58,12 +58,24 @@ export async function buildConfigReport(paths: PathResolution): Promise<ConfigRe
     } else {
       report.schemaValid = true;
       report.schemaVersion = result.data.version;
+      // Count leaf entries across both shapes: a pin value is either a
+      // version string (flat) or a subtype→version map (nested); a skip value
+      // is either a name list (flat) or a subtype→names map (nested).
       report.pinsCount = Object.values(result.data.pins).reduce(
-        (acc, pluginPins) => acc + Object.keys(pluginPins).length,
+        (acc, entry) =>
+          acc +
+          Object.values(entry).reduce(
+            (n, v) => n + (typeof v === 'string' ? 1 : Object.keys(v).length),
+            0,
+          ),
         0,
       );
       report.skipCount = Object.values(result.data.skip).reduce(
-        (acc, list) => acc + list.length,
+        (acc, entry) =>
+          acc +
+          (Array.isArray(entry)
+            ? entry.length
+            : Object.values(entry).reduce((n, list) => n + list.length, 0)),
         0,
       );
     }

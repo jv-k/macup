@@ -31,14 +31,14 @@ function fakePlugin(): Plugin {
         installed: true,
         installedVersion: '1.0.0',
         latestVersion: '1.1.0',
-        outdated: true,
+        updateStatus: 'outdated',
       },
       {
         ref: { kind: 'fake', name: 'beta' },
         installed: true,
         installedVersion: '2.0.0',
         latestVersion: '2.1.0',
-        outdated: true,
+        updateStatus: 'outdated',
       },
     ],
     update: vi.fn(async () => {}),
@@ -119,7 +119,7 @@ describe('update subcommand — positional names', () => {
         installed: true,
         installedVersion: '2.1.4',
         latestVersion: '2.2.2',
-        outdated: true,
+        updateStatus: 'outdated',
       },
     ];
     const cmd = commandsFromManifest(plugin, {

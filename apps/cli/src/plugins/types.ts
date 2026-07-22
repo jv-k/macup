@@ -7,14 +7,29 @@ export interface PackageRef {
   name: string;
   id?: string;
   pinnedMaxVersion?: string;
+  /**
+   * The plugin subtype this package belongs to (e.g. 'casks' | 'formulas' for
+   * brew), when the plugin has subtypes. Lets skip/pin scope to one subtype so
+   * a formula and a cask sharing a name are treated independently (ADR 0035).
+   */
+  subtype?: string;
 }
+
+/**
+ * A package's currency: whether the backend reports it up to date, behind a
+ * newer version, or — for a degraded backend that can't tell (e.g. an App
+ * Store app `mas` can't see) — undeterminable. Replaces a bare `outdated`
+ * boolean so "couldn't check" is a first-class state, never a false "current"
+ * (ADR 0036).
+ */
+export type UpdateStatus = 'current' | 'outdated' | 'unknown';
 
 export interface PackageStatus {
   ref: PackageRef;
   installed: boolean;
   installedVersion?: string;
   latestVersion?: string;
-  outdated: boolean;
+  updateStatus: UpdateStatus;
   pinnedAt?: string;
 }
 

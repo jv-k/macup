@@ -400,7 +400,7 @@ Bundles are a **layer above plugins**: they resolve per-plugin package lists and
 
 The [v1.0.0 milestone](https://github.com/jv-k/macup/milestone/1) tracks the release
 gate. Everything after it carries the `roadmap:post-1.0` label and lives on the
-[macup project board](https://github.com/users/jv-k/projects/11); this section lists
+[macup project board](https://github.com/users/jv-k/projects/15); this section lists
 the headline arcs, not the full backlog.
 
 ### 8.1 Built (v1.0.0 tagged; release gated)

@@ -11,7 +11,7 @@ states plainly that it "requires root privileges to uninstall apps".
 
 macup has never escalated. Nothing in the tree invokes `sudo`, and the only occurrences of the word
 are comments noting that a *backend's* own sudo prompt may appear in user-action output.
-`plugins/system.ts` runs `softwareupdate --install <label> --verbose` bare, and ADR 0037 cites that
+`apps/cli/plugins/system.ts` runs `softwareupdate --install <label> --verbose` bare, and ADR 0037 cites that
 same sudo requirement as a reason to keep `system` out of the composite. The project's instinct so
 far has been to route around escalation rather than adopt it.
 
@@ -25,7 +25,7 @@ supported", escaping only inside Docker, Podman, Kubernetes, and hosted CI. A ba
 and appstore is exactly the case that needs both, so running the whole process as root breaks the
 larger half of it.
 
-macup would also read the wrong config. `config/paths.ts` falls back to
+macup would also read the wrong config. `apps/cli/src/config/paths.ts` falls back to
 `join(home, '.config', 'macup', 'applist.yaml')`, so under `sudo`, where `HOME` is `/var/root`,
 macup resolves a nonexistent applist, sees an empty tracked set, and backs out nothing. Under
 `sudo -E` it instead writes root-owned backups into the user's config directory, which the user then
@@ -80,7 +80,7 @@ logging, and redaction continue to apply.
   reason this decision is recorded rather than assumed.
 - The blast radius stays auditable. Exactly one command runs elevated, it is named in the manifest,
   and a reviewer can confirm the whole surface by reading `elevates` declarations.
-- `plugins/system.ts` runs `softwareupdate --install` without the root it needs, which this
+- `apps/cli/plugins/system.ts` runs `softwareupdate --install` without the root it needs, which this
   mechanism reduces to a one-line manifest change (`elevates: ['install']`). Making that fix is out
   of scope here and wants its own issue.
 - The run must finish inside sudo's credential timeout, five minutes by default. A back-out large

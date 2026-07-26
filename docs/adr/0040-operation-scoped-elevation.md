@@ -83,8 +83,11 @@ logging, and redaction continue to apply.
 - The blast radius stays auditable. Exactly one command runs elevated, it is named in the manifest,
   and a reviewer can confirm the whole surface by reading `elevates` declarations.
 - `apps/cli/plugins/system.ts` runs `softwareupdate --install` without the root it needs, which this
-  mechanism reduces to a one-line manifest change (`elevates: ['install']`). Making that fix is out
-  of scope here and wants its own issue.
+  mechanism addresses with `elevates: ['install']`. Making that fix is out of scope here and is
+  tracked as #108. Note that it is a one-line change only in the simplest case: `softwareupdate(8)`
+  documents `--user` and `--stdinpass`, both Apple silicon only, for supplying a volume-owner
+  credential, so an OS update there may want owner authorization on top of root. `elevates` does not
+  express that, and #108 carries the question.
 - The run must finish inside sudo's credential timeout, five minutes by default. A back-out large
   enough to exceed it will re-prompt, and that prompt would arrive mid-pane. It is the case to
   watch.

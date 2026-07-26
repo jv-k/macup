@@ -9,11 +9,13 @@ targets need no special privilege: `brew uninstall`, `npm uninstall -g`, `pnpm r
 `pip uninstall -y` all run as the user. The fifth does not. `mas uninstall` exists in mas 6.0.1 and
 states plainly that it "requires root privileges to uninstall apps".
 
-macup has never escalated. Nothing in the tree invokes `sudo`, and the only occurrences of the word
-are comments noting that a *backend's* own sudo prompt may appear in user-action output.
-`apps/cli/plugins/system.ts` runs `softwareupdate --install <label> --verbose` bare, and ADR 0037 cites that
-same sudo requirement as a reason to keep `system` out of the composite. The project's instinct so
-far has been to route around escalation rather than adopt it.
+macup has never escalated. No code path in the shipped CLI invokes `sudo`, and the only occurrences
+of the word under `apps/cli/` are comments noting that a *backend's* own sudo prompt may appear in
+user-action output. (CI workflows do use it, to install fonts for the screenshot job, which says
+nothing about the binary.) `apps/cli/plugins/system.ts` runs
+`softwareupdate --install <label> --verbose` bare, and ADR 0037 cites that same sudo requirement as
+a reason to keep `system` out of the composite. The project's instinct so far has been to route
+around escalation rather than adopt it.
 
 Leaving it there has a real cost. A bundle containing App Store apps could never be fully backed
 out, and every such app would become permanent residue. The alternative of telling users to run

@@ -23,8 +23,12 @@ An operation a plugin declares it supports in its manifest: `list`, `install`, `
 _Avoid_: feature, permission
 
 **Composite**:
-The `all` surface: the single "do it across every backend" view for list/install/update. Each backend's failure is isolated as a skip, so one missing backend never aborts the run. The write fan-out is host-owned (ADR 0033) rather than performed by a backend-less plugin.
+The `all` surface: the single "do it across every backend" view for list/install/update. Each backend's failure is isolated as unavailable, so one missing backend never aborts the run. The write fan-out is host-owned (ADR 0033) rather than performed by a backend-less plugin.
 _Avoid_: aggregate, meta-plugin
+
+**Unavailable**:
+A plugin whose backend is missing on this machine: a required binary is not on PATH, so `check()` throws `ErrPluginUnavailable`. A runtime fact about the machine, never a user choice. That distinction is why it is not called a skip. The Composite and `bundle install` isolate an unavailable target and carry on; `doctor` and `plugins` report it.
+_Avoid_: skipped, excluded (that is `skip.all`), missing, disabled
 
 ### Packages
 
@@ -49,7 +53,7 @@ _Avoid_: manifest, config file
 ### Package state
 
 **Tracked**:
-A package is tracked when its name is in the applist. macup scopes to tracked packages by default (`list`, `install`, `update`); untracked packages are reached only by naming them explicitly or with `--all`.
+A package or bundle is tracked when its name is in the applist. macup scopes to tracked packages by default (`list`, `install`, `update`); untracked packages are reached only by naming them explicitly or with `--all`. Tracking records declared intent and nothing else, so a tracked bundle's packages need not all be installed (ADR 0038).
 _Avoid_: managed, declared, listed
 
 **Installed**:
@@ -82,11 +86,27 @@ _Avoid_: add, remove (they invite the install/uninstall mental model, which is e
 Backend verbs that act on the machine: install puts a package on the machine through its backend; update upgrades already-installed packages. Distinct from track/untrack, which never touch the machine.
 _Avoid_: upgrade (for update)
 
+**Install outcome**:
+The per-run classification of one package by an install: `installed` (macup put it on the machine this run), `already-present` (it was there before), `failed`. An outcome, not a state: an `already-present` package is Installed exactly as much as an `installed` one. What separates them is whether this run put it there, which is what Provenance records (ADR 0038).
+_Avoid_: install status, result, skipped (for already-present)
+
 ### Bundles
 
 **Bundle**:
 A named, shareable collection of packages spanning any combination of bundle targets, composable through inheritance. A declarative, version-controllable artifact that replaces a setup shell script.
 _Avoid_: group, profile, preset
+
+**Provenance**:
+The per-machine record of what macup itself installed, kept in `state.yaml` rather than the applist. Observed fact, as against the applist's declared intent: never committed, different on every machine, and recording only packages an `installed` outcome produced, never already-present, never failed. Back-out depends on it for correctness, not merely for tidiness (ADR 0038).
+_Avoid_: history, lockfile, receipt
+
+**Back-out**:
+Removing a bundle by uninstalling what macup installed for it and only that: the leave-no-trace rule. Bounded by Provenance, so a package the user already had, or one that failed, is left alone. Where the record is ambiguous, macup under-removes.
+_Avoid_: rollback, undo (both imply atomic reversal of a run, which macup never performs)
+
+**Fully realized**:
+A bundle is fully realized when every package it resolves to is `installed` or `already-present`. The predicate behind the exit code: `bundle install` exits zero iff the bundle is fully realized, and non-zero on any shortfall: a failed package, or one stranded under an unavailable target.
+_Avoid_: complete, successful
 
 **Bundle target**:
 A plugin a bundle can list as a key. Defined by capability, not by an enumerated list: a plugin is a bundle target exactly when it declares the `track` capability. Today that is the package-manager backends (`brew`, `npm`, `pnpm`, `pip`, `appstore`). The self-updaters (`xcode`, `system`) and the Composite (`all`) are not bundle targets, because they install no arbitrary packages. A new track-capable plugin becomes a bundle target for free (#82).

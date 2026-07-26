@@ -100,34 +100,26 @@ _Avoid_: install status, result, skipped (for already-present)
 A named, shareable collection of packages spanning any combination of bundle targets, composable through inheritance. A declarative, version-controllable artifact that replaces a setup shell script.
 _Avoid_: group, profile, preset
 
-**Provenance**:
-The per-machine record of what macup itself installed, kept in `state.yaml` rather than the applist. Observed fact, as against the applist's declared intent: never committed, different on every machine, and recording only packages an `installed` outcome produced, never already-present, never failed. Back-out depends on it for correctness, not merely for tidiness (ADR 0038).
-_Avoid_: history, lockfile, receipt
-
-**Back-out**:
-Removing a bundle by uninstalling what macup installed for it and only that: the leave-no-trace rule. Bounded by Provenance, so a package the user already had, or one that failed, is left alone. Where the record is ambiguous, macup under-removes.
-_Avoid_: rollback, undo (both imply atomic reversal of a run, which macup never performs)
-
-**Fully realized**:
-A bundle is fully realized when every package it resolves to is `installed` or `already-present`. The predicate behind the exit code: `bundle install` exits zero iff the bundle is fully realized, and non-zero on any shortfall: a failed package, or one stranded under an unavailable target.
-_Avoid_: complete, successful
-
 **Bundle target**:
 A plugin a bundle can list as a key. Defined by capability, not by an enumerated list: a plugin is a bundle target exactly when it declares the `track` capability. Today that is the package-manager backends (`brew`, `npm`, `pnpm`, `pip`, `appstore`). The self-updaters (`xcode`, `system`) and the Composite (`all`) are not bundle targets, because they install no arbitrary packages. A new track-capable plugin becomes a bundle target for free (#82).
 _Avoid_: bundle plugin, bundle key (the key is a target's in-file form)
 
+**Provenance**:
+The per-machine record of what macup itself installed, kept in `state.yaml` rather than the applist. Observed fact, as against the applist's declared intent: never committed, different on every machine, and recording only packages an `installed` outcome produced, never already-present, never failed. Only bundle adoption writes it (ADR 0038, ADR 0039).
+_Avoid_: history, lockfile, receipt, install log
+
 **Back-out**:
-The undoing of a bundle adoption: the name leaves the applist and the packages leave the machine, bounded by refcount and leave-no-trace. The exact inverse of adopting a bundle, which is why the CLI spells it `macup bundle uninstall` (ADR 0039).
-_Avoid_: untrack, remove (both name applist-only operations, and a back-out uninstalls)
+Removing a bundle by dropping its name from the applist and uninstalling what macup installed for it, and only that: the leave-no-trace rule. Bounded by Provenance and by refcount, so a package the user already had, one that failed, or one another bundle still claims is left alone. Where the record is ambiguous macup under-removes. The CLI spells it `macup bundle uninstall` (ADR 0039).
+_Avoid_: rollback, undo (both imply atomic reversal, which macup never performs), untrack, remove (both name applist-only operations)
 
 **Leave no trace**:
 The bound on what a back-out removes: macup undoes its own action and nothing further. It is not a scrubbing of the package's ever having existed, so files an app wrote at runtime survive unless the user explicitly asks otherwise.
 _Avoid_: clean uninstall, purge
 
-**Provenance**:
-macup's record of which packages its own bundle adoption put on the machine, counting genuine additions only and never ones already present. The gate for leave-no-trace: without it a back-out cannot tell its own work from the user's.
-_Avoid_: history, ownership, install log
-
 **Residue**:
 What a back-out should have removed but could not: an unavailable backend, a declined Elevation, or a backend's own refusal. Observed per-machine fact, surfaced by `doctor` rather than dropped in silence.
 _Avoid_: leftovers, orphans, failures
+
+**Fully realized**:
+A bundle is fully realized when every package it resolves to is `installed` or `already-present`. The predicate behind the exit code: `bundle install` exits zero iff the bundle is fully realized, and non-zero on any shortfall: a failed package, or one stranded under an unavailable target.
+_Avoid_: complete, successful

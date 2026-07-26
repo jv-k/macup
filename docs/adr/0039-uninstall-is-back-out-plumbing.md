@@ -49,7 +49,7 @@ another installed formula depends on the one being removed, macup respects the r
 it rather than overriding it. That refusal is a free second refcount, computed over a dependency
 graph macup cannot see. An opt-in escape hatch for deep cask removal is #104.
 
-**A back-out proceeds and reports. It never refuses wholesale.** A package skipped because the
+**A back-out proceeds and reports. It never refuses wholesale.** A package left in place because the
 refcount still claims it, or because provenance says macup did not install it, is the rule working
 rather than a shortfall. A backend that is unavailable, declines elevation, or refuses a removal is
 a shortfall: macup completes every other target, records what it could not remove, and exits
@@ -98,7 +98,8 @@ the moment the hand-written, committed applist is edited.
   for a passthrough the backends already provide. Promotion later is additive, whereas demotion
   would break.
 - **Refuse the back-out when any target cannot comply.** Contradicts four existing precedents (ADR
-  0036's tri-state, #81's "never silently under-scopes", the composite's per-backend skip isolation,
+  0036's tri-state, #81's "never silently under-scopes", the composite's isolation of an unavailable
+  backend,
   and PRD section 5.8.6) and strands the user on the one case that matters.
 - **Withhold the applist edit until removal fully succeeds.** Makes the applist encode observed
   success rather than declared intent, and leaves `macup update` maintaining packages the user asked

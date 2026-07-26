@@ -19,7 +19,7 @@ A plugin's self-declaration: id, display name, category, subtypes, supported OS,
 _Avoid_: spec, plugin config
 
 **Capability**:
-A user-facing verb a plugin declares it supports in its manifest: `list`, `install`, `update`, `track`, `untrack`, `outdated`. The set exists to be rendered — help, completions, and the actions the wizard offers all read it. An operation with no user-facing verb is signalled by method presence instead of a flag: `search` and `uninstall` (ADR 0039).
+A user-facing verb a plugin declares it supports in its manifest: `list`, `install`, `update`, `track`, `untrack`, `outdated`. The set exists to be rendered: help, completions, and the actions the wizard offers all read it. An operation with no user-facing verb is signalled by method presence instead of a flag: `search` and `uninstall` (ADR 0039).
 _Avoid_: feature, permission
 
 **Elevation**:
@@ -125,7 +125,7 @@ The bound on what a back-out removes: macup undoes its own action and nothing fu
 _Avoid_: clean uninstall, purge
 
 **Provenance**:
-macup's record of which packages its own bundle adoption put on the machine — genuine additions only, never ones already present. The gate for leave-no-trace: without it a back-out cannot tell its own work from the user's.
+macup's record of which packages its own bundle adoption put on the machine, counting genuine additions only and never ones already present. The gate for leave-no-trace: without it a back-out cannot tell its own work from the user's.
 _Avoid_: history, ownership, install log
 
 **Residue**:

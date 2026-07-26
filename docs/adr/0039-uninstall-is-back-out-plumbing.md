@@ -35,9 +35,10 @@ knows the refcount and the provenance.
 
 **It is signalled by method presence, not a capability flag.** `Plugin.uninstall?()` follows the
 precedent `search?()` already sets. `PluginCapabilities` stays a six-flag record describing the
-*user-facing verb surface*, the set that `help.ts`, `commands/plugins.ts`, `meta.ts`, and
-`commands/from-manifest.ts` all read to build commands, help text, and completions. A flag nothing
-renders would be dead weight inviting someone to render it.
+*user-facing verb surface*, the set that `apps/cli/src/cli/help.ts`,
+`apps/cli/src/commands/plugins.ts`, `apps/cli/src/meta.ts`, and
+`apps/cli/src/commands/from-manifest.ts` all read to build commands, help text, and completions. A
+flag nothing renders would be dead weight inviting someone to render it.
 
 **Leave no trace means macup leaves no trace of its own action**, not that the machine is scrubbed
 of the package's ever having existed. macup therefore passes no blast-radius-widening flag: not

@@ -65,3 +65,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0035](0035-subtype-aware-skip-pin.md) | Skip and pin are subtype-aware, via a backward-compatible union | accepted |
 | [0036](0036-package-currency-tri-state.md) | Package currency is a tri-state (current, outdated, unknown), not a boolean | accepted |
 | [0037](0037-exclude-backend-from-all.md) | Exclude a backend from `all` via `skip.all` listing plugin ids | accepted |
+| [0038](0038-bundle-partial-failure-semantics.md) | A bundle install aborts on resolve, continues on install, tracks by intent | accepted |

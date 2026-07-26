@@ -127,9 +127,12 @@ async function fetchStatus(ctx: PluginContext, onlyOutdated: boolean): Promise<P
 
 // cargo has no distinct "update" verb: `cargo install <name>` installs a new
 // crate and, when a newer version exists, upgrades an installed one in place
-// (it no-ops when already current). Both actions run the same argv. Note a
-// crate installed from git/path is refreshed from the crates.io registry here,
-// per the spec's `cargo install <pkg>` prescription (#20).
+// (it no-ops when already current). Both actions run the same argv, per the
+// spec's `cargo install <pkg>` prescription (#20). Note this always resolves
+// <name> from the DEFAULT crates.io registry: a crate originally installed
+// from a git/path source is replaced by the crates.io crate of that name (not
+// its original source) — which is also why such crates report 'unknown'
+// currency above rather than being offered for auto-update.
 function cargoInstallArgs(ref: PackageRef): readonly [string, readonly string[]] {
   return [CARGO, ['install', ref.name]];
 }

@@ -81,3 +81,13 @@ _Avoid_: add, remove (they invite the install/uninstall mental model, which is e
 **Install / Update**:
 Backend verbs that act on the machine: install puts a package on the machine through its backend; update upgrades already-installed packages. Distinct from track/untrack, which never touch the machine.
 _Avoid_: upgrade (for update)
+
+### Bundles
+
+**Bundle**:
+A named, shareable collection of packages spanning any combination of bundle targets, composable through inheritance. A declarative, version-controllable artifact that replaces a setup shell script.
+_Avoid_: group, profile, preset
+
+**Bundle target**:
+A plugin a bundle can list as a key. Defined by capability, not by an enumerated list: a plugin is a bundle target exactly when it declares the `track` capability. Today that is the package-manager backends (`brew`, `npm`, `pnpm`, `pip`, `appstore`). The self-updaters (`xcode`, `system`) and the Composite (`all`) are not bundle targets, because they install no arbitrary packages. A new track-capable plugin becomes a bundle target for free (#82).
+_Avoid_: bundle plugin, bundle key (the key is a target's in-file form)

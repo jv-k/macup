@@ -19,8 +19,12 @@ A plugin's self-declaration: id, display name, category, subtypes, supported OS,
 _Avoid_: spec, plugin config
 
 **Capability**:
-An operation a plugin declares it supports in its manifest: `list`, `install`, `update`, `track`, `untrack`, `outdated`. `search` is signalled by method presence rather than a flag. The wizard offers only the actions a plugin's capabilities allow.
+A user-facing verb a plugin declares it supports in its manifest: `list`, `install`, `update`, `track`, `untrack`, `outdated`. The set exists to be rendered — help, completions, and the actions the wizard offers all read it. An operation with no user-facing verb is signalled by method presence instead of a flag: `search` and `uninstall` (ADR 0039).
 _Avoid_: feature, permission
+
+**Elevation**:
+An operation a plugin declares needs root, named per operation in its manifest. macup itself never runs as root; it raises privilege for the single declared command and no further (ADR 0040).
+_Avoid_: sudo, privilege escalation, admin rights
 
 **Composite**:
 The `all` surface: the single "do it across every backend" view for list/install/update. Each backend's failure is isolated as a skip, so one missing backend never aborts the run. The write fan-out is host-owned (ADR 0033) rather than performed by a backend-less plugin.
@@ -91,3 +95,19 @@ _Avoid_: group, profile, preset
 **Bundle target**:
 A plugin a bundle can list as a key. Defined by capability, not by an enumerated list: a plugin is a bundle target exactly when it declares the `track` capability. Today that is the package-manager backends (`brew`, `npm`, `pnpm`, `pip`, `appstore`). The self-updaters (`xcode`, `system`) and the Composite (`all`) are not bundle targets, because they install no arbitrary packages. A new track-capable plugin becomes a bundle target for free (#82).
 _Avoid_: bundle plugin, bundle key (the key is a target's in-file form)
+
+**Back-out**:
+The undoing of a bundle adoption: the name leaves the applist and the packages leave the machine, bounded by refcount and leave-no-trace. The exact inverse of adopting a bundle, which is why the CLI spells it `macup bundle uninstall` (ADR 0039).
+_Avoid_: untrack, remove (both name applist-only operations, and a back-out uninstalls)
+
+**Leave no trace**:
+The bound on what a back-out removes: macup undoes its own action and nothing further. It is not a scrubbing of the package's ever having existed, so files an app wrote at runtime survive unless the user explicitly asks otherwise.
+_Avoid_: clean uninstall, purge
+
+**Provenance**:
+macup's record of which packages its own bundle adoption put on the machine — genuine additions only, never ones already present. The gate for leave-no-trace: without it a back-out cannot tell its own work from the user's.
+_Avoid_: history, ownership, install log
+
+**Residue**:
+What a back-out should have removed but could not: an unavailable backend, a declined Elevation, or a backend's own refusal. Observed per-machine fact, surfaced by `doctor` rather than dropped in silence.
+_Avoid_: leftovers, orphans, failures

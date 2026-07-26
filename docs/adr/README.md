@@ -66,3 +66,5 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0036](0036-package-currency-tri-state.md) | Package currency is a tri-state (current, outdated, unknown), not a boolean | accepted |
 | [0037](0037-exclude-backend-from-all.md) | Exclude a backend from `all` via `skip.all` listing plugin ids | accepted |
 | [0038](0038-bundle-partial-failure-semantics.md) | A bundle install aborts on resolve, continues on install, tracks by intent | accepted |
+| [0039](0039-uninstall-is-back-out-plumbing.md) | Uninstall is bundle back-out plumbing, not a user-facing verb | accepted |
+| [0040](0040-operation-scoped-elevation.md) | macup never runs as root, and elevates one declared operation at a time | accepted |

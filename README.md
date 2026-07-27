@@ -67,7 +67,7 @@ These are commands, not flags: `macup restore`, never `macup --restore`. A flag 
 
 Three modes:
 
-- **default**: install/upgrade flows stream their subprocess output (downloads, `Password:` prompts, success messages) as lines in the same gutter as the rest of the UI: one design language, no separate pane (ADR 0034). Queries (list, outdated, health) show a clack inline spinner while they run. List/outdated commands keep their formatted output; their internal `--json` chatter stays hidden, except `Error:` / `Warning:` lines, which surface as one-line notices.
+- **default**: install/upgrade flows stream their subprocess output (downloads, `Password:` prompts, success messages) as lines in the same gutter as the rest of the UI: one design language, no separate pane (ADR 0043). Queries (list, outdated, health) show a clack inline spinner while they run. List/outdated commands keep their formatted output; their internal `--json` chatter stays hidden, except `Error:` / `Warning:` lines, which surface as one-line notices.
 - **`--verbose` / `-V`**: the same, retained as the seam for future extra detail.
 - **`--debug` / `-D`**: full raw trace of every shell call (`$ cmd args  exit=N · Nms` + line-buffered live stdout/stderr), routed to stderr, so you see the same thing you would see if you ran each underlying command yourself, plus timing.
 

@@ -4,11 +4,15 @@
 # img/screenshot.png, img/demo.gif (+ demo-final.png), img/wizard.gif
 # (+ wizard-final.png).
 #
-# Usage:
-#   ./dev/screenshots.sh           # all three
-#   ./dev/screenshots.sh help      # just the --help PNG
-#   ./dev/screenshots.sh demo      # just the direct-CLI demo GIF
-#   ./dev/screenshots.sh wizard    # just the interactive-wizard GIF
+# Usage, from the monorepo root:
+#   pnpm screenshots           # all three
+#   pnpm screenshots:help      # just the --help PNG
+#   pnpm screenshots:demo      # just the direct-CLI demo GIF
+#   pnpm screenshots:wizard    # just the interactive-wizard GIF
+#
+# Or invoke it directly: ./apps/cli/dev/screenshots.sh [help|demo|wizard]
+# (./dev/screenshots.sh from apps/cli, which is how apps/cli/package.json
+# spells the same scripts).
 #
 # Requires: vhs (https://github.com/charmbracelet/vhs).  Install: brew install vhs
 # Also builds dist/cli.mjs first so the sandbox shim has something to invoke.

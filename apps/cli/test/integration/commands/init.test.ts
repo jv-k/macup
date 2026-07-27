@@ -32,9 +32,14 @@ const stubDeps = {
     source: 'home-macup' as const,
     explicit: false,
   }),
-  getStore: async () => {
-    throw new Error('the scaffolder must not open a store when the scan is empty');
-  },
+  // The scan is empty, so nothing is written — but the store is still opened on
+  // the non-dry-run path now, so that a corrupt or missing applist surfaces
+  // rather than being masked by "nothing found" (found in review).
+  getStore: async () => ({
+    list: () => [],
+    add: () => ({ added: [], skipped: [] }),
+    save: async () => ({ changed: false }),
+  }),
 } as unknown as Parameters<typeof buildInitCommand>[0];
 
 async function runInit(rawArgs: string[]): Promise<void> {

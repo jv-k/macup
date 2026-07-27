@@ -246,6 +246,7 @@ describe('runInitScaffold', () => {
     const added: Array<{ key: string; names: readonly string[] }> = [];
     const saves: string[] = [];
     const store = {
+      list: () => [] as readonly string[],
       add: (key: string, names: readonly string[]) => {
         added.push({ key, names });
         return { added: [...names], skipped: [] };
@@ -268,6 +269,7 @@ describe('runInitScaffold', () => {
       trackedAlready: 0,
       confirm: async () => true,
       print: (s: string) => printed.push(s),
+      printErr: (s: string) => printed.push(s),
       dryRun: false,
       interactive: true,
       force: false,
@@ -370,6 +372,8 @@ describe('runInitScaffold', () => {
 
   it('reports when a save changed nothing, so a re-run is not mistaken for a write', async () => {
     const store = {
+      // Nothing is new, so the no-op is detected before any staging happens.
+      list: () => ['typescript'] as readonly string[],
       add: () => ({ added: [], skipped: ['typescript'] }),
       save: async () => ({ changed: false }),
     };

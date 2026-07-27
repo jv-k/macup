@@ -12,7 +12,7 @@ What was open: what to do when an applist already exists, and how to behave when
 
 ## Decision
 
-**Merge, do not replace.** An existing applist holds pins, skip lists, and comments. Those are the parts a person typed, and the only parts a scan cannot regenerate, so overwriting the file would destroy exactly the information that has value. `init` adds the detected names to the existing document. `ConfigStore.add` skips names already present, so a second run is a genuine no-op and the file does not churn.
+**Merge, do not replace.** An existing applist holds pins, skip lists, and comments. Those are the parts a person typed, and the only parts a scan cannot regenerate, so overwriting the file would destroy exactly the information that has value. `init` adds the detected names to the existing document. Names already tracked are filtered out before anything is staged, so a second run is a genuine no-op: it neither churns the file nor trips the prompt, because there is no change to guard.
 
 The issue says "prompts before overwriting an existing config". Merging serves that intent better than the literal reading: the prompt still guards touching a populated applist at all, and what it guards is now a safe operation rather than a destructive one.
 
@@ -20,9 +20,9 @@ The issue says "prompts before overwriting an existing config". Merging serves t
 
 **Under a pipe, refuse rather than guess.** `docs/CODING_STANDARDS.md` forbids prompting when stdin is not a TTY, which leaves two options for a populated applist in a script: proceed silently, or fail. Failing is right. Silently rewriting a config inside someone's cron job is the kind of thing that gets discovered weeks later. `--force` is the explicit way to say yes in advance, and the refusal message names it.
 
-**`--dry-run` prints the plan and writes nothing**, per the first-class dry-run rule in the coding standards.
+**`--dry-run` prints the plan and does not open the store.** Not merely "does not save": opening it is itself a write, because `ConfigStore.load()` migrates a pre-1.x applist in place and takes a backup while doing so. The only way to honour "executes nothing, no exceptions" is to leave the file alone entirely, so the dry-run path is handed a store stand-in whose methods throw if anything reaches them.
 
-**One broken backend does not sink the scan.** A machine without `mas` is the ordinary case, not an error: an unavailable backend is recorded and stepped over, matching how the composite `all` isolates per-backend failure (ADR 0037). A backend that is present but whose listing errors is reported more loudly, since that is a real fault rather than an absence.
+**One broken backend does not sink the scan.** A machine without `mas` is the ordinary case, not an error: an unavailable backend is recorded and stepped over, matching how the composite `all` isolates per-backend failure (ADR 0037). A backend that is present but whose listing errors goes to stderr instead, since that is a real fault rather than an absence, and a script should see it.
 
 ## Alternatives
 
@@ -37,6 +37,10 @@ The issue says "prompts before overwriting an existing config". Merging serves t
 
 `init` is now cheap to recommend as the first command a new user runs, and safe to re-run: it converges rather than churning.
 
+Because the guard is keyed on packages already tracked, an applist holding only pins, skips, and comments is written to without a prompt. Merging makes that safe (none of it is touched), so the guard is about modifying a list someone curated rather than about the file existing.
+
 It inherits one awkward interaction with ADR 0044. `macup --applist work.yaml init` fails, because a named applist that does not exist is an error there, and `init` is precisely the command whose job is to populate a new one. The workaround is one command (`touch work.yaml`), and carving out an exception would mean weakening a rule that exists to catch typos. Worth revisiting if it annoys anyone in practice.
 
-Scaffolding tracks everything installed, which for Homebrew includes dependencies pulled in by other formulae. The applist will be longer than what the user would have written, and pruning it is manual. Filtering to top-level installs would need per-backend knowledge (`brew leaves`), which is a plugin-contract question rather than a scaffolder one.
+Scaffolding tracks everything installed, which for Homebrew includes dependencies pulled in by other formulae: a real run on the author's machine tracked 364 packages, 263 of them brew formulas. The applist is longer than what the user would have written, and pruning is manual. Filtering to top-level installs needs per-backend knowledge (`brew leaves`), which is a plugin-contract question rather than a scaffolder one. Tracked as #128.
+
+Merging also means `init` can only grow the applist. Uninstall something and re-run, and its entry stays. That is the deliberate cost of never destroying hand-written content, but it does mean `init` converges upward rather than to current system state, which is not what "pre-populated with what's currently installed" implies on a second run. An opt-in prune is the missing half, tracked as #127 rather than argued away here.

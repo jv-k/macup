@@ -15,7 +15,14 @@
 // must refuse rather than prompt.
 
 import { exec as execCb } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -126,6 +133,41 @@ describe('bare `macup init` scaffolds the applist (#14)', () => {
     expect(stdout).toContain('[dry-run]');
     expect(stdout).toContain(applist);
     expect(readFileSync(applist, 'utf8')).toBe(before);
+  });
+
+  it('writes nothing under --dry-run even when loading would migrate the applist', async () => {
+    // Found in review: opening the store is itself a write when the applist
+    // uses pre-1.x flat keys — ConfigStore.load() migrates in place and takes a
+    // backup. Seeding `version: 1` hid it, so this seeds the legacy shape.
+    // docs/CODING_STANDARDS.md: --dry-run must execute nothing, no exceptions.
+    const { dir, env, applist } = sandbox('brew_formulas:\n  - jq # keep\n');
+    const before = readFileSync(applist, 'utf8');
+    const { code } = await run(env, 'init --dry-run');
+    expect(code).toBe(0);
+    expect(readFileSync(applist, 'utf8')).toBe(before);
+    expect(existsSync(join(dir, 'backups'))).toBe(false);
+  });
+
+  it('is a prompt-free no-op in a script once everything found is tracked', async () => {
+    // The refusal exists to guard a change. With nothing new to add there is no
+    // change to guard, so failing would contradict "running it again adds only
+    // what is new" (ADR 0046).
+    const { env, applist } = sandbox();
+    await run(env, 'init');
+    const after = readFileSync(applist, 'utf8');
+    const again = await run(env, 'init');
+    expect(again.code).toBe(0);
+    expect(again.stdout).toMatch(/nothing to add/i);
+    expect(readFileSync(applist, 'utf8')).toBe(after);
+  });
+
+  it('sends the refusal to stderr, not stdout', async () => {
+    // docs/CODING_STANDARDS.md: errors to stderr, normal output to stdout.
+    const { env } = sandbox(POPULATED);
+    const { stdout, stderr, code } = await run(env, 'init');
+    expect(code).toBe(1);
+    expect(stderr).toContain('--force');
+    expect(stdout).not.toContain('--force');
   });
 
   it('refuses rather than prompting when the applist already tracks packages', async () => {

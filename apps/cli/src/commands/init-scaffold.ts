@@ -11,6 +11,7 @@
 import type { ApplistKey } from '../config/schema';
 import { ErrPluginUnavailable } from '../errors';
 import type { Plugin, PluginContext } from '../plugins/types';
+import { resolveConfigKey } from './from-manifest';
 
 /** One applist key's worth of detected packages. */
 export interface DetectedGroup {
@@ -38,12 +39,6 @@ export interface DetectionPlan {
 // The composite fans out over the other plugins (ADR 0033), so asking it would
 // double-count everything it covers. It also has no applist key of its own.
 const COMPOSITE_ID = 'all';
-
-function keyFor(plugin: Plugin, subtype?: string): ApplistKey | undefined {
-  const m = plugin.manifest;
-  if (m.configKeyFor) return m.configKeyFor(subtype);
-  return m.configKeys[0];
-}
 
 /**
  * Read-only scan: what is installed, grouped by the applist key that would
@@ -81,7 +76,7 @@ export async function detectInstalled(
     // keys rather than being merged into whichever came first.
     const subtypes = m.subtypes && m.subtypes.length > 0 ? m.subtypes : [undefined];
     for (const subtype of subtypes) {
-      const key = keyFor(plugin, subtype);
+      const key = resolveConfigKey(plugin, subtype);
       if (!key) continue;
       try {
         const statuses = await plugin.list(ctx, subtype ? { subtype } : {});
@@ -138,15 +133,16 @@ export function formatDetectionPlan(plan: DetectionPlan): string {
   for (const s of plan.unavailable) {
     lines.push(`  skipped ${s.pluginId}: ${s.reason}`);
   }
-  for (const s of plan.failed) {
-    lines.push(`  failed ${s.pluginId}: ${s.reason}`);
-  }
-
   return lines.join('\n');
 }
 
+// Kept as the stdout summary; `failed` backends are reported separately on
+// stderr by runInitScaffold.
+const summarise = formatDetectionPlan;
+
 /** The slice of ConfigStore scaffolding needs, so tests need no real file. */
 export interface ScaffoldStore {
+  list(key: ApplistKey): readonly string[];
   add(key: ApplistKey, names: readonly string[]): { added: string[]; skipped: string[] };
   save(operation: string): Promise<{ changed: boolean; backupPath?: string }>;
 }
@@ -159,6 +155,8 @@ export interface ScaffoldInput {
   readonly trackedAlready: number;
   readonly confirm: () => Promise<boolean>;
   readonly print: (line: string) => void;
+  /** Diagnostics and refusals: errors to stderr, normal output to stdout. */
+  readonly printErr: (line: string) => void;
   readonly dryRun: boolean;
   /** stdin is a TTY, so a prompt can actually be answered. */
   readonly interactive: boolean;
@@ -175,8 +173,12 @@ export interface ScaffoldInput {
  * no-op, and the backup-before-mutate contract covers the rest.
  */
 export async function runInitScaffold(input: ScaffoldInput): Promise<number> {
-  const { plan, print } = input;
-  print(formatDetectionPlan(plan));
+  const { plan, print, printErr } = input;
+  print(summarise(plan));
+  // A backend that is present but whose listing broke is a real fault, not the
+  // ordinary absence an unavailable one is, so it goes to stderr where a script
+  // will see it.
+  for (const s of plan.failed) printErr(`failed ${s.pluginId}: ${s.reason}`);
 
   if (countDetected(plan) === 0) {
     print('Nothing to write.');
@@ -188,28 +190,42 @@ export async function runInitScaffold(input: ScaffoldInput): Promise<number> {
     return 0;
   }
 
+  // What would actually change, computed before touching anything. The prompt
+  // and the non-TTY refusal exist to guard a modification, so with nothing new
+  // to add there is nothing to guard — failing there would contradict "running
+  // it again adds only what is new" (ADR 0046).
+  const pending = plan.groups
+    .map((group) => {
+      const tracked = new Set(input.store.list(group.key));
+      return { group, fresh: group.names.filter((n) => !tracked.has(n)) };
+    })
+    .filter((p) => p.fresh.length > 0);
+
+  if (pending.length === 0) {
+    print('The applist already tracked everything found — nothing to add.');
+    return 0;
+  }
+
   // Only guard an applist that has something in it: a first run has nothing to
-  // lose, and prompting anyway would make the common path annoying.
-  if (input.trackedAlready > 0) {
+  // lose, and prompting anyway would tax the path everyone takes once.
+  if (input.trackedAlready > 0 && !input.force) {
     print(`${input.applistPath} already tracks ${input.trackedAlready} package(s).`);
-    if (!input.force) {
-      // Never prompt under a pipe (docs/CODING_STANDARDS.md). Failing loudly
-      // beats hanging on a prompt nobody can answer, and beats silently
-      // rewriting a config inside someone's cron job.
-      if (!input.interactive) {
-        print('Refusing to modify it without confirmation. Re-run with --force to proceed.');
-        return 1;
-      }
-      if (!(await input.confirm())) {
-        print('Cancelled — the applist was not modified.');
-        return 0;
-      }
+    // Never prompt under a pipe (docs/CODING_STANDARDS.md). Failing loudly beats
+    // hanging on a prompt nobody can answer, and beats silently rewriting a
+    // config inside someone's cron job.
+    if (!input.interactive) {
+      printErr('Refusing to modify it without confirmation. Re-run with --force to proceed.');
+      return 1;
+    }
+    if (!(await input.confirm())) {
+      print('Cancelled — the applist was not modified.');
+      return 0;
     }
   }
 
   let addedTotal = 0;
-  for (const group of plan.groups) {
-    addedTotal += input.store.add(group.key, group.names).added.length;
+  for (const { group, fresh } of pending) {
+    addedTotal += input.store.add(group.key, fresh).added.length;
   }
 
   const result = await input.store.save('init');

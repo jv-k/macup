@@ -165,20 +165,27 @@ async function runInitScaffoldAction(
     signal: deps.signal,
   });
 
-  // Nothing found means nothing to write, so there is no reason to open the
-  // store — which matters because a named-but-missing applist refuses to load
-  // (ADR 0044) and reporting an empty scan is more useful than that error.
-  if (countDetected(plan) === 0) {
+  const shared = {
+    plan,
+    applistPath: paths.applistPath,
+    print: (s: string) => console.log(s),
+    printErr: (s: string) => console.error(s),
+    dryRun: opts.dryRun,
+    interactive: process.stdin.isTTY === true,
+    force: opts.force,
+  };
+
+  // Under --dry-run the store is never opened, because opening it is itself a
+  // write: ConfigStore.load() migrates a pre-1.x applist in place and takes a
+  // backup while doing it (found in review). The coding standards allow no
+  // exceptions to dry-run executing nothing, so the only safe answer is not to
+  // touch the file at all.
+  if (opts.dryRun) {
     return runInitScaffold({
-      plan,
-      store: { add: () => ({ added: [], skipped: [] }), save: async () => ({ changed: false }) },
-      applistPath: paths.applistPath,
+      ...shared,
+      store: emptyStore,
       trackedAlready: 0,
       confirm: async () => false,
-      print: (s) => console.log(s),
-      dryRun: opts.dryRun,
-      interactive: process.stdin.isTTY === true,
-      force: opts.force,
     });
   }
 
@@ -186,9 +193,8 @@ async function runInitScaffoldAction(
   const trackedAlready = ApplistKeySchema.options.reduce((n, key) => n + store.list(key).length, 0);
 
   return runInitScaffold({
-    plan,
+    ...shared,
     store,
-    applistPath: paths.applistPath,
     trackedAlready,
     confirm: async () => {
       const ans = await confirm({
@@ -197,9 +203,18 @@ async function runInitScaffoldAction(
       });
       return !isCancel(ans) && ans === true;
     },
-    print: (s) => console.log(s),
-    dryRun: opts.dryRun,
-    interactive: process.stdin.isTTY === true,
-    force: opts.force,
   });
 }
+
+// Stands in for the store on the dry-run path, which reports a plan and writes
+// nothing. Every method is unreachable there, so reaching one is a bug worth a
+// loud failure rather than a silent no-op.
+const emptyStore = {
+  list: () => [],
+  add: () => {
+    throw new Error('init: --dry-run must not stage applist changes');
+  },
+  save: async () => {
+    throw new Error('init: --dry-run must not save the applist');
+  },
+};

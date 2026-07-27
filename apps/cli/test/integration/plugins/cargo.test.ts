@@ -167,6 +167,29 @@ describe('cargo plugin — list()', () => {
     expect(statuses[0]?.updateStatus).toBe('unknown');
   });
 
+  it('reports unknown when the installed version is not comparable semver', async () => {
+    const fx: FixtureEntry[] = [
+      {
+        cmd: 'cargo',
+        args: ['install', '--list'],
+        result: { stdout: 'oddcrate v0.1:\n    odd\n', stderr: '', exitCode: 0 },
+      },
+      {
+        cmd: 'cargo',
+        args: ['search', 'oddcrate', '--limit', '5'],
+        result: {
+          stdout: 'oddcrate = "0.2.0"    # newer, but 0.1 can\'t be ordered\n',
+          stderr: '',
+          exitCode: 0,
+        },
+      },
+    ];
+    const statuses = await cargoPlugin.list(ctx(fx), {});
+    expect(statuses[0]?.installedVersion).toBe('0.1');
+    expect(statuses[0]?.updateStatus).toBe('unknown');
+    expect(statuses[0]?.latestVersion).toBeUndefined();
+  });
+
   it('returns [] cleanly when no crates are installed', async () => {
     const empty: FixtureEntry[] = [
       {

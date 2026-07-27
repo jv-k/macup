@@ -69,10 +69,12 @@ function parseCargoList(stdout: string): CargoCrate[] {
 
 // cargo has no bulk "outdated" view (that needs the separate
 // cargo-install-update crate). We learn each registry crate's latest version
-// with a `cargo search` — one query per crate, so this hits the network and
-// can be slow, the same trade-off `pip list --outdated` makes. Crates from a
-// git/path source aren't on crates.io, so their currency stays undeterminable
-// ('unknown', ADR 0036) rather than a false 'current'.
+// with a `cargo search` — one network query per crate, so unlike pip and go
+// (two calls each, whatever the package count) this scales with the number of
+// crates installed, and fetchStatus runs them one at a time to avoid spawning
+// a subprocess per crate at once. Crates from a git/path source aren't on
+// crates.io, so their currency stays undeterminable ('unknown', ADR 0036)
+// rather than a false 'current'.
 async function fetchLatest(ctx: PluginContext, name: string): Promise<string | undefined> {
   const result = await ctx.exec.run(CARGO, ['search', name, '--limit', '5'], {
     signal: ctx.signal,

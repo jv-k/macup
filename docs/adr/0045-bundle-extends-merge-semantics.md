@@ -61,8 +61,10 @@ a merge produces, a flat pin from one bundle beside a subtype-nested pin from an
 representable. Without this, `pins: { brew: { node: "20.11.0", casks: { docker: "1.0" } } }` satisfies
 neither branch of the union, even though the two entries are about different packages and do not
 conflict at all. This is the schema catching up to the reader: `selectionFor` already dispatches on
-each value's shape and would consume the mixed entry unchanged, so no shipped code changes. Both keys
-are additive, so by the rule at the top of `apps/cli/src/config/schema.ts` `SCHEMA_VERSION` stays 1.
+each value's shape and would consume the mixed entry unchanged, as do the two other readers, in
+`commands/config.ts` and `doctor/checks/data-integrity.ts`. Applying the widening on its own leaves
+the typecheck clean and the suite green at 745 tests, so it costs no shipped code change. It is
+additive, so by the rule at the top of `apps/cli/src/config/schema.ts` `SCHEMA_VERSION` stays 1.
 
 **`appstore` dedupes by Adam id, and a differing label resolves nearest-first in silence.** The id is
 what `mas` installs, and #82 made the human name a preserved label. Two spellings of a display string
@@ -142,6 +144,6 @@ Widening `PinEntry` gives `applist.yaml` the same mixed form, which is a gain ra
 block was already readable and only unwritable. The widening is the one part of this ADR that touches
 a shipped schema, so it is where a reviewer should look first.
 
-PRD section 5.8.5 now contradicts the record in two places, on its last-wins wording and on the
-`--resolved` flag's relationship to `extends`, and risk R8 retains a depth cap that no longer exists.
-They are corrected in the single PRD pass that ADR 0041 already defers to handoff, not piecemeal.
+PRD section 5.8.5 now contradicts the record on its last-wins wording, and risk R8 retains a depth cap
+that no longer exists. Both are corrected in the single PRD pass that ADR 0041 already defers to
+handoff, not piecemeal.

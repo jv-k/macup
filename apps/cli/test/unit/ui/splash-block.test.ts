@@ -48,6 +48,25 @@ describe('splashBlock', () => {
     }
   });
 
+  it('renders the header block alone when logo is false', () => {
+    const out = splashBlock({ ...baseOpts, termWidth: 80, logo: false });
+    const lines = out.split('\n');
+
+    // The header survives: badge, both bullet lines, and the description.
+    expect(out).toContain(`macup v${baseOpts.version}`);
+    expect(out).toContain(baseOpts.homepage);
+    const bulletLine = lines.find((l) => l.includes('Author:'));
+    expect(bulletLine).toBe(`• Author:   ${baseOpts.author}`);
+
+    // ...with nothing beside it. The badge is the whole first line, where
+    // the default side-by-side render at this width carries logo glyphs
+    // past it and is taller by the logo's rows.
+    expect(lines[0]).toBe(`macup v${baseOpts.version}`);
+    const withLogo = splashBlock({ ...baseOpts, termWidth: 80 }).split('\n');
+    expect(visualWidth(withLogo[0] ?? '')).toBeGreaterThan(visualWidth(lines[0] ?? ''));
+    expect(lines.length).toBeLessThan(withLogo.length);
+  });
+
   it('does not introduce output lines wider than the terminal when side-by-side applies', () => {
     // Generous terminal — side-by-side path. The widest line should
     // comfortably fit so the terminal does not reflow and shred the

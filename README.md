@@ -7,7 +7,9 @@ See [docs/README.md](docs/README.md) for the full documentation index.
 <p align="center">
   <img src="img/screenshot.png" alt="macup --help" width="640">
   <br>
-  <img src="img/demo.gif" alt="macup demo: plugins, brew add, npm pin, config" width="640">
+  <img src="img/wizard.gif" alt="macup interactive wizard: pick a plugin from the menu, list tracked packages, select and update the outdated ones" width="640">
+  <br>
+  <img src="img/demo.gif" alt="macup demo: plugins, brew track, npm pin, config" width="640">
 </p>
 
 ## Install

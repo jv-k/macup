@@ -172,3 +172,13 @@ describe('--applist completion (#17)', () => {
     expect(out).toMatch(/-l applist[^\n]*-r -F/);
   });
 });
+
+// #17: the flag is usable alongside plugin/action args, so completion has to
+// offer it past position 1 too — `macup brew list --app<TAB>` was dead.
+describe('--applist completes past the first position (#17)', () => {
+  it('bash offers it wherever a flag can go', () => {
+    const out = generateBashCompletions(plugins);
+    const afterFirstPosition = out.slice(out.indexOf('COMP_CWORD} -ge 3'));
+    expect(afterFirstPosition).toContain('--applist');
+  });
+});

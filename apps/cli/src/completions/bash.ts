@@ -63,6 +63,9 @@ ${pluginCases}
     case "\${COMP_WORDS[1]}/\${COMP_WORDS[2]}" in
 ${flagCases}
     esac
+    # --applist is usable alongside plugin/action args, so offer it here too,
+    # appended rather than replacing the per-command flags above.
+    COMPREPLY+=( $(compgen -W "--applist" -- "$cur") )
     return
   fi
 }

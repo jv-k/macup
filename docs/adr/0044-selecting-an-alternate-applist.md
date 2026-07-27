@@ -18,7 +18,7 @@ Three rules come with it:
 
 - **The path is normalised.** A leading `~` expands to home and a relative path resolves against the working directory, so what macup reports is the absolute path it actually opened.
 - **A named applist must exist.** `--applist` and `$MACUP_APPLIST` mark the resolution `explicit`; an explicit path that isn't on disk raises `ErrApplistNotFound` instead of being created on first write. The default locations and `$MACUP_CONFIG` stay lenient, because a first run there is ordinary, whereas naming a file that isn't there is almost always a typo, and silently starting an empty list loses the run. The diagnostic surfaces (`macup config`, `macup doctor`) still report a missing explicit applist rather than failing, because refusing to diagnose is the wrong answer to "why isn't this working?"
-- **Backups are namespaced per applist.** A backup filename now leads with the applist's basename stem rather than a hard-coded `applist_`, so `work.yaml` snapshots as `work_track_<stamp>.yaml` and `restore` / `undo` / `cleanup` see only their own applist's set. The default `applist.yaml` reduces to the `applist` prefix, so existing backups keep listing and restoring unchanged.
+- **Backups are namespaced per applist.** A backup filename now leads with the applist's basename stem rather than a hard-coded `applist_`, so `work.yaml` snapshots as `work_track_<stamp>.yaml` and `restore` / `undo` / `cleanup` see only their own applist's set. The default `applist.yaml` reduces to the `applist` prefix, so existing backups keep listing and restoring unchanged. The reduction has to be injective or the isolation is a lie, so any name that is not a clean stem plus `.yaml` also carries a short digest of the full basename. That keeps `my_list.yaml` apart from `my-list.yaml`, and `work.yml` apart from `work.yaml`, at the cost of a less pretty filename in cases nobody hits.
 
 The flag is stripped from argv before citty parses, like the verbosity flags: it configures the run, not any one subcommand.
 
@@ -34,6 +34,6 @@ The flag is stripped from argv before citty parses, like the verbosity flags: it
 
 Separate work and personal lists now cost one flag, and a launchd or cron job can set `$MACUP_APPLIST` once (#18). `PathResolution` grows an `explicit` field, which every construction site (including test fixtures) has to set.
 
-`$MACUP_CONFIG` and `$MACUP_APPLIST` now differ in one respect: the older spelling creates a missing file, the newer one refuses. That is deliberate back-compat rather than a distinction worth defending forever. If `$MACUP_CONFIG` is ever retired, the difference goes with it.
+`$MACUP_CONFIG` and `$MACUP_APPLIST` now differ in two respects: the older spelling creates a missing file where the newer one refuses, and it does not expand `~` or resolve a relative path. Both are deliberate back-compat rather than distinctions worth defending forever. If `$MACUP_CONFIG` is ever retired, they go with it.
 
-Backup filenames are derived from a user-supplied basename, so the stem is reduced to `[A-Za-z0-9-]` before it reaches a filename. Two applists whose stems collide after that reduction (`my list.yaml` and `my-list.yaml` in one directory) share a backup namespace. Rare enough to accept, and both files still restore to themselves.
+Backup filenames stay stable and readable for every ordinary applist, and become `<stem>-<digest>_…` for the awkward ones. The digest is derived from the basename alone, so a given applist always lands in the same namespace no matter which command wrote the snapshot.

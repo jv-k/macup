@@ -7,6 +7,8 @@
 import { constants, accessSync, existsSync } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
+import { backupFileRe, backupPrefixFor } from '../../../config/backup';
+import { selectorLabel } from '../../../config/paths';
 import { buildConfigReport } from '../../config';
 import type { CheckDeps, CheckResult, Section } from '../report';
 import { errorMessage } from './probe';
@@ -41,6 +43,10 @@ function checkConfigDir(deps: CheckDeps): CheckResult {
 
 async function checkBackups(deps: CheckDeps): Promise<CheckResult> {
   const dir = deps.paths.backupDir;
+  // Scoped to the active applist (#17): another applist's snapshots can share
+  // this directory, and counting them here would credit them to the wrong
+  // list — the same set `restore` and `cleanup` deliberately exclude.
+  const mine = backupFileRe(backupPrefixFor(deps.paths.applistPath));
   let entries: string[];
   try {
     entries = await readdir(dir);
@@ -55,6 +61,7 @@ async function checkBackups(deps: CheckDeps): Promise<CheckResult> {
   let bytes = 0;
   let count = 0;
   for (const name of entries) {
+    if (!mine.test(name)) continue;
     try {
       const s = await stat(join(dir, name));
       if (!s.isFile()) continue;
@@ -78,11 +85,10 @@ export async function check(deps: CheckDeps): Promise<Section> {
   // assumes that means the default one. When the run was scoped to a named
   // applist (#17), say which selector chose it before reporting on it.
   if (deps.paths.explicit) {
-    const selector = deps.paths.source === 'flag-applist' ? '--applist' : '$MACUP_APPLIST';
     results.push({
       level: 'ok',
       label: 'Applist',
-      detail: `${deps.paths.applistPath} — selected by ${selector}`,
+      detail: `${deps.paths.applistPath} — selected by ${selectorLabel(deps.paths)}`,
     });
   }
 
@@ -93,7 +99,16 @@ export async function check(deps: CheckDeps): Promise<Section> {
   // always named applist.yaml (#17) — labelling it so named a file the run
   // never touched.
   const applistLabel = basename(report.applistPath);
-  if (!report.exists) {
+  if (!report.exists && deps.paths.explicit) {
+    // macup creates the default applist on first write but refuses to create
+    // a named one (ADR 0044), so this is a broken run, not a fresh install.
+    results.push({
+      level: 'error',
+      label: applistLabel,
+      detail: `${report.applistPath} — missing`,
+      hint: `create it first, or correct the path passed to ${selectorLabel(deps.paths)}`,
+    });
+  } else if (!report.exists) {
     results.push({
       level: 'ok',
       label: applistLabel,

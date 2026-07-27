@@ -126,6 +126,38 @@ describe('--applist selects the active applist (#17)', () => {
   });
 });
 
+describe('--applist is usable alongside plugin/action args (#17)', () => {
+  it('works after the plugin and verb, not only in first position', async () => {
+    const { dir, env, defaultPath } = sandbox();
+    const workPath = join(dir, 'work.yaml');
+    writeFileSync(workPath, 'version: 1\n', 'utf8');
+
+    const { code } = await run(env, `brew track ripgrep --applist "${workPath}"`);
+    expect(code).toBe(0);
+    expect(readFileSync(workPath, 'utf8')).toContain('ripgrep');
+    expect(readFileSync(defaultPath, 'utf8')).not.toContain('ripgrep');
+  });
+
+  it('leaves the bare-word `version` alias reachable behind it', async () => {
+    // The alias rewrite only inspects argv[2], so it has to run after the
+    // global modifiers are stripped or `--applist x version` prints help.
+    const { dir, env } = sandbox();
+    writeFileSync(join(dir, 'work.yaml'), 'version: 1\n', 'utf8');
+    const { stdout, code } = await run(env, `--applist "${join(dir, 'work.yaml')}" version`);
+    expect(code).toBe(0);
+    expect(stdout).toMatch(/\d+\.\d+\.\d+/);
+  });
+
+  it('combines with a verbosity flag in either order', async () => {
+    const { dir, env } = sandbox();
+    const workPath = join(dir, 'work.yaml');
+    writeFileSync(workPath, 'version: 1\n', 'utf8');
+    const { code } = await run(env, `--verbose --applist "${workPath}" brew track ripgrep`);
+    expect(code).toBe(0);
+    expect(readFileSync(workPath, 'utf8')).toContain('ripgrep');
+  });
+});
+
 describe('$MACUP_APPLIST (#17)', () => {
   it('selects the applist when no flag is given', async () => {
     const { dir, env } = sandbox();

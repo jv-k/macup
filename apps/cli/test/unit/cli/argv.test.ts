@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractApplistFlag,
+  extractVerbosityFlags,
   findUnknownTopLevelFlags,
   rewriteDeprecatedVerbAliases,
+  rewriteFlagAliases,
 } from '../../../src/cli/argv';
 import { ErrUsage } from '../../../src/errors';
 
@@ -137,5 +139,25 @@ describe('extractApplistFlag (#17)', () => {
     const a = argv('brew', 'track', '--', '--applist', 'x.yaml');
     expect(extractApplistFlag(a)).toBeUndefined();
     expect(a).toEqual(argv('brew', 'track', '--', '--applist', 'x.yaml'));
+  });
+});
+
+// #17: `macup --applist w.yaml version` has to reach the version flag. The
+// bare-word alias rewrite only inspects argv[2], so it has to run after the
+// global modifiers are stripped — the ordering rewriteDeprecatedVerbAliases
+// already relies on.
+describe('bare-word aliases survive a preceding global flag', () => {
+  it('finds `version` once --applist has been stripped', () => {
+    const a = argv('--applist', 'w.yaml', 'version');
+    extractApplistFlag(a);
+    rewriteFlagAliases(a);
+    expect(a).toEqual(argv('--version'));
+  });
+
+  it('finds `version` once the verbosity flags have been stripped', () => {
+    const a = argv('--debug', 'version');
+    extractVerbosityFlags(a);
+    rewriteFlagAliases(a);
+    expect(a).toEqual(argv('--version'));
   });
 });

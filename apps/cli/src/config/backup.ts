@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { access, copyFile, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
@@ -17,18 +18,28 @@ export interface BackupEntry {
 
 /**
  * The backup-filename namespace for one applist: its basename without the
- * YAML extension, reduced to the `[A-Za-z0-9-]` the filename grammar allows.
- * Two applists in one config dir (`--applist work.yaml` beside the default)
- * must not share a backup set, or restoring one would offer the other's
- * snapshots (#17). The default `applist.yaml` reduces to `applist`, so
- * existing backups keep listing and restoring unchanged.
+ * `.yaml` extension. Two applists in one config dir (`--applist work.yaml`
+ * beside the default) must not share a backup set, or restoring one would
+ * offer — and overwrite with — the other's snapshots (#17).
+ *
+ * The filename grammar only admits `[A-Za-z0-9-]`, and dropping the extension
+ * loses information, so the plain reduction is not injective: `my_list.yaml`,
+ * `my-list.yaml`, and `work.yaml` / `work.yml` would each collapse onto one
+ * prefix. Anything that isn't already a clean stem plus `.yaml` therefore
+ * carries a short digest of the full basename, which restores the one
+ * property that matters: distinct files, distinct namespaces.
+ *
+ * The common case is untouched. `applist.yaml` is still `applist`, so backups
+ * taken by earlier versions keep listing and restoring with no migration.
  */
 export function backupPrefixFor(applistPath: string): string {
-  const stem = basename(applistPath, extname(applistPath));
+  const name = basename(applistPath);
+  const stem = basename(name, extname(name));
   const safe = stem.replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
-  // A stem of only separators (`_.yaml`) would leave nothing to namespace by;
-  // fall back rather than emit a filename the grammar can't parse back.
-  return safe === '' ? 'applist' : safe;
+  if (safe !== '' && safe === stem && name === `${stem}.yaml`) return safe;
+  // Lossy reduction: disambiguate with a digest of what was actually lost.
+  const digest = createHash('sha256').update(name).digest('hex').slice(0, 8);
+  return safe === '' ? `applist-${digest}` : `${safe}-${digest}`;
 }
 
 // Operation labels can contain hyphens (e.g. `sync-tracked`); the segment

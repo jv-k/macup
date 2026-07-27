@@ -31,6 +31,15 @@ export interface PathResolution {
   legacyMigration?: LegacyMigration;
 }
 
+/**
+ * How the user named this applist, for messages that have to say so. Only
+ * meaningful when the resolution is `explicit`; the implicit sources are the
+ * ones nobody had to ask for.
+ */
+export function selectorLabel(paths: Pick<PathResolution, 'source'>): string {
+  return paths.source === 'flag-applist' ? '--applist' : '$MACUP_APPLIST';
+}
+
 export interface ResolveOptions {
   env: Partial<Record<string, string>>;
   home: string;

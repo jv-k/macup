@@ -158,12 +158,15 @@ export class ConfigStore {
   private originalText = '';
   private fileExisted = false;
   private readonly now: () => Date;
+  /** Backup-filename namespace for this applist; see backupPrefixFor (#17). */
+  private readonly backupPrefix: string;
 
   constructor(
     readonly paths: ConfigStorePaths,
     deps: ConfigStoreDeps = {},
   ) {
     this.now = deps.now ?? (() => new Date());
+    this.backupPrefix = backupPrefixFor(paths.applistPath);
   }
 
   async load(): Promise<LoadResult> {
@@ -261,12 +264,7 @@ export class ConfigStore {
   // ./backup so mutation backups and pre-undo snapshots name files
   // identically. `operation` is the bare label (e.g. 'add', 'migration').
   private uniqueBackupPath(operation: string): string {
-    return uniqueBackupPath(
-      this.paths.backupDir,
-      backupPrefixFor(this.paths.applistPath),
-      operation,
-      this.now(),
-    );
+    return uniqueBackupPath(this.paths.backupDir, this.backupPrefix, operation, this.now());
   }
 
   // An invalid config is nearly always recoverable — every mutation takes
@@ -278,7 +276,7 @@ export class ConfigStore {
       // Match on what `macup restore` can actually offer — the same
       // pattern BackupStore lists by, namespaced to THIS applist. Counting
       // every *.yaml would promise a rollback to files restore never shows.
-      const re = backupFileRe(backupPrefixFor(this.paths.applistPath));
+      const re = backupFileRe(this.backupPrefix);
       const files = (await readdir(this.paths.backupDir)).filter((f) => re.test(f));
       if (files.length === 0) return '';
       return `\n\nA backup of this file exists (${files.length} in ${this.paths.backupDir}).\nRun \`macup restore\` to roll back to a working version.`;

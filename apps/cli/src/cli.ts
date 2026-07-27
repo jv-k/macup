@@ -56,11 +56,10 @@ import { runWizard } from './wizard-runner';
 // src/commands/shell directly.
 export { detectShellFromEnv } from './commands/shell';
 
-rewriteFlagAliases(process.argv);
-// `--applist <path>` is stripped before anything else parses argv: it selects
-// the config the whole run reads and writes, so it belongs to bootstrap, not
-// to any one subcommand (#17, ADR 0044). The only error it can raise is a
-// missing value, and that happens before the error boundary below exists.
+// `--applist <path>` is stripped first: it selects the config the whole run
+// reads and writes, so it belongs to bootstrap, not to any one subcommand
+// (#17, ADR 0044). The only error it can raise is a missing value, and that
+// happens before the error boundary below exists.
 let applistFlag: string | undefined;
 try {
   applistFlag = extractApplistFlag(process.argv);
@@ -72,6 +71,11 @@ try {
   throw err;
 }
 const flags = extractVerbosityFlags(process.argv);
+// After both strippers, for the same reason rewriteDeprecatedVerbAliases runs
+// late: this only inspects argv[2], so a leading global modifier would push
+// the bare word out of the slot and `macup --applist w.yaml version` would
+// fall through to the help screen.
+rewriteFlagAliases(process.argv);
 // Deprecated `add`/`remove` verbs → `track`/`untrack` (ADR 0031). Rewritten in
 // argv (not registered as citty subcommands) so the aliases dispatch but stay
 // out of `--help` and completions; the notice goes to stderr. Runs after the

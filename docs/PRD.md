@@ -425,7 +425,7 @@ v1.0.x polish:
 - **#5** Tracked marker in `list --all` + wizard multiselect (re-scoped; tracked-by-default listing already shipped)
 - **#6** Rollback / undo command
 - **#7** Config schema `version:` field
-- **#14** `macup init`: shipped; scaffolds an applist from what is installed, merging rather than replacing (ADR 0046)
+- **#14** `macup init`: shipped; scaffolds an applist from what is installed, merging rather than replacing (ADR 0047)
 - **#16** File logging (`--log`, `MACUP_LOG`): shipped; JSON-lines subprocess records, distinct from `--verbose` (ADR 0045)
 
 ### 8.3 Mid-term (v1.1, scriptability + bundles)

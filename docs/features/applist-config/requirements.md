@@ -32,7 +32,7 @@
 
 ### Scaffolding
 
-15. Bare `macup init` scans every available plugin, collects what each reports as installed, and merges those names into the applist under the key that plugin's `track` verb writes to (ADR 0046). It never replaces the file: pins, skip lists, and comments survive, and a second run adds nothing. An empty applist is written without a prompt; a populated one prompts, and under a non-TTY refuses with a pointer at `--force` rather than rewriting a config unattended. `--dry-run` prints the plan and writes nothing. An unavailable backend is reported and skipped, not fatal.
+15. Bare `macup init` scans every available plugin, collects what each reports as installed, and merges those names into the applist under the key that plugin's `track` verb writes to (ADR 0047). It never replaces the file: pins, skip lists, and comments survive, and a second run adds nothing. An empty applist is written without a prompt; a populated one prompts, and under a non-TTY refuses with a pointer at `--force` rather than rewriting a config unattended. `--dry-run` prints the plan and writes nothing. An unavailable backend is reported and skipped, not fatal.
 
 ## Source of truth
 

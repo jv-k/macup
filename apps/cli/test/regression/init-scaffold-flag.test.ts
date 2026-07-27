@@ -1,4 +1,4 @@
-// End-to-end coverage for #14 / ADR 0046: bare `macup init` scaffolds an
+// End-to-end coverage for #14 / ADR 0047: bare `macup init` scaffolds an
 // applist from what is installed, while `macup init <shell>` keeps emitting
 // shell integration (#24). The two share a verb and nothing else, so the
 // dispatch between them is worth pinning against the real binary.
@@ -151,7 +151,7 @@ describe('bare `macup init` scaffolds the applist (#14)', () => {
   it('is a prompt-free no-op in a script once everything found is tracked', async () => {
     // The refusal exists to guard a change. With nothing new to add there is no
     // change to guard, so failing would contradict "running it again adds only
-    // what is new" (ADR 0046).
+    // what is new" (ADR 0047).
     const { env, applist } = sandbox();
     await run(env, 'init');
     const after = readFileSync(applist, 'utf8');
@@ -191,7 +191,7 @@ describe('bare `macup init` scaffolds the applist (#14)', () => {
 
   it('leaves pins, skip lists, and comments alone', async () => {
     // The parts a user typed by hand are the ones a scan cannot regenerate, so
-    // scaffolding merges rather than replacing (ADR 0046).
+    // scaffolding merges rather than replacing (ADR 0047).
     const { env, applist } = sandbox(
       'version: 1\n# my notes\nnpm:\n  - typescript\npins:\n  npm:\n    typescript: 5.3.3\nskip:\n  brew:\n    - legacy-dep\n',
     );

@@ -1,4 +1,4 @@
-# ADR 0046: `macup init` scaffolds by merging, and refuses to guess under a pipe
+# ADR 0047: `macup init` scaffolds by merging, and refuses to guess under a pipe
 
 > Status: accepted · Date: 2026-07-27 · Deciders: John Valai
 

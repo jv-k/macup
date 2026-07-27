@@ -193,7 +193,7 @@ export async function runInitScaffold(input: ScaffoldInput): Promise<number> {
   // What would actually change, computed before touching anything. The prompt
   // and the non-TTY refusal exist to guard a modification, so with nothing new
   // to add there is nothing to guard — failing there would contradict "running
-  // it again adds only what is new" (ADR 0046).
+  // it again adds only what is new" (ADR 0047).
   const pending = plan.groups
     .map((group) => {
       const tracked = new Set(input.store.list(group.key));

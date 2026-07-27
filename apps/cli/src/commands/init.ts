@@ -16,7 +16,7 @@
 //   - silent when everything is up to date.
 //
 // Namespace note: bare `macup init` (no shell) scaffolds the applist from
-// what is already installed (#14, ADR 0046). The two branches share only
+// what is already installed (#14, ADR 0047). The two branches share only
 // the verb: the scaffolder lives in ./init-scaffold, and the dispatch
 // between them is the first thing run() does.
 

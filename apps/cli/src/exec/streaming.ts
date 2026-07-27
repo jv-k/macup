@@ -100,7 +100,7 @@ export class StreamingExecRunner implements ExecRunner {
 
   /**
    * Run a command and parse its stdout as JSON.
-   * @throws Error when the command exits non-zero, so a caller expecting JSON never parses failure output.
+   * @throws Error when the command exits non-zero, so a caller expecting JSON never parses failure output, or SyntaxError when stdout is not JSON.
    */
   async runJson<T = unknown>(
     cmd: string,

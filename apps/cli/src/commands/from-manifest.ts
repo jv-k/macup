@@ -368,7 +368,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       /**
-       * @throws MacupError from the plugin or the store; the CLI's error boundary turns it into a message and an exit code.
+       * @throws whatever the plugin or store raised, after logging it under
+       * `--verbose`. A MacupError reaches the user as a single line; anything
+       * else — including the bare Error `mutateRefs` raises on a non-zero exit —
+       * keeps its stack trace, which #122 tracks.
        */
       async run({ args, rawArgs }) {
         // `all` is the composite: host-owned fan-out (ADR 0033), not a per-ref
@@ -467,7 +470,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       /**
-       * @throws MacupError from the plugin or the store; the CLI's error boundary turns it into a message and an exit code.
+       * @throws whatever the plugin or store raised, after logging it under
+       * `--verbose`. A MacupError reaches the user as a single line; anything
+       * else — including the bare Error `mutateRefs` raises on a non-zero exit —
+       * keeps its stack trace, which #122 tracks.
        */
       async run({ args, rawArgs }) {
         // Only `all` is the composite (ADR 0033); system/xcode also have empty

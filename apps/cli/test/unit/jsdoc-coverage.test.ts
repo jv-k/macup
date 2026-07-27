@@ -231,9 +231,15 @@ describe('JSDoc coverage across src/ (#43)', () => {
     const missing: string[] = [];
     for (const file of files) {
       const text = readFileSync(file, 'utf8');
-      if (!text.trimStart().startsWith('/**')) missing.push(relative(CLI_ROOT, file));
+      // The tag, not merely a leading block: `errors.ts` opens with
+      // MacupError's own docstring, which a "starts with /**" check accepted as
+      // a file summary.
+      const open = text.indexOf('/**');
+      const close = text.indexOf('*/');
+      const firstBlock = open === 0 && close > open ? text.slice(open, close + 2) : '';
+      if (!firstBlock.includes('@module')) missing.push(relative(CLI_ROOT, file));
     }
-    expect(missing, `file(s) with no module header:\n  ${missing.join('\n  ')}`).toEqual([]);
+    expect(missing, `file(s) with no @module header:\n  ${missing.join('\n  ')}`).toEqual([]);
   });
 
   it('tags a function that can throw with @throws', () => {

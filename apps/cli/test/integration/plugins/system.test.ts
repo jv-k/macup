@@ -67,3 +67,82 @@ describe('system plugin — install / update', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+// #120: `softwareupdate --install <label>` exits 0 when the label matches
+// nothing, announcing `<label>: No such update` on stdout. Judging the run by
+// its exit code alone reports a successful install having installed nothing.
+describe('system plugin — a no-op install is a failure (#120)', () => {
+  const NOOP = 'macOS Tahoe 26.6-25G70';
+
+  it('rejects when softwareupdate reports "No such update", naming the label', async () => {
+    const ctx = await makeCtx('system-noop-install');
+    await expect(systemPlugin.install?.(ctx, [{ kind: 'system', name: NOOP }], {})).rejects.toThrow(
+      new RegExp(NOOP.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    );
+  });
+
+  it('rejects for `update` too, which shares the helper', async () => {
+    const ctx = await makeCtx('system-noop-install');
+    await expect(systemPlugin.update?.(ctx, [{ kind: 'system', name: NOOP }], {})).rejects.toThrow(
+      /no such update/i,
+    );
+  });
+
+  it('stops before the remaining refs rather than reporting a partial success', async () => {
+    const ctx = await makeCtx('system-noop-install');
+    await expect(
+      systemPlugin.install?.(
+        ctx,
+        [
+          { kind: 'system', name: NOOP },
+          { kind: 'system', name: 'Safari17.5-20H30SafariSeed1' },
+        ],
+        {},
+      ),
+    ).rejects.toThrow(/no such update/i);
+  });
+
+  it('still resolves for a genuine install', async () => {
+    const ctx = await makeCtx('system-noop-install');
+    await expect(
+      systemPlugin.install?.(ctx, [{ kind: 'system', name: 'Safari17.5-20H30SafariSeed1' }], {}),
+    ).resolves.toBeUndefined();
+  });
+
+  // The marker has to be "No such update", which is scoped to the label we
+  // asked for. "No updates are available." is softwareupdate's sign-off and
+  // can trail a real install, so treating it as a no-op signal would fail a
+  // successful run — the over-strictness the issue warns against.
+  it('does not fail an install whose output merely ends with "No updates are available."', async () => {
+    const ctx = await makeCtx('system-noop-install');
+    await expect(
+      systemPlugin.install?.(ctx, [{ kind: 'system', name: 'NoUpdatesTail-1.0' }], {}),
+    ).resolves.toBeUndefined();
+  });
+
+  it('still raises on a non-zero exit, with the exit code and stderr preserved', async () => {
+    const ctx = await makeCtx('system-noop-install');
+    await expect(
+      systemPlugin.install?.(ctx, [{ kind: 'system', name: 'NeedsRoot-1.0' }], {}),
+    ).rejects.toThrow(/exited 1: softwareupdate: must be run as root/);
+  });
+
+  it('executes nothing under --dry-run, so the no-op check cannot fire', async () => {
+    const logged: string[] = [];
+    const ctx: PluginContext = {
+      // No fixtures at all: any real invocation would be a fixture miss.
+      exec: new FixtureExecRunner({ fixtures: [], onPath: ['softwareupdate'] }),
+      log: {
+        info: (m: string) => void logged.push(m),
+        warn: () => {},
+        error: () => {},
+        debug: () => {},
+      },
+      signal: new AbortController().signal,
+    };
+    await expect(
+      systemPlugin.install?.(ctx, [{ kind: 'system', name: NOOP }], { dryRun: true }),
+    ).resolves.toBeUndefined();
+    expect(logged).toEqual([`[dry-run] softwareupdate --install ${NOOP} --verbose`]);
+  });
+});

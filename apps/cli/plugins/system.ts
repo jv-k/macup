@@ -10,6 +10,24 @@ import type {
 
 const LABEL_RE = /^\*\s*Label:\s*(.+?)\s*$/;
 
+// `softwareupdate --install <label>` exits 0 when the label matches nothing,
+// announcing `<label>: No such update` on stdout and installing nothing (#120).
+// The exit code cannot tell that apart from a real install, so the no-op has to
+// be read out of the output.
+//
+// Deliberately narrow: only `No such update`, which is scoped to the label we
+// asked for and cannot appear in a run that did work. softwareupdate also
+// prints `No updates are available.`, but that is its sign-off and can trail a
+// genuine install, so keying on it would fail successful runs. Recognising the
+// explicit no-op beats trying to pattern-match what success looks like, because
+// success wording varies across macOS releases and a false failure is as bad as
+// the false success this fixes.
+const NO_SUCH_UPDATE_RE = /(?:^|:\s*)No such update\.?$/i;
+
+function reportsNoSuchUpdate(output: string): boolean {
+  return output.split('\n').some((line) => NO_SUCH_UPDATE_RE.test(line.trim()));
+}
+
 function parseSoftwareUpdateList(stdout: string): string[] {
   const labels: string[] = [];
   for (const line of stdout.split('\n')) {
@@ -46,6 +64,11 @@ async function runInstall(
     if (r.exitCode !== 0) {
       throw new Error(
         `softwareupdate --install ${ref.name} exited ${r.exitCode}: ${r.stderr.trim()}`,
+      );
+    }
+    if (reportsNoSuchUpdate(r.stdout) || reportsNoSuchUpdate(r.stderr)) {
+      throw new Error(
+        `softwareupdate --install ${ref.name}: no such update, nothing was installed. Apple stamps labels with a version, so this one may be stale or already applied; run \`macup system list\` for the labels currently on offer.`,
       );
     }
   }

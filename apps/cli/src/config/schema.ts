@@ -23,6 +23,7 @@ export const ApplistKeySchema = z.enum([
   'npm',
   'pnpm',
   'pip',
+  'go',
   'brew.formulas',
   'brew.casks',
 ]);
@@ -59,6 +60,7 @@ export const ApplistSchema = z.object({
   npm: StringList,
   pnpm: StringList,
   pip: StringList,
+  go: StringList,
   brew: BrewListSchema,
   pins: z.record(z.string(), PinEntry).default({}),
   skip: z.record(z.string(), SkipEntry).default({}),

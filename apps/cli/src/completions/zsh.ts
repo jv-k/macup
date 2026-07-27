@@ -61,6 +61,7 @@ _macup() {
     '(-v --version)'{-v,--version}'[Show version]' \\
     '(-V --verbose)'{-V,--verbose}'[Stream output to scrollback]' \\
     '(-D --debug)'{-D,--debug}'[Trace every shell call to stderr]' \\
+    '--applist[Use an alternate applist file]:applist:_files -g "*.(yaml|yml)"' \\
     '1:plugin:->plugin' \\
     '2:command:->command' \\
     '*:: :->rest'

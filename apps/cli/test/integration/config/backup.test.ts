@@ -150,3 +150,97 @@ describe('BackupStore — cleanup', () => {
     expect(leftover).toBe('hello');
   });
 });
+
+// #17: two applists can share one config dir, so the backup set has to be
+// namespaced by the applist it came from — restoring `work.yaml` must never
+// offer, overwrite, or delete a backup of the default `applist.yaml`.
+describe('BackupStore — per-applist namespace (#17)', () => {
+  it('names a non-default applist backups after its own stem', async () => {
+    const workPath = join(workDir, 'work.yaml');
+    await writeFile(workPath, 'version: 2\n', 'utf8');
+    const s = new BackupStore({ applistPath: workPath, backupDir });
+    const entry = await s.snapshot('track', new Date(2026, 6, 27, 9, 30, 0));
+    expect(entry?.filename).toBe('work_track_2026-07-27_09-30-00.yaml');
+  });
+
+  it('keeps naming the default applist backups applist_*', async () => {
+    await writeFile(applistPath, 'version: 2\n', 'utf8');
+    const s = new BackupStore({ applistPath, backupDir });
+    const entry = await s.snapshot('track', new Date(2026, 6, 27, 9, 30, 0));
+    expect(entry?.filename).toBe('applist_track_2026-07-27_09-30-00.yaml');
+  });
+
+  it('lists only the active applist backups when both share a backup dir', async () => {
+    await seedBackups([
+      'applist_track_2026-07-27_09-00-00.yaml',
+      'work_track_2026-07-27_09-10-00.yaml',
+      'work_untrack_2026-07-27_09-20-00.yaml',
+    ]);
+    const work = new BackupStore({ applistPath: join(workDir, 'work.yaml'), backupDir });
+    expect((await work.list()).map((e) => e.filename)).toEqual([
+      'work_untrack_2026-07-27_09-20-00.yaml',
+      'work_track_2026-07-27_09-10-00.yaml',
+    ]);
+    const dflt = new BackupStore({ applistPath, backupDir });
+    expect((await dflt.list()).map((e) => e.filename)).toEqual([
+      'applist_track_2026-07-27_09-00-00.yaml',
+    ]);
+  });
+
+  it('cleans up only the active applist backups', async () => {
+    await seedBackups([
+      'applist_track_2026-07-27_09-00-00.yaml',
+      'work_track_2026-07-27_09-10-00.yaml',
+    ]);
+    const work = new BackupStore({ applistPath: join(workDir, 'work.yaml'), backupDir });
+    expect(await work.cleanup(true)).toBe(1);
+    const dflt = new BackupStore({ applistPath, backupDir });
+    expect((await dflt.list()).map((e) => e.filename)).toEqual([
+      'applist_track_2026-07-27_09-00-00.yaml',
+    ]);
+  });
+
+  it('sanitises a stem that would otherwise break the backup filename grammar', async () => {
+    const oddPath = join(workDir, 'my list_v2.yaml');
+    await writeFile(oddPath, 'version: 2\n', 'utf8');
+    const s = new BackupStore({ applistPath: oddPath, backupDir });
+    const entry = await s.snapshot('track', new Date(2026, 6, 27, 9, 30, 0));
+    expect(entry?.filename).toMatch(/^my-list-v2-[0-9a-f]{8}_track_2026-07-27_09-30-00\.yaml$/);
+    expect((await s.list()).map((e) => e.filename)).toEqual([entry?.filename]);
+  });
+
+  // The sanitiser squashes anything outside the filename grammar to `-`, and
+  // the extension is dropped, so several distinct filenames can reduce to one
+  // prefix. Sharing a namespace means `restore` offers the WRONG list's
+  // snapshot and overwrites with it, which is the exact thing #17 forbids.
+  it.each([
+    ['my_list.yaml', 'my-list.yaml'],
+    ['work.yaml', 'work.yml'],
+    ['work list.yaml', 'work-list.yaml'],
+  ])('keeps %s and %s in separate namespaces', async (a, b) => {
+    const prefixes = new Set<string>();
+    for (const name of [a, b]) {
+      const path = join(workDir, name);
+      await writeFile(path, 'version: 2\n', 'utf8');
+      const entry = await new BackupStore({ applistPath: path, backupDir }).snapshot(
+        'track',
+        new Date(2026, 6, 27, 9, 30, 0),
+      );
+      prefixes.add((entry as { filename: string }).filename.split('_')[0] as string);
+    }
+    expect(prefixes.size).toBe(2);
+  });
+
+  it('never lists another applist that reduced to a similar prefix', async () => {
+    const underscore = join(workDir, 'my_list.yaml');
+    const hyphen = join(workDir, 'my-list.yaml');
+    await writeFile(underscore, 'version: 2\n', 'utf8');
+    await writeFile(hyphen, 'version: 2\n', 'utf8');
+    const a = new BackupStore({ applistPath: underscore, backupDir });
+    const b = new BackupStore({ applistPath: hyphen, backupDir });
+    await a.snapshot('track', new Date(2026, 6, 27, 9, 30, 0));
+    await b.snapshot('untrack', new Date(2026, 6, 27, 9, 31, 0));
+    expect((await a.list()).map((e) => e.operation)).toEqual(['track']);
+    expect((await b.list()).map((e) => e.operation)).toEqual(['untrack']);
+  });
+});

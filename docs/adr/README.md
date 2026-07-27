@@ -71,3 +71,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0041](0041-bundle-schema.md) | A bundle shares the applist's package block and derives its target keys | accepted |
 | [0042](0042-one-tui-design-language.md) | One TUI design language, with wizard output joining clack's gutter | accepted |
 | [0043](0043-fold-live-output-into-the-gutter.md) | Fold live subprocess output into the gutter; retire the DECSTBM status bar | accepted |
+| [0044](0044-selecting-an-alternate-applist.md) | Selecting an alternate applist with `--applist` | accepted |

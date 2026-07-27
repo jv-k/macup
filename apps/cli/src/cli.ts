@@ -22,12 +22,14 @@
 import type { ArgsDef, CommandDef } from 'citty';
 import { defineCommand, runMain } from 'citty';
 import {
+  extractApplistFlag,
   extractVerbosityFlags,
   findUnknownTopLevelFlags,
   rewriteDeprecatedVerbAliases,
   rewriteFlagAliases,
 } from './cli/argv';
 import { bootstrap } from './cli/bootstrap';
+import { withErrorBoundary } from './cli/error-boundary';
 import { printVersionSplash, showCustomHelp } from './cli/help';
 import type { ActionCommand } from './cli/types';
 import { buildCheckCommand } from './commands/check';
@@ -55,8 +57,26 @@ import { runWizard } from './wizard-runner';
 // src/commands/shell directly.
 export { detectShellFromEnv } from './commands/shell';
 
-rewriteFlagAliases(process.argv);
+// `--applist <path>` is stripped first: it selects the config the whole run
+// reads and writes, so it belongs to bootstrap, not to any one subcommand
+// (#17, ADR 0044). The only error it can raise is a missing value, and that
+// happens before the error boundary below exists.
+let applistFlag: string | undefined;
+try {
+  applistFlag = extractApplistFlag(process.argv);
+} catch (err) {
+  if (err instanceof MacupError) {
+    console.error(`error: ${err.message}`);
+    process.exit(err.exitCode);
+  }
+  throw err;
+}
 const flags = extractVerbosityFlags(process.argv);
+// After both strippers, for the same reason rewriteDeprecatedVerbAliases runs
+// late: this only inspects argv[2], so a leading global modifier would push
+// the bare word out of the slot and `macup --applist w.yaml version` would
+// fall through to the help screen.
+rewriteFlagAliases(process.argv);
 // Deprecated `add`/`remove` verbs → `track`/`untrack` (ADR 0031). Rewritten in
 // argv (not registered as citty subcommands) so the aliases dispatch but stay
 // out of `--help` and completions; the notice goes to stderr. Runs after the
@@ -68,7 +88,7 @@ const trackablePluginIds = new Set(
 );
 const deprecatedVerbNotice = rewriteDeprecatedVerbAliases(process.argv, trackablePluginIds);
 if (deprecatedVerbNotice) console.warn(logui.warning(deprecatedVerbNotice));
-const deps = bootstrap(flags);
+const deps = bootstrap({ ...flags, applist: applistFlag });
 
 // SIGINT: trip the deps-level abort so in-flight subprocesses cancel,
 // then exit. Registered here (vs at module import) so importing any of
@@ -175,47 +195,6 @@ for (const plugin of deps.registry) {
   });
 }
 
-// citty's runMain catches whatever escapes a command and hands it to
-// consola, which prints the message followed by an internal stack trace.
-// For a MacupError — a condition we diagnosed and worded FOR the user,
-// like an invalid applist — that trace buries the advice under noise and
-// reads like a crash. citty's own CLIError (the escape hatch runMain
-// checks for) isn't exported, so the boundary goes here instead: catch
-// MacupError at each command's edge, print just the message, and set the
-// exit code. Anything else still escapes with its trace intact.
-function withErrorBoundary<A extends ArgsDef>(cmd: CommandDef<A>): CommandDef<A> {
-  const wrapped: CommandDef<A> = { ...cmd };
-  const run = cmd.run;
-  if (typeof run === 'function') {
-    wrapped.run = async (ctx) => {
-      try {
-        return await run(ctx);
-      } catch (err) {
-        if (err instanceof MacupError) {
-          // Set-and-return, not process.exit(): exit() can truncate a
-          // piped stdout mid-flush, which would be a poor trade on the
-          // one path whose whole job is getting a message to the user.
-          console.error(`error: ${err.message}`);
-          process.exitCode = err.exitCode;
-          return;
-        }
-        throw err;
-      }
-    };
-  }
-  // Subcommands run via citty's own dispatch, not the parent's run(), so
-  // the boundary has to reach every node of the tree.
-  const subs = cmd.subCommands;
-  if (subs && typeof subs === 'object') {
-    const wrappedSubs: Record<string, CommandDef> = {};
-    for (const [name, sub] of Object.entries(subs)) {
-      wrappedSubs[name] = withErrorBoundary(sub as CommandDef);
-    }
-    wrapped.subCommands = wrappedSubs;
-  }
-  return wrapped;
-}
-
 // Only the tree citty dispatches gets the boundary. The wizard runs these
 // same commands via its own runCommand() call and reports failures inline
 // so the session survives — routing it through a boundary that exits the
@@ -260,6 +239,9 @@ const KNOWN_TOP_LEVEL_FLAGS = new Set<string>([
   '-V',
   '--debug',
   '-D',
+  // Stripped from argv before citty, like the verbosity flags — listed so a
+  // future change that stops stripping it doesn't silently make it "unknown".
+  '--applist',
 ]);
 
 const main = defineCommand({
@@ -299,4 +281,9 @@ const main = defineCommand({
   },
 });
 
-runMain(main);
+// The boundary reaches the ROOT too, not just the subcommand tree: the
+// wizard runs from main's own run() and calls deps.getStore(), so a fatal
+// condition there (a named applist that isn't on disk, #17) would otherwise
+// escape to runMain and print a stack trace over the message we wrote for
+// the user. Re-wrapping the already-wrapped subcommands is a no-op.
+runMain(withErrorBoundary(main));

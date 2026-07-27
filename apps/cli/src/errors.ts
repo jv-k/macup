@@ -25,6 +25,32 @@ export class ErrInvalidConfig extends MacupError {
   }
 }
 
+/**
+ * A malformed invocation macup rejected before doing any work — a flag
+ * missing its value, say. Distinct from ErrInvalidConfig: nothing was read,
+ * so there is no file to blame and no backup to offer.
+ */
+export class ErrUsage extends MacupError {
+  override readonly kind = 'usage';
+}
+
+/**
+ * An applist the user named explicitly (`--applist` / `$MACUP_APPLIST`) that
+ * isn't on disk. The default locations create the file on first write; a
+ * named one is far more likely a typo, so macup stops and shows the absolute
+ * path it resolved (ADR 0044).
+ */
+export class ErrApplistNotFound extends MacupError {
+  override readonly kind = 'applist-not-found';
+
+  constructor(
+    readonly applistPath: string,
+    readonly source: string,
+  ) {
+    super(`No applist at ${applistPath} (selected by ${source})`);
+  }
+}
+
 export class ErrBackupNotFound extends MacupError {
   override readonly kind = 'backup-not-found';
 

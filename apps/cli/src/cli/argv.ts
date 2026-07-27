@@ -15,8 +15,14 @@
 //      without being registered as citty subcommands — which keeps them out
 //      of per-plugin `--help` and the generated completions.
 //
+//   4) Pull `--applist <path>` out of argv, for the same reason as (2): it
+//      selects the config the whole run reads and writes, so it is consumed
+//      at bootstrap rather than by any one subcommand (#17, ADR 0044).
+//
 // All are pure transforms over argv, exported so cli.ts and any future
 // in-process tests can drive them deterministically without spawning.
+
+import { ErrUsage } from '../errors';
 
 // `--version` is the canonical spelling here, unlike the command nouns:
 // every CLI has `--version`/`-v`, so the flag is the convention and
@@ -90,6 +96,62 @@ export function findUnknownTopLevelFlags(
     if (!known.has(name)) unknown.push(name);
   }
   return unknown;
+}
+
+// Pull `--applist <path>` / `--applist=<path>` out of argv and return the
+// path, stripping the matched tokens so citty never sees them — the flag is a
+// global modifier consumed at bootstrap, like the verbosity flags, and every
+// subcommand would otherwise reject it (#17, ADR 0044).
+//
+// Scanning stops at the `--` end-of-flags marker so a package literally named
+// `--applist` stays a positional. Repeats take the last value, matching the
+// convention every other flag parser follows. A missing or empty value is a
+// usage error rather than a silent fallback to the default applist: the whole
+// point of the flag is to NOT write to the default one.
+export function extractApplistFlag(argv: string[]): string | undefined {
+  let value: string | undefined;
+  const kept: string[] = [];
+  let terminated = false;
+
+  for (let i = 0; i < argv.length; i++) {
+    const tok = argv[i] as string;
+    if (terminated) {
+      kept.push(tok);
+      continue;
+    }
+    if (tok === '--') {
+      terminated = true;
+      kept.push(tok);
+      continue;
+    }
+    if (tok === '--applist') {
+      const next = argv[i + 1];
+      // `--applist --json` means the value was forgotten, not that the next
+      // flag is a filename. The `=` spelling is the escape hatch for a path
+      // that really does start with a dash.
+      if (next === undefined || next === '' || next.startsWith('-')) {
+        throw new ErrUsage('--applist requires a path (e.g. --applist work.yaml)');
+      }
+      value = next;
+      i++;
+      continue;
+    }
+    if (tok.startsWith('--applist=')) {
+      const inline = tok.slice('--applist='.length);
+      if (inline === '') {
+        throw new ErrUsage('--applist requires a path (e.g. --applist work.yaml)');
+      }
+      value = inline;
+      continue;
+    }
+    kept.push(tok);
+  }
+
+  if (value !== undefined) {
+    argv.length = 0;
+    argv.push(...kept);
+  }
+  return value;
 }
 
 // Inspect argv for --debug/-D/--verbose/-V, return the parsed flags, and

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { findUnknownTopLevelFlags, rewriteDeprecatedVerbAliases } from '../../../src/cli/argv';
+import {
+  extractApplistFlag,
+  extractVerbosityFlags,
+  findUnknownTopLevelFlags,
+  rewriteDeprecatedVerbAliases,
+  rewriteFlagAliases,
+} from '../../../src/cli/argv';
+import { ErrUsage } from '../../../src/errors';
 
 const KNOWN = new Set(['--plugins', '--config', '--completions', '-h', '--help']);
 const PLUGIN_IDS = new Set(['brew', 'npm']);
@@ -71,5 +78,86 @@ describe('rewriteDeprecatedVerbAliases (ADR 0031)', () => {
     const a = argv('brew');
     expect(rewriteDeprecatedVerbAliases(a, PLUGIN_IDS)).toBeNull();
     expect(a).toEqual(argv('brew'));
+  });
+});
+
+describe('extractApplistFlag (#17)', () => {
+  it('reads the space-separated spelling and strips both tokens', () => {
+    const a = argv('--applist', 'work.yaml', 'brew', 'list');
+    expect(extractApplistFlag(a)).toBe('work.yaml');
+    expect(a).toEqual(argv('brew', 'list'));
+  });
+
+  it('reads the --applist=<path> spelling and strips the one token', () => {
+    const a = argv('--applist=work.yaml', 'brew', 'list');
+    expect(extractApplistFlag(a)).toBe('work.yaml');
+    expect(a).toEqual(argv('brew', 'list'));
+  });
+
+  it('returns undefined and leaves argv alone when the flag is absent', () => {
+    const a = argv('brew', 'list');
+    expect(extractApplistFlag(a)).toBeUndefined();
+    expect(a).toEqual(argv('brew', 'list'));
+  });
+
+  it('keeps a path that looks like a flag when spelled with =', () => {
+    const a = argv('--applist=--weird.yaml', 'brew', 'list');
+    expect(extractApplistFlag(a)).toBe('--weird.yaml');
+    expect(a).toEqual(argv('brew', 'list'));
+  });
+
+  it('rejects a trailing --applist with no value', () => {
+    expect(() => extractApplistFlag(argv('--applist'))).toThrow(ErrUsage);
+  });
+
+  it('rejects --applist followed by another flag rather than eating it', () => {
+    expect(() => extractApplistFlag(argv('--applist', '--json'))).toThrow(ErrUsage);
+  });
+
+  it('rejects an empty value in either spelling', () => {
+    expect(() => extractApplistFlag(argv('--applist='))).toThrow(ErrUsage);
+    expect(() => extractApplistFlag(argv('--applist', ''))).toThrow(ErrUsage);
+  });
+
+  it('exits non-zero for a usage error', () => {
+    try {
+      extractApplistFlag(argv('--applist'));
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ErrUsage);
+      expect((err as ErrUsage).exitCode).toBe(1);
+    }
+  });
+
+  it('takes the last --applist when repeated, matching flag convention', () => {
+    const a = argv('--applist', 'a.yaml', 'brew', '--applist=b.yaml', 'list');
+    expect(extractApplistFlag(a)).toBe('b.yaml');
+    expect(a).toEqual(argv('brew', 'list'));
+  });
+
+  it('leaves an --applist after the -- end-of-flags marker for the command', () => {
+    const a = argv('brew', 'track', '--', '--applist', 'x.yaml');
+    expect(extractApplistFlag(a)).toBeUndefined();
+    expect(a).toEqual(argv('brew', 'track', '--', '--applist', 'x.yaml'));
+  });
+});
+
+// #17: `macup --applist w.yaml version` has to reach the version flag. The
+// bare-word alias rewrite only inspects argv[2], so it has to run after the
+// global modifiers are stripped — the ordering rewriteDeprecatedVerbAliases
+// already relies on.
+describe('bare-word aliases survive a preceding global flag', () => {
+  it('finds `version` once --applist has been stripped', () => {
+    const a = argv('--applist', 'w.yaml', 'version');
+    extractApplistFlag(a);
+    rewriteFlagAliases(a);
+    expect(a).toEqual(argv('--version'));
+  });
+
+  it('finds `version` once the verbosity flags have been stripped', () => {
+    const a = argv('--debug', 'version');
+    extractVerbosityFlags(a);
+    rewriteFlagAliases(a);
+    expect(a).toEqual(argv('--version'));
   });
 });

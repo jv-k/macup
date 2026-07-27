@@ -13,6 +13,8 @@ export interface ConfigReport {
   schemaError?: string;
   /** Declared or defaulted schema version; undefined when the file is absent or invalid. */
   schemaVersion?: number;
+  /** True when `--applist` / `$MACUP_APPLIST` named this file (#17). */
+  explicit: boolean;
   pinsCount: number;
   skipCount: number;
   backupDir: string;
@@ -25,6 +27,7 @@ export async function buildConfigReport(paths: PathResolution): Promise<ConfigRe
     applistPath: paths.applistPath,
     source: paths.source,
     exists: existsSync(paths.applistPath),
+    explicit: paths.explicit,
     schemaValid: false,
     pinsCount: 0,
     skipCount: 0,
@@ -87,11 +90,21 @@ export async function buildConfigReport(paths: PathResolution): Promise<ConfigRe
   return report;
 }
 
+// What "no file here" means depends on who chose the path. The default
+// locations create it on first write; an applist named with --applist /
+// $MACUP_APPLIST is refused instead (ADR 0044), so promising creation would
+// point the reader away from the actual problem.
+function missingFileNote(report: ConfigReport): string {
+  return report.explicit
+    ? 'no (missing — a named applist is not created for you)'
+    : 'no (will be created on first write)';
+}
+
 export function formatConfigReport(report: ConfigReport): string {
   const lines: string[] = [
     `applist:     ${report.applistPath}`,
     `source:      ${report.source}`,
-    `exists:      ${report.exists ? 'yes' : 'no (will be created on first write)'}`,
+    `exists:      ${report.exists ? 'yes' : missingFileNote(report)}`,
     `schema:      ${report.schemaValid ? `valid${report.schemaVersion ? ` (v${report.schemaVersion})` : ''}` : `INVALID — ${report.schemaError ?? 'unknown'}`}`,
     `pins:        ${report.pinsCount}`,
     `skip:        ${report.skipCount}`,

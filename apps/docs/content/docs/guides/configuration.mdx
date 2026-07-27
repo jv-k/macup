@@ -34,14 +34,38 @@ and its type.
 
 ## Resolution order
 
-1. `$MACUP_CONFIG` (explicit path)
-2. `$MACOS_UPDATETOOL_CONFIG` (legacy, emits a deprecation warning)
-3. `$XDG_CONFIG_HOME/macup/applist.yaml`
-4. `~/.config/macup/applist.yaml`
-5. `~/.config/macos-updatetool/applist.yaml` (legacy, auto-migration prompt on first mutation)
+1. `--applist <path>` (this run only)
+2. `$MACUP_APPLIST`
+3. `$MACUP_CONFIG` (the spelling that predates `--applist`)
+4. `$MACOS_UPDATETOOL_CONFIG` (legacy, emits a deprecation warning)
+5. `$XDG_CONFIG_HOME/macup/applist.yaml`
+6. `~/.config/macup/applist.yaml`
+7. `~/.config/macos-updatetool/applist.yaml` (legacy, auto-migration prompt on first mutation)
+
+## More than one applist
+
+Keeping work and personal packages apart takes one flag:
+
+```bash
+macup --applist ~/lists/work.yaml brew track ripgrep
+macup --applist ~/lists/work.yaml all update
+```
+
+`~` expands and a relative path resolves against the working directory. Set
+`MACUP_APPLIST` instead when passing the flag every time is impractical, in a
+launchd or cron job say. The flag wins when both are set.
+
+An applist you name this way has to exist. macup creates the default applist on
+first write, but a named path that isn't there is far more likely a typo than a
+new list, so it stops and shows you the absolute path it looked for. Create the
+file first (`touch ~/lists/work.yaml`) to start an empty one.
 
 ## Backups
 
-A timestamped backup is written before every config mutation (`add`, `remove`,
-`pin`, `skip`). If nothing changed, the backup is removed. Manage them with
-`macup cleanup` and `macup restore`.
+A timestamped backup is written before every config mutation (`track`,
+`untrack`, `pin`, `skip`). If nothing changed, no backup is written. Manage them
+with `macup cleanup` and `macup restore`.
+
+Backups are scoped to the applist they came from: `work.yaml` snapshots as
+`work_track_<timestamp>.yaml`, so `restore` and `cleanup` under one applist
+never touch another's, even when both live in the same directory.

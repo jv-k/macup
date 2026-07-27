@@ -149,3 +149,36 @@ describe('generateFishCompletions', () => {
     expect(out).toContain('cask');
   });
 });
+
+// #17: --applist takes a path, so every shell must both offer the flag and
+// complete a filename after it — an unlisted global flag is invisible to tab
+// completion even though the CLI accepts it.
+describe('--applist completion (#17)', () => {
+  it('zsh offers --applist with file completion', () => {
+    const out = generateZshCompletions(plugins);
+    expect(out).toContain('--applist');
+    expect(out).toMatch(/--applist\[[^\]]*\]:[^:]*:_files/);
+  });
+
+  it('bash offers --applist among the global flags and completes a file after it', () => {
+    const out = generateBashCompletions(plugins);
+    expect(out).toContain('--applist');
+    expect(out).toContain('compgen -f');
+  });
+
+  it('fish offers --applist and completes a path after it', () => {
+    const out = generateFishCompletions(plugins);
+    expect(out).toContain('-l applist');
+    expect(out).toMatch(/-l applist[^\n]*-r -F/);
+  });
+});
+
+// #17: the flag is usable alongside plugin/action args, so completion has to
+// offer it past position 1 too — `macup brew list --app<TAB>` was dead.
+describe('--applist completes past the first position (#17)', () => {
+  it('bash offers it wherever a flag can go', () => {
+    const out = generateBashCompletions(plugins);
+    const afterFirstPosition = out.slice(out.indexOf('COMP_CWORD} -ge 3'));
+    expect(afterFirstPosition).toContain('--applist');
+  });
+});

@@ -35,7 +35,7 @@ afterEach(async () => {
 });
 
 function configPaths(): PathResolution {
-  return { applistPath, configDir: workDir, backupDir, source: 'home-macup' };
+  return { applistPath, configDir: workDir, backupDir, source: 'home-macup', explicit: false };
 }
 
 async function loadCorrupt(): Promise<Error> {

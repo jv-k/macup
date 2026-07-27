@@ -6,28 +6,29 @@
 
 ### Path resolution
 
-1. The config path resolves in this order: `$MACUP_CONFIG`; `$MACOS_UPDATETOOL_CONFIG` (honored with a deprecation warning); `$XDG_CONFIG_HOME/macup/applist.yaml`, defaulting to `~/.config/macup/applist.yaml`; and, only when the new path does not exist, the legacy `~/.config/macos-updatetool/applist.yaml` with a pending-migration marker.
-2. The backup directory is always `backups/` next to the resolved applist file.
-3. `macup config` prints the resolved path and its source, whether the file exists, schema validity (with the zod issue list on failure), pin and skip counts, the backup dir, and any deprecation or legacy-migration notice.
+1. The config path resolves in this order: `--applist <path>`; `$MACUP_APPLIST`; `$MACUP_CONFIG`; `$MACOS_UPDATETOOL_CONFIG` (honored with a deprecation warning); `$XDG_CONFIG_HOME/macup/applist.yaml`, defaulting to `~/.config/macup/applist.yaml`; and, only when the new path does not exist, the legacy `~/.config/macos-updatetool/applist.yaml` with a pending-migration marker.
+2. `--applist` and `$MACUP_APPLIST` name the applist explicitly (ADR 0044): a leading `~` expands, a relative path resolves against the working directory, and a path that does not exist raises `ErrApplistNotFound` naming the absolute path rather than being created on first write. The diagnostic commands (`macup config`, `macup doctor`) still report a missing explicit applist instead of failing on it.
+3. The backup directory is always `backups/` next to the resolved applist file, and a backup filename leads with the applist's basename stem, so applists sharing a directory never share a backup set.
+4. `macup config` prints the resolved path and its source, whether the file exists, schema validity (with the zod issue list on failure), pin and skip counts, the backup dir, and any deprecation or legacy-migration notice.
 
 ### Schema and layout
 
-4. The file validates against the zod `ApplistSchema`: list keys `appstore`, `npm`, `pnpm`, `brew.formulas`, `brew.casks`, plus `pins` (plugin to name to version) and `skip` (plugin to name list). A file that fails validation raises `ErrInvalidConfig` and the command exits 1.
-5. Loading a missing file yields an empty document rather than an error; the file is created on first save.
-6. YAML round-trips through the CST so user comments and formatting on unchanged lines survive edits.
-7. On load, pre-1.x flat keys (`appstore_apps`, `npm_apps`, `pnpm_apps`, `brew_formulas`, `brew_casks`) are auto-migrated in place to the hierarchical layout; the rewrite is preceded by an `applist_migration_<timestamp>.yaml` backup and announced with the backup path.
+5. The file validates against the zod `ApplistSchema`: list keys `appstore`, `npm`, `pnpm`, `brew.formulas`, `brew.casks`, plus `pins` (plugin to name to version) and `skip` (plugin to name list). A file that fails validation raises `ErrInvalidConfig` and the command exits 1.
+6. Loading a missing file yields an empty document rather than an error; the file is created on first save.
+7. YAML round-trips through the CST so user comments and formatting on unchanged lines survive edits.
+8. On load, pre-1.x flat keys (`appstore_apps`, `npm_apps`, `pnpm_apps`, `brew_formulas`, `brew_casks`) are auto-migrated in place to the hierarchical layout; the rewrite is preceded by an `applist_migration_<timestamp>.yaml` backup and announced with the backup path.
 
 ### Saves and backups
 
-8. Saves are crash-safe: content is written to a sibling `.tmp` file and renamed over the live file (atomic on POSIX).
-9. A save whose serialized text is unchanged writes nothing and creates no backup, so no-op mutations cannot spam the backup dir.
-10. Every changing save of an existing file first copies it to `backups/applist_<operation>_<YYYY-MM-DD_HH-MM-SS>.yaml`; same-second collisions get an incrementing `_N` suffix instead of overwriting an earlier backup.
-11. Commands that trigger a backup echo the backup path (`Backup: ...`) after reporting the change.
+9. Saves are crash-safe: content is written to a sibling `.tmp` file and renamed over the live file (atomic on POSIX).
+10. A save whose serialized text is unchanged writes nothing and creates no backup, so no-op mutations cannot spam the backup dir.
+11. Every changing save of an existing file first copies it to `backups/<applist-stem>_<operation>_<YYYY-MM-DD_HH-MM-SS>.yaml` (`applist_…` for the default applist); same-second collisions get an incrementing `_N` suffix instead of overwriting an earlier backup.
+12. Commands that trigger a backup echo the backup path (`Backup: ...`) after reporting the change.
 
 ### Restore and cleanup
 
-12. `macup restore` lists backups newest first, asks for a target and a confirmation (default No), then copies the chosen backup over the live applist; with no backups it prints `No backups found` and exits 0.
-13. `macup cleanup` lists every `applist_*.yaml` backup, requires confirmation (default No), deletes them all, reports the count, and removes the backup dir if it is left empty.
+13. `macup restore` lists backups newest first, asks for a target and a confirmation (default No), then copies the chosen backup over the live applist; with no backups it prints `No backups found` and exits 0.
+14. `macup cleanup` lists the active applist's backups, requires confirmation (default No), deletes them all, reports the count, and removes the backup dir if it is left empty. Another applist's backups in the same directory are left alone.
 
 ## Source of truth
 

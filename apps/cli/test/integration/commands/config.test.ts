@@ -21,6 +21,7 @@ function paths(applistName = 'applist.yaml'): PathResolution {
     configDir: workDir,
     backupDir: join(workDir, 'backups'),
     source: 'home-macup',
+    explicit: false,
   };
 }
 
@@ -95,6 +96,7 @@ describe('formatConfigReport', () => {
       applistPath: '/x/applist.yaml',
       source: 'xdg-macup',
       exists: true,
+      explicit: false,
       schemaValid: true,
       pinsCount: 3,
       skipCount: 1,
@@ -112,6 +114,7 @@ describe('formatConfigReport', () => {
       applistPath: '/new',
       source: 'legacy-home',
       exists: true,
+      explicit: false,
       schemaValid: true,
       pinsCount: 0,
       skipCount: 0,
@@ -119,5 +122,35 @@ describe('formatConfigReport', () => {
       legacyMigration: { from: '/old/applist.yaml', to: '/new/applist.yaml' },
     });
     expect(out).toContain('legacy config detected at /old/applist.yaml');
+  });
+});
+
+// #17: "will be created on first write" is true for the default applist and
+// false for a named one — a named applist that's missing is an error on the
+// next mutating run, so promising creation sends the reader the wrong way.
+describe('config — a missing explicit applist (#17)', () => {
+  it('says the named applist is missing, not that it will be created', async () => {
+    const report = await buildConfigReport({
+      applistPath: '/nope/work.yaml',
+      configDir: '/nope',
+      backupDir: '/nope/backups',
+      source: 'flag-applist',
+      explicit: true,
+    });
+    const out = formatConfigReport(report);
+    expect(out).toContain('/nope/work.yaml');
+    expect(out).not.toContain('will be created on first write');
+    expect(out).toMatch(/missing/i);
+  });
+
+  it('still promises creation for the default applist', async () => {
+    const report = await buildConfigReport({
+      applistPath: '/nope/applist.yaml',
+      configDir: '/nope',
+      backupDir: '/nope/backups',
+      source: 'home-macup',
+      explicit: false,
+    });
+    expect(formatConfigReport(report)).toContain('will be created on first write');
   });
 });

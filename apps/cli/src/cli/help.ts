@@ -125,6 +125,7 @@ export function buildHelp(deps: CliDeps): string {
   const optionRows: logui.ColumnRow[] = [
     { label: '--verbose, -V', desc: 'Stream user-facing output to scrollback' },
     { label: '--debug, -D', desc: 'Trace every shell call to stderr (dev mode)' },
+    { label: '--applist <path>', desc: 'Read and write an alternate applist file' },
   ];
   say(cols(optionRows, s.dim));
   say('');

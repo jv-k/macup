@@ -69,9 +69,13 @@ function sandbox(seed = 'version: 1\n'): { dir: string; env: NodeJS.ProcessEnv; 
   return {
     dir,
     applist,
-    // /usr/bin and /bin stay on PATH for node itself; every package-manager
-    // binary other than the stub is absent, so those plugins drop out.
-    env: { ...process.env, MACUP_CONFIG: applist, PATH: `${bin}:/usr/bin:/bin` },
+    // PATH is ONLY the stub directory. Leaving /usr/bin:/bin on it was not
+    // hermetic: CI found 10 packages where this machine found 3, because a
+    // macOS runner ships trackable backends there (pip3 among them) and the
+    // set differs per image. macup resolves binaries by scanning PATH with fs
+    // (src/exec/on-path.ts) rather than shelling out, and the interpreter is
+    // named absolutely below, so nothing here needs the system directories.
+    env: { ...process.env, MACUP_CONFIG: applist, PATH: bin },
   };
 }
 
@@ -117,6 +121,17 @@ describe('bare `macup init` scaffolds the applist (#14)', () => {
     const { stdout, code } = await run(env, 'init');
     expect(code).toBe(0);
     expect(stdout).toMatch(/Found 3 installed packages/);
+    // Exactly the stub's two keys and no others. This is what makes the
+    // hermetic claim self-enforcing: if PATH ever leaks a real backend again,
+    // an extra key shows up and this fails here rather than only on a CI runner
+    // whose /usr/bin differs from a developer's.
+    const keys = stdout
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => /^[a-z.]+: \d+$/.test(l))
+      .map((l) => l.split(':')[0]);
+    expect(keys.sort()).toEqual(['brew.casks', 'brew.formulas']);
+
     const text = readFileSync(applist, 'utf8');
     expect(text).toContain('formulas');
     expect(text).toContain('fd');

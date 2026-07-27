@@ -156,7 +156,10 @@ function requireNames(rawArgs: string[], pluginId: string, command: string): str
   return names;
 }
 
-function resolveConfigKey(plugin: Plugin, subtype: string | undefined) {
+// Exported so the init scaffolder (#14) resolves a subtype to its applist key
+// the same way the track verb does, rather than keeping a third copy of the
+// configKeyFor-or-first-key fallback.
+export function resolveConfigKey(plugin: Plugin, subtype: string | undefined) {
   if (plugin.manifest.configKeyFor) {
     return plugin.manifest.configKeyFor(subtype);
   }

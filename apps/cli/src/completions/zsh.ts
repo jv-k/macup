@@ -1,6 +1,12 @@
 import { SUPPORTED_SHELLS } from '../commands/shell';
 import type { Plugin } from '../plugins/types';
-import { SHELL_ARG_COMMANDS, TOP_LEVEL_COMMANDS, commandsFor, flagsForCommand } from './shared';
+import {
+  SHELL_ARG_COMMANDS,
+  TOP_LEVEL_COMMANDS,
+  TOP_LEVEL_COMMAND_FLAGS,
+  commandsFor,
+  flagsForCommand,
+} from './shared';
 
 const esc = (s: string): string => s.replace(/'/g, "'\\''");
 
@@ -29,6 +35,16 @@ export function generateZshCompletions(plugins: readonly Plugin[]): string {
         .join(' ');
       return `      ${p.manifest.id}) _values 'command' ${cmds} ;;`;
     })
+    .join('\n');
+
+  // Stand-alone commands with flags of their own (`macup init --dry-run`).
+  // They sit where a plugin id would, so their case keys have an empty
+  // command half.
+  const nounFlagCases = Object.entries(TOP_LEVEL_COMMAND_FLAGS)
+    .map(
+      ([name, flags]) =>
+        `        ${name}:*) _values 'flag' ${flags.map((f) => `'${f}'`).join(' ')} ;;`,
+    )
     .join('\n');
 
   // `<plugin>:<command>) ...` cases offering that subcommand's flags in the
@@ -81,6 +97,7 @@ ${shellCases}
     (rest)
       case "$words[2]:$words[3]" in
 ${flagCases}
+${nounFlagCases}
         *) _message 'package name(s)' ;;
       esac
       ;;

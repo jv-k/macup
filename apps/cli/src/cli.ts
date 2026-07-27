@@ -208,7 +208,7 @@ const topLevelSubCommands = {
   ),
   outdated: withErrorBoundary(buildOutdatedCommand(deps)),
   check: withErrorBoundary(buildCheckCommand(deps)),
-  init: withErrorBoundary(buildInitCommand()),
+  init: withErrorBoundary(buildInitCommand(deps)),
   ...Object.fromEntries(
     NOUN_ACTIONS.map((a) => [a.name, withErrorBoundary(subCommandFromAction(a))]),
   ),

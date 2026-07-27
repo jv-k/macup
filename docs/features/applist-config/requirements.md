@@ -30,10 +30,15 @@
 13. `macup restore` lists backups newest first, asks for a target and a confirmation (default No), then copies the chosen backup over the live applist; with no backups it prints `No backups found` and exits 0.
 14. `macup cleanup` lists the active applist's backups, requires confirmation (default No), deletes them all, reports the count, and removes the backup dir if it is left empty. Another applist's backups in the same directory are left alone.
 
+### Scaffolding
+
+15. Bare `macup init` scans every available plugin, collects what each reports as installed, and merges those names into the applist under the key that plugin's `track` verb writes to (ADR 0047). It never replaces the file: pins, skip lists, and comments survive, and a second run adds nothing. An empty applist is written without a prompt; a populated one prompts, and under a non-TTY refuses with a pointer at `--force` rather than rewriting a config unattended. `--dry-run` prints the plan and writes nothing. An unavailable backend is reported and skipped, not fatal.
+
 ## Source of truth
 
 - apps/cli/src/config/schema.ts, apps/cli/src/config/paths.ts, apps/cli/src/config/store.ts, apps/cli/src/config/backup.ts
 - apps/cli/src/commands/config.ts, apps/cli/src/commands/restore.ts, apps/cli/src/commands/cleanup.ts
+- apps/cli/src/commands/init-scaffold.ts (detection and the merge), apps/cli/src/commands/init.ts (the dispatch)
 - apps/cli/test/integration/config/store.test.ts, apps/cli/test/integration/config/backup.test.ts, apps/cli/test/unit/config/paths.test.ts, apps/cli/test/unit/config/schema.test.ts
 - apps/docs/content/docs/guides/configuration.mdx, apps/docs/content/docs/reference/config-schema.mdx
 

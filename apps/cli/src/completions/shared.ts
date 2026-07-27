@@ -43,6 +43,13 @@ export function commandsFor(plugin: Plugin): string[] {
 // commands (completions deliberately offer only the shortcut spellings).
 export const SUBTYPE_COMMANDS = new Set(['list', 'install', 'update', 'track', 'untrack']);
 
+// Flags on the stand-alone commands, for the shells. Kept beside the
+// per-plugin table so a reader finds both in one place; `init` is the only
+// noun with flags of its own so far (#14).
+export const TOP_LEVEL_COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = {
+  init: ['--dry-run', '--force'],
+};
+
 export function flagsForCommand(plugin: Plugin, command: string): string[] {
   const flags: string[] = [];
   if (command === 'list') flags.push('--only-outdated', '--all', '--json');

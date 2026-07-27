@@ -1,5 +1,10 @@
 import type { Plugin } from '../plugins/types';
-import { TOP_LEVEL_COMMANDS, commandsFor, flagsForCommand } from './shared';
+import {
+  TOP_LEVEL_COMMANDS,
+  TOP_LEVEL_COMMAND_FLAGS,
+  commandsFor,
+  flagsForCommand,
+} from './shared';
 
 export function generateBashCompletions(plugins: readonly Plugin[]): string {
   // Stand-alone commands complete where a plugin id would go — `macup
@@ -25,6 +30,13 @@ export function generateBashCompletions(plugins: readonly Plugin[]): string {
           (x) =>
             `      ${p.manifest.id}/${x.cmd}) COMPREPLY=( $(compgen -W "${x.flags.join(' ')}" -- "$cur") ) ;;`,
         ),
+    )
+    .join('\n');
+
+  const nounFlagCases = Object.entries(TOP_LEVEL_COMMAND_FLAGS)
+    .map(
+      ([name, flags]) =>
+        `      ${name}) COMPREPLY=( $(compgen -W "${flags.join(' ')}" -- "$cur") ) ;;`,
     )
     .join('\n');
 
@@ -55,6 +67,7 @@ _macup() {
   if [[ \${COMP_CWORD} -eq 2 ]]; then
     case "\${COMP_WORDS[1]}" in
 ${pluginCases}
+${nounFlagCases}
     esac
     return
   fi

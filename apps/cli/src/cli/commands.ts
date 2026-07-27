@@ -20,8 +20,8 @@ export const TOP_LEVEL_COMMANDS: readonly TopLevelCommand[] = [
   { name: 'check', description: 'Exit 0 if everything is current, 1 if anything is outdated' },
   {
     name: 'init',
-    description: 'Emit shell integration to eval from your rc file',
-    argHint: '<shell>',
+    description: 'Scaffold an applist from what is installed, or emit shell integration',
+    argHint: '[shell]',
   },
   { name: 'doctor', description: 'Run a self-diagnostic report' },
   { name: 'config', description: 'Show config path, schema, and pin/skip counts' },

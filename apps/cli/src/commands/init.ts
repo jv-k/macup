@@ -15,12 +15,16 @@
 //     empty-summary guard so a crashed check prints nothing),
 //   - silent when everything is up to date.
 //
-// Namespace note: bare `macup init` (no shell) is reserved for the
-// config scaffolder (#14). That branch is isolated at the top of run()
-// so #14 can replace the placeholder error without touching the shell
-// dispatch below it.
+// Namespace note: bare `macup init` (no shell) scaffolds the applist from
+// what is already installed (#14, ADR 0047). The two branches share only
+// the verb: the scaffolder lives in ./init-scaffold, and the dispatch
+// between them is the first thing run() does.
 
+import { confirm, isCancel } from '@clack/prompts';
 import { defineCommand } from 'citty';
+import type { CliDeps } from '../cli/types';
+import { ApplistKeySchema } from '../config/schema';
+import { countDetected, detectInstalled, runInitScaffold } from './init-scaffold';
 import { SUPPORTED_SHELLS, type Shell, isShell } from './shell';
 
 // Arg defs live outside the factory so macup/meta can project them into
@@ -30,6 +34,14 @@ export const INIT_ARGS = {
     type: 'positional',
     required: false,
     description: 'Shell to emit integration code for: zsh | bash | fish.',
+  },
+  'dry-run': {
+    type: 'boolean',
+    description: 'Print what bare `macup init` would track, without writing.',
+  },
+  force: {
+    type: 'boolean',
+    description: 'Let bare `macup init` modify an applist that already tracks packages.',
   },
 } as const;
 
@@ -104,23 +116,23 @@ export function renderInitSnippet(shell: Shell): string {
   }
 }
 
-export function buildInitCommand() {
+export function buildInitCommand(deps: CliDeps) {
   return defineCommand({
     meta: {
       name: 'init',
-      description: 'Emit shell integration code (zsh | bash | fish) to eval from your rc file.',
+      description:
+        'Scaffold an applist from what is installed; with a shell, emit integration code.',
     },
     args: INIT_ARGS,
     async run({ args }) {
       const shellArg = args.shell as string | undefined;
 
-      // Reserved namespace (#14): bare `macup init` will scaffold the
-      // config file. Until that lands, point at the shell form.
+      // Bare `macup init` is the config scaffolder (#14).
       if (!shellArg) {
-        console.error('error: missing <shell> argument');
-        console.error('usage: macup init <zsh|bash|fish>, e.g. eval "$(macup init zsh)"');
-        console.error('(bare `macup init` is reserved for the upcoming config scaffolder)');
-        process.exitCode = 1;
+        process.exitCode = await runInitScaffoldAction(deps, {
+          dryRun: args['dry-run'] === true,
+          force: args.force === true,
+        });
         return;
       }
 
@@ -136,3 +148,73 @@ export function buildInitCommand() {
     },
   });
 }
+
+/**
+ * Wires the scaffolder to the live deps: the registry to scan, the store to
+ * write, and clack for the prompt. Mirrors runCleanupAction — the decisions
+ * live in a pure function and this only supplies the world.
+ */
+async function runInitScaffoldAction(
+  deps: CliDeps,
+  opts: { dryRun: boolean; force: boolean },
+): Promise<number> {
+  const paths = deps.resolvePaths();
+  const plan = await detectInstalled(deps.registry, {
+    exec: deps.exec,
+    log: deps.log,
+    signal: deps.signal,
+  });
+
+  const shared = {
+    plan,
+    applistPath: paths.applistPath,
+    print: (s: string) => console.log(s),
+    printErr: (s: string) => console.error(s),
+    dryRun: opts.dryRun,
+    interactive: process.stdin.isTTY === true,
+    force: opts.force,
+  };
+
+  // Under --dry-run the store is never opened, because opening it is itself a
+  // write: ConfigStore.load() migrates a pre-1.x applist in place and takes a
+  // backup while doing it (found in review). The coding standards allow no
+  // exceptions to dry-run executing nothing, so the only safe answer is not to
+  // touch the file at all.
+  if (opts.dryRun) {
+    return runInitScaffold({
+      ...shared,
+      store: emptyStore,
+      trackedAlready: 0,
+      confirm: async () => false,
+    });
+  }
+
+  const store = await deps.getStore();
+  const trackedAlready = ApplistKeySchema.options.reduce((n, key) => n + store.list(key).length, 0);
+
+  return runInitScaffold({
+    ...shared,
+    store,
+    trackedAlready,
+    confirm: async () => {
+      const ans = await confirm({
+        message: 'Add the packages found on this machine to it?',
+        initialValue: false,
+      });
+      return !isCancel(ans) && ans === true;
+    },
+  });
+}
+
+// Stands in for the store on the dry-run path, which reports a plan and writes
+// nothing. Every method is unreachable there, so reaching one is a bug worth a
+// loud failure rather than a silent no-op.
+const emptyStore = {
+  list: () => [],
+  add: () => {
+    throw new Error('init: --dry-run must not stage applist changes');
+  },
+  save: async () => {
+    throw new Error('init: --dry-run must not save the applist');
+  },
+};

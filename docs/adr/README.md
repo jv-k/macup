@@ -74,3 +74,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0044](0044-selecting-an-alternate-applist.md) | Selecting an alternate applist with `--applist` | accepted |
 | [0045](0045-subprocess-log-is-json-lines.md) | The subprocess log is JSON lines, written synchronously | accepted |
 | [0046](0046-bundle-extends-merge-semantics.md) | Bundle `extends` flattens by union, and only pins and labels can conflict | accepted |
+| [0047](0047-init-scaffolds-by-merging.md) | `macup init` scaffolds by merging, and refuses to guess under a pipe | accepted |

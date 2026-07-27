@@ -29,6 +29,7 @@ import {
   rewriteFlagAliases,
 } from './cli/argv';
 import { bootstrap } from './cli/bootstrap';
+import { withErrorBoundary } from './cli/error-boundary';
 import { printVersionSplash, showCustomHelp } from './cli/help';
 import type { ActionCommand } from './cli/types';
 import { buildCheckCommand } from './commands/check';
@@ -194,47 +195,6 @@ for (const plugin of deps.registry) {
   });
 }
 
-// citty's runMain catches whatever escapes a command and hands it to
-// consola, which prints the message followed by an internal stack trace.
-// For a MacupError — a condition we diagnosed and worded FOR the user,
-// like an invalid applist — that trace buries the advice under noise and
-// reads like a crash. citty's own CLIError (the escape hatch runMain
-// checks for) isn't exported, so the boundary goes here instead: catch
-// MacupError at each command's edge, print just the message, and set the
-// exit code. Anything else still escapes with its trace intact.
-function withErrorBoundary<A extends ArgsDef>(cmd: CommandDef<A>): CommandDef<A> {
-  const wrapped: CommandDef<A> = { ...cmd };
-  const run = cmd.run;
-  if (typeof run === 'function') {
-    wrapped.run = async (ctx) => {
-      try {
-        return await run(ctx);
-      } catch (err) {
-        if (err instanceof MacupError) {
-          // Set-and-return, not process.exit(): exit() can truncate a
-          // piped stdout mid-flush, which would be a poor trade on the
-          // one path whose whole job is getting a message to the user.
-          console.error(`error: ${err.message}`);
-          process.exitCode = err.exitCode;
-          return;
-        }
-        throw err;
-      }
-    };
-  }
-  // Subcommands run via citty's own dispatch, not the parent's run(), so
-  // the boundary has to reach every node of the tree.
-  const subs = cmd.subCommands;
-  if (subs && typeof subs === 'object') {
-    const wrappedSubs: Record<string, CommandDef> = {};
-    for (const [name, sub] of Object.entries(subs)) {
-      wrappedSubs[name] = withErrorBoundary(sub as CommandDef);
-    }
-    wrapped.subCommands = wrappedSubs;
-  }
-  return wrapped;
-}
-
 // Only the tree citty dispatches gets the boundary. The wizard runs these
 // same commands via its own runCommand() call and reports failures inline
 // so the session survives — routing it through a boundary that exits the
@@ -321,4 +281,9 @@ const main = defineCommand({
   },
 });
 
-runMain(main);
+// The boundary reaches the ROOT too, not just the subcommand tree: the
+// wizard runs from main's own run() and calls deps.getStore(), so a fatal
+// condition there (a named applist that isn't on disk, #17) would otherwise
+// escape to runMain and print a stack trace over the message we wrote for
+// the user. Re-wrapping the already-wrapped subcommands is a no-op.
+runMain(withErrorBoundary(main));

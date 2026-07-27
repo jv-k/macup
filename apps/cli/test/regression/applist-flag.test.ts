@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 const exec = promisify(execCb);
 
@@ -207,5 +207,41 @@ describe('omitting --applist is unchanged (#17)', () => {
     const { code } = await run(env, 'brew track ripgrep');
     expect(code).toBe(0);
     expect(readFileSync(configPath, 'utf8')).toContain('ripgrep');
+  });
+});
+
+// A MacupError raised from the ROOT command's run() — the wizard path, which
+// calls deps.getStore() un-guarded (wizard-runner.ts) — used to escape to
+// citty's runMain and print an internal stack trace, because withErrorBoundary
+// was applied to every subcommand but not to `main` itself. The whole point of
+// ErrApplistNotFound is a one-line message, so the boundary has to reach the
+// root too (#17).
+describe('the error boundary reaches the root command (#17)', () => {
+  it('reports a MacupError from a root run() as a message, not a stack trace', async () => {
+    const { defineCommand } = await import('citty');
+    const { withErrorBoundary } = await import('../../src/cli/error-boundary');
+    const { ErrApplistNotFound } = await import('../../src/errors');
+
+    const errors: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((m) => void errors.push(String(m)));
+    const before = process.exitCode;
+
+    const cmd = withErrorBoundary(
+      defineCommand({
+        meta: { name: 'root' },
+        run: () => {
+          throw new ErrApplistNotFound('/nope/work.yaml', '--applist');
+        },
+      }),
+    );
+    await expect((cmd.run as () => Promise<void>)()).resolves.toBeUndefined();
+
+    // Exactly the one line we wrote, and no stack frame after it.
+    expect(errors).toEqual(['error: No applist at /nope/work.yaml (selected by --applist)']);
+    expect(errors.join('\n')).not.toMatch(/\n\s+at /);
+    expect(process.exitCode).toBe(1);
+
+    process.exitCode = before;
+    spy.mockRestore();
   });
 });

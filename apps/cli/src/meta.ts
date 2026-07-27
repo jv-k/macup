@@ -167,6 +167,7 @@ const CONFIG_DESCRIPTIONS: Record<string, string> = {
   pnpm: 'Global pnpm package names tracked for updates.',
   pip: 'Global pip (pip3) package names tracked for updates.',
   go: 'Global go (`go install`) binary import paths tracked for updates.',
+  cargo: 'Global cargo (Rust) crate names tracked for updates.',
   'brew.formulas': 'Homebrew formula names tracked for updates.',
   'brew.casks': 'Homebrew cask names tracked for updates.',
 };

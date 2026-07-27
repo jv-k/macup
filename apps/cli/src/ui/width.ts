@@ -9,6 +9,7 @@
 // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI on purpose
 const ANSI_CSI = /\x1b\[[0-9;?]*[A-Za-z]/g;
 
+/** Text without escape sequences, so width is measured on what is actually visible. */
 export function stripAnsi(s: string): string {
   return s.replace(ANSI_CSI, '');
 }

@@ -209,6 +209,7 @@ function orphanedConfigKeys(applist: Applist, deps: CheckDeps): CheckResult[] {
   return results;
 }
 
+/** Doctor section: applist contents against the registry: unknown keys, skip ids that match no plugin, and pins that cannot apply. */
 export async function check(deps: CheckDeps): Promise<Section> {
   const title = 'Data integrity';
   const applist = await loadApplist(deps);

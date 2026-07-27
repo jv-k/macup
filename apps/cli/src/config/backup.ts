@@ -4,15 +4,23 @@ import { access, copyFile, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/p
 import { basename, extname, join } from 'node:path';
 import { ErrBackupNotFound } from '../errors';
 
+/** Which applist a {@link BackupStore} is scoped to, and where its backups live. */
 export interface BackupStorePaths {
+  /** The applist these backups belong to; its basename namespaces their filenames. */
   readonly applistPath: string;
+  /** Where they live. May hold another applist's backups too, hence the namespacing. */
   readonly backupDir: string;
 }
 
+/** One backup file, with the operation and timestamp parsed back out of its name. */
 export interface BackupEntry {
+  /** Absolute path, for restoring and reporting. */
   readonly path: string;
+  /** Basename only, which is what the restore prompt shows. */
   readonly filename: string;
+  /** The label the mutation carried (`track`, `undo`, `migration`), parsed back out of the name. */
   readonly operation: string;
+  /** Second-resolution stamp, `YYYY-MM-DD_HH-MM-SS`, as it appears in the name. */
   readonly timestamp: string;
 }
 
@@ -42,13 +50,15 @@ export function backupPrefixFor(applistPath: string): string {
   return safe === '' ? `applist-${digest}` : `${safe}-${digest}`;
 }
 
-// Operation labels can contain hyphens (e.g. `sync-tracked`); the segment
-// separator is `_`, so hyphens in the operation don't confuse the split.
-// Trailing `(?:_\d+)?` matches the collision suffix uniqueBackupPath adds
-// when two same-operation backups land in the same second (C-1), so those
-// extra files still list and restore instead of silently disappearing.
-// The prefix comes from backupPrefixFor, which already restricts it to
-// `[A-Za-z0-9-]` — no regex metacharacters survive, so it interpolates safely.
+/**
+ * Operation labels can contain hyphens (e.g. `sync-tracked`); the segment
+ * separator is `_`, so hyphens in the operation don't confuse the split.
+ * Trailing `(?:_\d+)?` matches the collision suffix uniqueBackupPath adds
+ * when two same-operation backups land in the same second (C-1), so those
+ * extra files still list and restore instead of silently disappearing.
+ * The prefix comes from backupPrefixFor, which already restricts it to
+ * `[A-Za-z0-9-]` — no regex metacharacters survive, so it interpolates safely.
+ */
 export function backupFileRe(prefix: string): RegExp {
   return new RegExp(
     `^${prefix}_([A-Za-z0-9-]+)_(\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2})(?:_\\d+)?\\.yaml$`,
@@ -64,11 +74,13 @@ export function backupTimestamp(now: Date): string {
   );
 }
 
-// A backup path that does not exist yet. Second-resolution timestamps mean
-// two same-operation backups within one second would otherwise collide and
-// lose one (C-1), so append an incrementing suffix. Shared by ConfigStore
-// (mutation backups) and BackupStore.snapshot (pre-undo backups) so both
-// name files the same way.
+/**
+ * A backup path that does not exist yet. Second-resolution timestamps mean
+ * two same-operation backups within one second would otherwise collide and
+ * lose one (C-1), so append an incrementing suffix. Shared by ConfigStore
+ * (mutation backups) and BackupStore.snapshot (pre-undo backups) so both
+ * name files the same way.
+ */
 export function uniqueBackupPath(
   backupDir: string,
   prefix: string,
@@ -104,6 +116,14 @@ function entryFor(dir: string, filename: string, re: RegExp): BackupEntry | null
   };
 }
 
+/**
+ * The backup set belonging to one applist: list, restore, snapshot, clean up.
+ *
+ * Scoped, not directory-wide. Two applists can share a config directory
+ * (`--applist work.yaml` beside the default), and a restore that offered the
+ * other one's snapshots would overwrite the wrong file, so every operation is
+ * filtered to this applist's filename namespace (ADR 0044).
+ */
 export class BackupStore {
   /** Backup-filename namespace for this applist; see backupPrefixFor. */
   private readonly prefix: string;
@@ -114,6 +134,7 @@ export class BackupStore {
     this.fileRe = backupFileRe(this.prefix);
   }
 
+  /** This applist's backups, newest first. Same-second collisions tie-break on filename so ordering is deterministic rather than left to readdir. */
   async list(): Promise<BackupEntry[]> {
     if (!(await pathExists(this.paths.backupDir))) return [];
     const entries = await readdir(this.paths.backupDir);
@@ -139,6 +160,7 @@ export class BackupStore {
     return (await this.list())[0] ?? null;
   }
 
+  /** Copy a backup over the live applist. @throws ErrBackupNotFound when it vanished since listing. */
   async restore(entry: BackupEntry): Promise<void> {
     if (!(await pathExists(entry.path))) {
       throw new ErrBackupNotFound(entry.path);
@@ -182,6 +204,7 @@ export class BackupStore {
     return count;
   }
 
+  /** Size in bytes, for the restore prompt and doctor's report. */
   async size(entry: BackupEntry): Promise<number> {
     const s = await stat(entry.path);
     return s.size;

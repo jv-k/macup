@@ -6,6 +6,7 @@ import type { CheckDeps, CheckResult, Section } from '../report';
 
 const MIN_NODE_MAJOR = 20;
 
+/** Doctor section: the machine: platform, architecture, Node version, and the terminal. */
 export async function check(deps: CheckDeps): Promise<Section> {
   const results: CheckResult[] = [];
 

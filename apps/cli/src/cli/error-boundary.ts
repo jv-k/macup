@@ -14,6 +14,15 @@
 import type { ArgsDef, CommandDef } from 'citty';
 import { MacupError } from '../errors';
 
+/**
+ * Wrap a command tree so a {@link MacupError} prints as its message alone and
+ * sets the exit code, while anything else keeps its stack trace.
+ *
+ * Recursive, because citty dispatches subcommands itself rather than through
+ * the parent's run(), and applied at the root too — the wizard runs from there
+ * and a fatal condition inside it would otherwise print a trace over the
+ * diagnosis (#17).
+ */
 export function withErrorBoundary<A extends ArgsDef>(cmd: CommandDef<A>): CommandDef<A> {
   const wrapped: CommandDef<A> = { ...cmd };
   const run = cmd.run;

@@ -15,8 +15,10 @@ import { defineCommand } from 'citty';
 import type { CliDeps } from '../cli/types';
 import { type OutdatedReport, buildOutdatedReport } from './outdated';
 
-// Arg defs live outside the factory so macup/meta can project them into
-// the generated reference without constructing CliDeps.
+/**
+ * Arg defs live outside the factory so macup/meta can project them into
+ * the generated reference without constructing CliDeps.
+ */
 export const CHECK_ARGS = {
   quiet: {
     type: 'boolean',
@@ -50,6 +52,7 @@ export function formatCheckSummary(report: OutdatedReport): string {
   return segments.length > 0 ? segments.join('; ') : 'everything up to date';
 }
 
+/** `macup check`: exit 0 when everything is current, 1 when anything is behind. Built for shell prompts and cron, so its output is one line. */
 export function buildCheckCommand(deps: CliDeps) {
   return defineCommand({
     meta: {

@@ -17,6 +17,7 @@ import * as log from './log';
 const ERROR_RE = /^\s*(?:Error|fatal|FATAL):\s+(.+?)\s*$/i;
 const WARNING_RE = /^\s*(?:Warning|warn):\s+(.+?)\s*$/i;
 
+/** @see {@link StreamSink} */
 export interface StreamSinkOptions {
   // Surface error/warning lines from query/check calls. Default true. Tests
   // turn it off to assert pure routing.
@@ -27,6 +28,11 @@ export interface StreamSinkOptions {
   readonly emitNotice?: (line: string) => void;
 }
 
+/**
+ * The default {@link UiSink}: folds live subprocess output into clack's gutter,
+ * line by line, so streaming shares one design language with the rest of the UI
+ * instead of owning a separate pane (ADR 0043).
+ */
 export class StreamSink implements UiSink {
   private readonly surface: boolean;
   private readonly emitStream: (line: string) => void;

@@ -5,6 +5,7 @@ import type { PackageStatus, Plugin, PluginContext } from '../plugins/types';
 import * as log from '../ui/log';
 import { withSpinner } from './spinner';
 
+/** One backend's contribution to the cross-plugin report, including why it could not answer. */
 export interface OutdatedPluginSummary {
   pluginId: string;
   displayName: string;
@@ -30,6 +31,7 @@ export interface OutdatedPluginSummary {
   uncheckable: readonly PackageStatus[];
 }
 
+/** The whole `macup outdated` result, shared by the text and JSON renderers. */
 export interface OutdatedReport {
   /** Sum of `outdated.length` across all available plugins. */
   totalOutdated: number;
@@ -39,6 +41,7 @@ export interface OutdatedReport {
   plugins: readonly OutdatedPluginSummary[];
 }
 
+/** Progress callbacks, so the spinner can name the backend currently being queried. */
 export interface OutdatedProgress {
   readonly pluginId: string;
   readonly displayName: string;
@@ -48,6 +51,7 @@ export interface OutdatedProgress {
   readonly completed: number;
 }
 
+/** @see the report builder these drive. */
 export interface OutdatedReportDeps {
   readonly plugins: readonly Plugin[];
   /**
@@ -116,6 +120,7 @@ export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<Out
   return { plugins: summaries, totalOutdated, totalUncheckable };
 }
 
+/** Rendering choices for the outdated report: colour and terminal width. */
 export interface FormatOptions {
   /** If true, wraps status glyphs and labels in ANSI. */
   color?: boolean;
@@ -198,8 +203,10 @@ export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions
   return lines.join('\n');
 }
 
-// Arg defs live outside the factory so macup/meta can project them into
-// the generated reference without constructing CliDeps.
+/**
+ * Arg defs live outside the factory so macup/meta can project them into
+ * the generated reference without constructing CliDeps.
+ */
 export const OUTDATED_ARGS = {
   json: {
     type: 'boolean',
@@ -207,9 +214,11 @@ export const OUTDATED_ARGS = {
   },
 } as const;
 
-// Citty CommandDef factory for the cross-plugin `macup outdated` subcommand.
-// Lives here (not in cli.ts) so the dispatch + spinner orchestration sits
-// alongside the report builder/formatter it drives.
+/**
+ * Citty CommandDef factory for the cross-plugin `macup outdated` subcommand.
+ * Lives here (not in cli.ts) so the dispatch + spinner orchestration sits
+ * alongside the report builder/formatter it drives.
+ */
 export function buildOutdatedCommand(deps: CliDeps) {
   return defineCommand({
     meta: {

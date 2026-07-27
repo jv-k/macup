@@ -10,6 +10,7 @@ import { ErrPluginUnavailable } from '../../../errors';
 import type { ListOptions, PackageStatus, Plugin } from '../../../plugins/types';
 import type { CheckDeps } from '../report';
 
+/** Result of asking a backend to list: available, unavailable with a reason, or errored. */
 export type ProbeOutcome =
   | { kind: 'ok'; statuses: PackageStatus[] }
   | { kind: 'unavailable'; message: string }
@@ -27,6 +28,7 @@ class ProbeTimeoutError extends Error {
   }
 }
 
+/** Call one plugin's `list()` defensively, so a backend that throws becomes a reported line rather than an aborted report. */
 export async function probeList(
   plugin: Plugin,
   deps: CheckDeps,

@@ -12,6 +12,7 @@ import { generateFishCompletions } from '../completions/fish';
 import { generateZshCompletions } from '../completions/zsh';
 import { SUPPORTED_SHELLS, type Shell, detectShellFromEnv, isShell } from './shell';
 
+/** `macup completions <shell>`: emit the script to stdout, for redirecting into a dotfile. */
 export async function runCompletions(args: ParsedArgs, deps: CliDeps): Promise<void> {
   const value = args.completions;
   if (typeof value !== 'string') return;
@@ -45,6 +46,7 @@ function resolveShell(value: string, env: NodeJS.ProcessEnv): Shell | undefined 
   return undefined;
 }
 
+/** `macup completions`. */
 export class CompletionsAction implements ActionCommand {
   readonly name = 'completions';
   readonly description =

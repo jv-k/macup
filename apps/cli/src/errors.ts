@@ -1,9 +1,27 @@
+/**
+ * A failure macup diagnosed and worded for the user, as opposed to a crash.
+ * The CLI's error boundary catches this and prints the message alone, so a
+ * subclass's text is the whole of what the user sees — anything else escapes
+ * with its stack trace, which is the right outcome for a genuine bug.
+ *
+ * The boundary itself lives in `src/cli/error-boundary.ts`.
+ */
 export class MacupError extends Error {
+  /** Stable discriminator, so a caller can branch on the failure without matching message text. */
   readonly kind: string = 'macup-error';
+  /** The process exit code this failure produces. @see docs/CODING_STANDARDS.md */
   readonly exitCode: number = 1;
 }
 
+/**
+ * A backend is unavailable on this machine: a required binary does not resolve
+ * on PATH. A fact about the machine, never a user choice, which is why
+ * `CONTEXT.md` keeps it distinct from a skip. Plugins throw this from `check()`
+ * rather than a bare Error (ADR 0011), because the composite `all` catches
+ * exactly this class to isolate an unavailable backend and carry on (ADR 0033).
+ */
 export class ErrPluginUnavailable extends MacupError {
+  /** @see {@link MacupError.kind} */
   override readonly kind = 'plugin-unavailable';
 
   constructor(
@@ -14,7 +32,14 @@ export class ErrPluginUnavailable extends MacupError {
   }
 }
 
+/**
+ * The applist on disk does not satisfy the schema, or a staged mutation would
+ * not. Raised on the way in and on the way out: validating only on load let a
+ * bad in-memory edit overwrite good data and surface a file already lost (#48).
+ * The message names the path and, when backups exist, how to roll back.
+ */
 export class ErrInvalidConfig extends MacupError {
+  /** @see {@link MacupError.kind} */
   override readonly kind = 'invalid-config';
 
   constructor(
@@ -31,6 +56,7 @@ export class ErrInvalidConfig extends MacupError {
  * so there is no file to blame and no backup to offer.
  */
 export class ErrUsage extends MacupError {
+  /** @see {@link MacupError.kind} */
   override readonly kind = 'usage';
 }
 
@@ -41,6 +67,7 @@ export class ErrUsage extends MacupError {
  * path it resolved (ADR 0044).
  */
 export class ErrApplistNotFound extends MacupError {
+  /** @see {@link MacupError.kind} */
   override readonly kind = 'applist-not-found';
 
   constructor(
@@ -51,7 +78,9 @@ export class ErrApplistNotFound extends MacupError {
   }
 }
 
+/** A backup listed a moment ago is gone — deleted or moved between listing and restore. */
 export class ErrBackupNotFound extends MacupError {
+  /** @see {@link MacupError.kind} */
   override readonly kind = 'backup-not-found';
 
   constructor(readonly path: string) {

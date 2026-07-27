@@ -5,6 +5,7 @@ import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import type { PathResolution } from '../config/paths';
 import { ApplistSchema, SCHEMA_VERSION, formatApplistIssueLines } from '../config/schema';
 
+/** Everything `macup config` and doctor's Config section report, computed once so the two cannot disagree on what "valid" means. */
 export interface ConfigReport {
   applistPath: string;
   source: PathResolution['source'];
@@ -22,6 +23,7 @@ export interface ConfigReport {
   legacyMigration?: PathResolution['legacyMigration'];
 }
 
+/** Inspect the applist without mutating it: existence, schema validity, pin and skip counts, and any migration still pending. */
 export async function buildConfigReport(paths: PathResolution): Promise<ConfigReport> {
   const report: ConfigReport = {
     applistPath: paths.applistPath,
@@ -100,6 +102,7 @@ function missingFileNote(report: ConfigReport): string {
     : 'no (will be created on first write)';
 }
 
+/** {@link ConfigReport} as the labelled block `macup config` prints. */
 export function formatConfigReport(report: ConfigReport): string {
   const lines: string[] = [
     `applist:     ${report.applistPath}`,
@@ -123,12 +126,14 @@ export function formatConfigReport(report: ConfigReport): string {
   return lines.join('\n');
 }
 
+/** `macup config`: where config lives, whether it parses, and what it holds. */
 export async function runConfig(_args: ParsedArgs, deps: CliDeps): Promise<void> {
   const paths = deps.resolvePaths();
   const report = await buildConfigReport(paths);
   console.log(formatConfigReport(report));
 }
 
+/** `macup config`. */
 export class ConfigAction implements ActionCommand {
   readonly name = 'config';
   readonly description =

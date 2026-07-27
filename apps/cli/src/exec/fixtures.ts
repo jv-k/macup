@@ -1,12 +1,14 @@
 import { readFile } from 'node:fs/promises';
 import type { ExecResult, ExecRunner } from '../plugins/types';
 
+/** One recorded invocation: the command, its exact arguments, and what it returned. */
 export interface FixtureEntry {
   cmd: string;
   args: readonly string[];
   result: ExecResult;
 }
 
+/** @see {@link FixtureExecRunner} */
 export interface FixtureRunnerOptions {
   readonly fixtures: readonly FixtureEntry[];
   /** Binaries reported as on-PATH. Defaults to every unique fixture cmd. */
@@ -21,6 +23,15 @@ function argsEqual(a: readonly string[], b: readonly string[]): boolean {
   return true;
 }
 
+/**
+ * Replays recorded subprocess results instead of running anything, which is
+ * what lets the plugin suites be hermetic (`docs/TESTING_STRATEGY.md`): no live
+ * `brew`, no mutated machine state in CI.
+ *
+ * A call with no matching fixture throws rather than returning an empty
+ * result, so a plugin that starts issuing a new command fails loudly instead of
+ * silently seeing nothing.
+ */
 export class FixtureExecRunner implements ExecRunner {
   private readonly fixtures: FixtureEntry[];
   private readonly consumed: Set<number>;
@@ -64,6 +75,7 @@ export class FixtureExecRunner implements ExecRunner {
   }
 }
 
+/** Read a committed recording from `test/fixtures/recordings/`. */
 export async function loadFixtures(path: string): Promise<FixtureEntry[]> {
   const text = await readFile(path, 'utf8');
   const parsed = JSON.parse(text) as FixtureEntry[];

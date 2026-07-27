@@ -119,6 +119,7 @@ function kindLabel(kind: string): string {
   return `${kind}s`.toUpperCase();
 }
 
+/** The shared package-listing renderer, so `list` output is identical whichever plugin produced it. */
 export function renderList(
   pluginName: string,
   statuses: PackageStatus[],

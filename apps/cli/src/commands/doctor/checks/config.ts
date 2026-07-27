@@ -78,6 +78,7 @@ async function checkBackups(deps: CheckDeps): Promise<CheckResult> {
   };
 }
 
+/** Doctor section: config directory writability, the applist's schema, and the backup set. */
 export async function check(deps: CheckDeps): Promise<Section> {
   const results: CheckResult[] = [];
 

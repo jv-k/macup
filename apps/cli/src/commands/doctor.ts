@@ -38,11 +38,13 @@ const CHECKS = [
   checkShellIntegration,
 ] as const;
 
+/** Run every section and assemble the report. Separated from {@link runDoctor} so tests need no console. */
 export async function runDoctorChecks(deps: CheckDeps): Promise<DoctorReport> {
   const sections = await Promise.all(CHECKS.map((check) => check(deps)));
   return buildReport(deps.macupVersion, sections);
 }
 
+/** `macup doctor`: the self-diagnostic. Exit code reflects the worst finding, and `--json` emits the same report machine-readably. */
 export async function runDoctor(args: ParsedArgs, deps: CliDeps): Promise<void> {
   const checkDeps: CheckDeps = {
     env: deps.env,
@@ -70,6 +72,7 @@ export async function runDoctor(args: ParsedArgs, deps: CliDeps): Promise<void> 
   process.exitCode = exitCodeFor(report);
 }
 
+/** `macup doctor`. */
 export class DoctorAction implements ActionCommand {
   readonly name = 'doctor';
   readonly description =

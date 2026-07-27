@@ -33,6 +33,7 @@ export interface LogRecord {
   stderr: string;
 }
 
+/** @see {@link LoggingExecRunner} */
 export interface LoggingOptions {
   /** Where a record goes. Injectable so the format is testable without fs. */
   readonly append: (line: string) => void;
@@ -114,6 +115,15 @@ export function redactArgs(args: readonly string[]): string[] {
   return out;
 }
 
+/**
+ * Appends one JSON-lines record per subprocess to a file, for scheduled runs,
+ * audit trails, and bug reports (ADR 0045).
+ *
+ * A pure side channel: the inner result is returned untouched and terminal
+ * output is byte-identical with and without it. A sink that cannot be written
+ * is reported once and the run continues, because an unwritable log is a
+ * problem with the log, not with the update the user asked for.
+ */
 export class LoggingExecRunner implements ExecRunner {
   private readonly now: () => Date;
   private sinkFailed = false;

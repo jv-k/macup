@@ -24,24 +24,29 @@
 
 import { ErrUsage } from '../errors';
 
-// `--version` is the canonical spelling here, unlike the command nouns:
-// every CLI has `--version`/`-v`, so the flag is the convention and
-// `macup version` is the sugar. The nouns went the other way — they are
-// real subcommands now, so rewriting them would hide them from citty's
-// dispatch (ADR 0029).
-//
-// Exported for macup/meta, which surfaces the bare form beside the flag in
-// the generated reference.
+/**
+ * `--version` is the canonical spelling here, unlike the command nouns:
+ * every CLI has `--version`/`-v`, so the flag is the convention and
+ * `macup version` is the sugar. The nouns went the other way — they are
+ * real subcommands now, so rewriting them would hide them from citty's
+ * dispatch (ADR 0029).
+ *
+ * Exported for macup/meta, which surfaces the bare form beside the flag in
+ * the generated reference.
+ */
 export const FLAG_COMMAND_ALIASES = ['version'] as const;
 
+/** The two global output modifiers, after being stripped from argv. */
 export interface VerbosityFlags {
   readonly debug: boolean;
   readonly verbose: boolean;
 }
 
-// Rewrite the first positional arg if it's one of the known flag-styled
-// commands. Mutates the array in place (matches the existing call-site
-// ergonomics; argv is shared global state anyway).
+/**
+ * Rewrite the first positional arg if it's one of the known flag-styled
+ * commands. Mutates the array in place (matches the existing call-site
+ * ergonomics; argv is shared global state anyway).
+ */
 export function rewriteFlagAliases(argv: string[]): void {
   if (argv.length <= 2) return;
   const first = argv[2];
@@ -50,19 +55,23 @@ export function rewriteFlagAliases(argv: string[]): void {
   }
 }
 
-// The applist verbs renamed in ADR 0031: the deprecated spelling maps to the
-// replacement the CLI now documents. Removed when the aliases are dropped at
-// the next major.
+/**
+ * The applist verbs renamed in ADR 0031: the deprecated spelling maps to the
+ * replacement the CLI now documents. Removed when the aliases are dropped at
+ * the next major.
+ */
 export const DEPRECATED_VERB_ALIASES: Readonly<Record<string, string>> = {
   add: 'track',
   remove: 'untrack',
 };
 
-// If argv spells `macup <plugin> add|remove …`, rewrite the verb in place to
-// its track/untrack replacement and return the one-line notice for cli.ts to
-// print to stderr; otherwise return null. Gated on `pluginIds` so an
-// `add`/`remove` that lands after a non-plugin command (or as a package name
-// further along) is left alone — only the verb slot, argv[3], is rewritten.
+/**
+ * If argv spells `macup <plugin> add|remove …`, rewrite the verb in place to
+ * its track/untrack replacement and return the one-line notice for cli.ts to
+ * print to stderr; otherwise return null. Gated on `pluginIds` so an
+ * `add`/`remove` that lands after a non-plugin command (or as a package name
+ * further along) is left alone — only the verb slot, argv[3], is rewritten.
+ */
 export function rewriteDeprecatedVerbAliases(
   argv: string[],
   pluginIds: ReadonlySet<string>,
@@ -79,11 +88,13 @@ export function rewriteDeprecatedVerbAliases(
   return `${verb} is deprecated; use ${replacement}`;
 }
 
-// Return the flag-style tokens in `rawArgs` that aren't in `known`. Used to
-// reject `macup --bogus` with a non-zero exit instead of silently falling
-// through to the wizard (A-1). The `=value` suffix is ignored when matching
-// (`--completions=zsh` checks `--completions`), positionals are skipped, and
-// scanning stops at the `--` end-of-flags marker.
+/**
+ * Return the flag-style tokens in `rawArgs` that aren't in `known`. Used to
+ * reject `macup --bogus` with a non-zero exit instead of silently falling
+ * through to the wizard (A-1). The `=value` suffix is ignored when matching
+ * (`--completions=zsh` checks `--completions`), positionals are skipped, and
+ * scanning stops at the `--` end-of-flags marker.
+ */
 export function findUnknownTopLevelFlags(
   rawArgs: readonly string[],
   known: ReadonlySet<string>,
@@ -98,17 +109,19 @@ export function findUnknownTopLevelFlags(
   return unknown;
 }
 
-// Pull `--<name> <value>` / `--<name>=<value>` out of argv and return the
-// value, stripping the matched tokens so citty never sees them. These are
-// global modifiers consumed at bootstrap, like the verbosity flags, and every
-// subcommand would otherwise reject them (#17 / ADR 0044, #16).
-//
-// Scanning stops at the `--` end-of-flags marker so a package literally named
-// `--applist` stays a positional. Repeats take the last value, matching the
-// convention every other flag parser follows. A missing or empty value is a
-// usage error rather than a silent fallback: the whole point of these flags is
-// to redirect something away from its default, so guessing is worse than
-// stopping.
+/**
+ * Pull `--<name> <value>` / `--<name>=<value>` out of argv and return the
+ * value, stripping the matched tokens so citty never sees them. These are
+ * global modifiers consumed at bootstrap, like the verbosity flags, and every
+ * subcommand would otherwise reject them (#17 / ADR 0044, #16).
+ *
+ * Scanning stops at the `--` end-of-flags marker so a package literally named
+ * `--applist` stays a positional. Repeats take the last value, matching the
+ * convention every other flag parser follows. A missing or empty value is a
+ * usage error rather than a silent fallback: the whole point of these flags is
+ * to redirect something away from its default, so guessing is worse than
+ * stopping.
+ */
 export function extractPathFlag(argv: string[], name: string, hint: string): string | undefined {
   const flag = `--${name}`;
   const inlinePrefix = `${flag}=`;
@@ -167,8 +180,10 @@ export function extractLogFlag(argv: string[]): string | undefined {
   return extractPathFlag(argv, 'log', '--log ~/macup.log');
 }
 
-// Inspect argv for --debug/-D/--verbose/-V, return the parsed flags, and
-// strip the matched tokens from argv so citty sees a clean tail.
+/**
+ * Inspect argv for --debug/-D/--verbose/-V, return the parsed flags, and
+ * strip the matched tokens from argv so citty sees a clean tail.
+ */
 export function extractVerbosityFlags(argv: string[]): VerbosityFlags {
   const debug = argv.includes('--debug') || argv.includes('-D');
   const verbose = argv.includes('--verbose') || argv.includes('-V');

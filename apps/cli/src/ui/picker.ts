@@ -18,6 +18,7 @@ import { visualWidth } from './log';
 import { PageableAutocompletePrompt } from './pageable-prompt';
 import { clipAnsiToWidth } from './width';
 
+/** One selectable row, carrying its value so the caller gets back a value rather than a label (#50). */
 export interface PickerOption<Value> {
   value: Value;
   label?: string;
@@ -25,6 +26,7 @@ export interface PickerOption<Value> {
   disabled?: boolean;
 }
 
+/** Rows, initial selection, and prompt text for the multi-select the wizard drives. */
 export interface PickerOptions<Value> {
   message: string;
   options: PickerOption<Value>[];

@@ -2,6 +2,7 @@ import { confirm, isCancel, outro, select } from '@clack/prompts';
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { type BackupEntry, BackupStore } from '../config/backup';
 
+/** Injected so the prompt and output belong to the caller. @see {@link runRestore} */
 export interface RestoreDeps {
   readonly backups: BackupStore;
   readonly select: (entries: readonly BackupEntry[]) => Promise<BackupEntry | null>;
@@ -9,6 +10,7 @@ export interface RestoreDeps {
   readonly print: (line: string) => void;
 }
 
+/** Pick a backup and copy it over the live applist. @returns the restored entry, or null when there was nothing to restore or the user declined. */
 export async function runRestore(deps: RestoreDeps): Promise<BackupEntry | null> {
   const entries = await deps.backups.list();
   if (entries.length === 0) {
@@ -33,6 +35,7 @@ export async function runRestore(deps: RestoreDeps): Promise<BackupEntry | null>
   return picked;
 }
 
+/** Wires {@link runRestore} to the real backup store and clack prompts. */
 export async function runRestoreAction(_args: ParsedArgs, deps: CliDeps): Promise<void> {
   const paths = deps.resolvePaths();
   const backups = new BackupStore(paths);
@@ -61,6 +64,7 @@ export async function runRestoreAction(_args: ParsedArgs, deps: CliDeps): Promis
   outro('Done.');
 }
 
+/** `macup restore`. */
 export class RestoreAction implements ActionCommand {
   readonly name = 'restore';
   readonly description = 'Interactively restore the applist from a backup.';

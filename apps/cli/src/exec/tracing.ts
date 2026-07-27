@@ -1,6 +1,7 @@
 import pc from 'picocolors';
 import type { ExecResult, ExecRunOptions, ExecRunner } from '../plugins/types';
 
+/** @see {@link TracingExecRunner} */
 export interface TracingOptions {
   readonly print?: (line: string) => void;
   readonly color?: boolean;
@@ -10,15 +11,17 @@ export interface TracingOptions {
   readonly maxLineWidth?: number;
 }
 
-// Decorator over an ExecRunner that emits a pre-trace header (`$ cmd args`)
-// before the call, line-buffered live output as it streams, and a summary
-// (`↳ exit=N · Nms`) after completion. Output goes to stderr by default so
-// JSON-piped flows stay clean.
-//
-// Inner runners that don't honor the onStdout/onStderr callbacks (e.g. the
-// FixtureExecRunner used in tests) trigger a fallback path: after the call
-// resolves we emit the buffered stdout/stderr instead, preserving the
-// pre-streaming behaviour.
+/**
+ * Decorator over an ExecRunner that emits a pre-trace header (`$ cmd args`)
+ * before the call, line-buffered live output as it streams, and a summary
+ * (`↳ exit=N · Nms`) after completion. Output goes to stderr by default so
+ * JSON-piped flows stay clean.
+ *
+ * Inner runners that don't honor the onStdout/onStderr callbacks (e.g. the
+ * FixtureExecRunner used in tests) trigger a fallback path: after the call
+ * resolves we emit the buffered stdout/stderr instead, preserving the
+ * pre-streaming behaviour.
+ */
 export class TracingExecRunner implements ExecRunner {
   private readonly inner: ExecRunner;
   private readonly print: (line: string) => void;

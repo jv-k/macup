@@ -5,6 +5,7 @@
 // help / completions / docs can no longer drift (they used to keep three lists,
 // and the help screen silently omitted `doctor` and `completions`).
 
+/** One command that sits where a plugin id would go: `macup restore`, not `macup --restore`. */
 export interface TopLevelCommand {
   readonly name: string;
   /** One terse line. The single description used by help, completions, and docs. */
@@ -15,6 +16,12 @@ export interface TopLevelCommand {
   readonly inCompletions?: boolean;
 }
 
+/**
+ * The stand-alone commands, and the single source for their descriptions. Help,
+ * the shells' completions, and the docs reference all project from this list, so
+ * your tab key and the website cannot disagree about what `macup restore` is
+ * (ADR 0029).
+ */
 export const TOP_LEVEL_COMMANDS: readonly TopLevelCommand[] = [
   { name: 'outdated', description: 'Show outdated packages across every plugin in one pane' },
   { name: 'check', description: 'Exit 0 if everything is current, 1 if anything is outdated' },

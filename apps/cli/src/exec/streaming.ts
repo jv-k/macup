@@ -9,8 +9,14 @@
 
 import type { ExecResult, ExecRunKind, ExecRunOptions, ExecRunner } from '../plugins/types';
 
+/** Which stream a chunk came from, so a sink can style stderr differently. */
 export type StreamSource = 'stdout' | 'stderr';
 
+/**
+ * Where subprocess output goes, decided by the UI rather than the plugin. The
+ * three methods mirror {@link ExecRunKind}, which is what keeps plugins
+ * oblivious to presentation.
+ */
 export interface UiSink {
   // Output from a `user-action` exec call (install/update). Streams to the
   // gutter line-by-line (ADR 0043).
@@ -27,8 +33,10 @@ export interface UiSink {
   flush?(kind: ExecRunKind): void;
 }
 
-// Default sink: drops every chunk. Used when no UI is attached so the
-// runner stays well-behaved in tests and non-TTY environments.
+/**
+ * Default sink: drops every chunk. Used when no UI is attached so the
+ * runner stays well-behaved in tests and non-TTY environments.
+ */
 export const NULL_SINK: UiSink = {
   onUserAction: () => {},
   onQuery: () => {},
@@ -36,6 +44,11 @@ export const NULL_SINK: UiSink = {
   flush: () => {},
 };
 
+/**
+ * Decorator that routes each chunk to the sink method matching the call's kind,
+ * so install chatter reaches the gutter while internal JSON fetches stay quiet
+ * (ADR 0043).
+ */
 export class StreamingExecRunner implements ExecRunner {
   private readonly inner: ExecRunner;
   private sink: UiSink;

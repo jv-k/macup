@@ -1,5 +1,10 @@
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
+/**
+ * Which rule chose the applist path, in precedence order. Reported by `macup
+ * config` and `doctor` so "why is it reading that file?" has an answer, and
+ * used to tell an explicitly named applist from a defaulted one.
+ */
 export type PathSource =
   | 'flag-applist'
   | 'env-applist'
@@ -9,15 +14,23 @@ export type PathSource =
   | 'home-macup'
   | 'legacy-home';
 
+/** A pre-1.x config location that will be moved on the next mutation. */
 export interface LegacyMigration {
+  /** Where the pre-1.x config is now. */
   from: string;
+  /** Where it will move on the next mutation. */
   to: string;
 }
 
+/** Everything downstream needs about where config lives, and how that was decided. */
 export interface PathResolution {
+  /** The applist this run reads and writes, absolute. */
   applistPath: string;
+  /** Its directory, which is also what `doctor` checks for writability. */
   configDir: string;
+  /** `backups/` beside the applist. */
   backupDir: string;
+  /** Which rule chose the path. @see {@link PathSource} */
   source: PathSource;
   /**
    * True when the user named this applist themselves, via `--applist` or
@@ -27,7 +40,9 @@ export interface PathResolution {
    * first-run behaviour predates the flag — stay implicit.
    */
   explicit: boolean;
+  /** Set when the chosen source is deprecated, so the caller can say so once. */
   deprecationWarning?: string;
+  /** Set when a pre-1.x config was found and will be moved. @see {@link LegacyMigration} */
   legacyMigration?: LegacyMigration;
 }
 
@@ -40,9 +55,17 @@ export function selectorLabel(paths: Pick<PathResolution, 'source'>): string {
   return paths.source === 'flag-applist' ? '--applist' : '$MACUP_APPLIST';
 }
 
+/**
+ * Inputs to {@link resolveConfigPaths}. The environment, home directory, and
+ * existence probe are all passed in rather than read, which is what makes the
+ * resolution order unit-testable without touching a real filesystem.
+ */
 export interface ResolveOptions {
+  /** The environment to read the override variables from. */
   env: Partial<Record<string, string>>;
+  /** Home directory, for `~` expansion and the default locations. */
   home: string;
+  /** Filesystem probe, injected so resolution is testable without a real disk. */
   exists: (path: string) => boolean;
   /** `--applist <path>`, already stripped from argv. Wins over every env var. */
   applist?: string;
@@ -82,6 +105,17 @@ function finalise(
   };
 }
 
+/**
+ * Resolve which applist this run uses, and where its backups go.
+ *
+ * Precedence is CLI over env over default, the invariant in
+ * `docs/CODING_STANDARDS.md`: `--applist`, `$MACUP_APPLIST`, `$MACUP_CONFIG`,
+ * `$MACOS_UPDATETOOL_CONFIG` (deprecated), then the XDG or home default, with
+ * the pre-1.x location honoured only when nothing newer exists (ADR 0021,
+ * ADR 0044).
+ *
+ * Pure: no filesystem access beyond the injected `exists` probe.
+ */
 export function resolveConfigPaths(opts: ResolveOptions): PathResolution {
   const { env, home, exists } = opts;
   const cwd = opts.cwd ?? process.cwd();

@@ -10,11 +10,13 @@ import { SUPPORTED_SHELLS, type Shell, detectShellFromEnv, isShell } from './she
 
 export type { Shell };
 
+/** Filesystem and environment seams, injected so installation is testable without writing to a real home directory. */
 export interface InstallDeps {
   home: string;
   env: NodeJS.ProcessEnv;
 }
 
+/** Where the script went, how big it was, and what the user must do next. */
 export interface InstallReport {
   shell: Shell;
   path: string;
@@ -128,6 +130,7 @@ async function removeZcompdumps(deps: InstallDeps): Promise<string[]> {
   return removed;
 }
 
+/** {@link InstallReport} as the confirmation the user sees, including the reload hint. */
 export function formatInstallReport(report: InstallReport): string {
   const lines: string[] = [];
   lines.push(`wrote ${report.path} (${report.bytes} bytes)`);
@@ -141,6 +144,7 @@ export function formatInstallReport(report: InstallReport): string {
   return lines.join('\n');
 }
 
+/** `macup install-completions`: write the script to the shell's standard location, detecting the shell when not told. */
 export async function runInstallCompletions(args: ParsedArgs, deps: CliDeps): Promise<void> {
   const value = args['install-completions'];
   if (typeof value !== 'string') return;
@@ -173,6 +177,7 @@ function resolveShellArg(value: string, env: NodeJS.ProcessEnv): Shell | undefin
   return undefined;
 }
 
+/** `macup install-completions`. */
 export class InstallCompletionsAction implements ActionCommand {
   readonly name = 'install-completions';
   readonly description =

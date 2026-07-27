@@ -78,6 +78,7 @@ async function probePlugin(plugin: Plugin, deps: CheckDeps): Promise<CheckResult
   }
 }
 
+/** Doctor section: each plugin's availability, and a live listing probe per backend. */
 export async function check(deps: CheckDeps): Promise<Section> {
   const results = await Promise.all(deps.plugins.map((p) => probePlugin(p, deps)));
   return { title: 'Plugins', results };

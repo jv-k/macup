@@ -11,6 +11,7 @@ import xcodePlugin from '../../plugins/xcode';
 import { isOnPath, pathTo } from '../exec/on-path';
 import type { Plugin } from './types';
 
+/** The two machine facts registry filtering depends on, injected so it is testable. */
 export interface RegistryDeps {
   readonly platform: NodeJS.Platform;
   readonly onPath: (binary: string) => boolean;
@@ -52,6 +53,12 @@ const INDIVIDUAL_PLUGINS: readonly Plugin[] = [
   systemPlugin,
 ];
 
+/**
+ * Every plugin macup ships, in the order they appear in help, completions, and
+ * the wizard. Closed by design: this list plus one file under `plugins/` is the
+ * entire cost of adding a package manager, and the only chokepoint between the
+ * backends and the rest of the app (`CLAUDE.md`).
+ */
 export const BUILTIN_PLUGINS: readonly Plugin[] = [
   ...INDIVIDUAL_PLUGINS,
   createAllPlugin(INDIVIDUAL_PLUGINS),

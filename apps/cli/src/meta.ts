@@ -26,11 +26,13 @@ import { BUILTIN_PLUGINS } from './plugins/registry';
 import type { Plugin } from './plugins/types';
 import { getVersion } from './version';
 
+/** One flag and its prose, for the generated reference. */
 export interface FlagDoc {
   flag: string;
   description: string;
 }
 
+/** One command, its flags, and (for stand-alone commands) its description. */
 export interface CommandDoc {
   name: string;
   flags: FlagDoc[];
@@ -38,6 +40,7 @@ export interface CommandDoc {
   description?: string;
 }
 
+/** A plugin's manifest, flattened for the docs site. */
 export interface PluginDoc {
   id: string;
   displayName: string;
@@ -56,6 +59,7 @@ export interface PluginDoc {
   commands: CommandDoc[];
 }
 
+/** A top-level flag, with its alias and bare-word spelling where one exists. */
 export interface GlobalFlagDoc {
   flag: string;
   alias?: string;
@@ -64,22 +68,26 @@ export interface GlobalFlagDoc {
   description: string;
 }
 
+/** One applist key and what it holds. */
 export interface ConfigFieldDoc {
   key: string;
   type: string;
   description: string;
 }
 
+/** A process exit code and what it means. */
 export interface ExitCodeDoc {
   code: number;
   meaning: string;
 }
 
+/** An environment variable macup reads. */
 export interface EnvVarDoc {
   name: string;
   description: string;
 }
 
+/** The whole projection consumed by the docs generator. @see {@link docsMetadata} */
 export interface DocsMetadata {
   version: string;
   plugins: PluginDoc[];
@@ -242,6 +250,15 @@ function bareFormFor(flag: string): string | undefined {
   return (FLAG_COMMAND_ALIASES as readonly string[]).includes(word) ? `macup ${word}` : undefined;
 }
 
+/**
+ * Project the live CLI structures into a serializable object for the docs site.
+ *
+ * The parts backed by real data — the registry, the completion flag tables, the
+ * config schema, the version — cannot drift from the CLI because they are read
+ * from it. The exit-code and env-var tables have no such structure behind them
+ * and are maintained mirrors, so they can: update them alongside the control
+ * flow they describe.
+ */
 export function docsMetadata(): DocsMetadata {
   return {
     version: getVersion(),

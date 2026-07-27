@@ -103,8 +103,8 @@ adopted list from #81. `bundle-definitions:` holds inline bodies keyed by name, 
 sitting alongside a file rather than a statement that the bundle is installed. An inline body is the
 bundle schema minus `name`. Conflict resolution between the two is #102's.
 
-An element of `bundles:` is a reference string using the grammar `macup bundle install <name>`
-already accepts, so one resolver serves both. A local filesystem path is refused at track time, the
+An element of `bundles:` is a reference string in the grammar PRD section 5.8.4 specifies for
+`macup bundle install <name>`, so that one resolver can serve both once either is built. A local filesystem path is refused at track time, the
 install proceeding untracked with a warning, because a path is machine-specific and #81 requires the
 applist to be identical on every machine. A GitHub spec is portable and therefore allowed, which is
 what lets a new laptop resolve an adopted bundle without the bundles directory travelling too.

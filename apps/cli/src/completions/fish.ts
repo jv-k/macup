@@ -13,6 +13,10 @@ export function generateFishCompletions(plugins: readonly Plugin[]): string {
     'complete -c macup -n "__fish_use_subcommand" -l version -d "Show version"',
     'complete -c macup -n "__fish_use_subcommand" -l verbose -d "Stream output to scrollback"',
     'complete -c macup -n "__fish_use_subcommand" -l debug -d "Trace every shell call to stderr"',
+    // -r takes an argument, -F re-enables file completion for it (the file
+    // said `complete -c macup -f` at the top, which would otherwise suppress
+    // path completion for the applist too).
+    'complete -c macup -l applist -r -F -d "Use an alternate applist file"',
     '',
     // Nouns, not flags (ADR 0029) — so they complete as subcommands,
     // in the same position as a plugin id.

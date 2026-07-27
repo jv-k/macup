@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolveConfigPaths } from '../config/paths';
 import { ConfigStore } from '../config/store';
+import { ErrApplistNotFound } from '../errors';
 import { buildExecRunner } from '../exec/build';
 import { ExecaExecRunner } from '../exec/run';
 import { defaultRegistry } from '../plugins/registry';
@@ -27,6 +28,10 @@ export interface BootstrapInput {
   /** Override env / home for tests; defaults to the live process. */
   readonly env?: NodeJS.ProcessEnv;
   readonly home?: string;
+  /** `--applist <path>`, already stripped from argv (#17). */
+  readonly applist?: string;
+  /** Base for a relative --applist; defaults to the live process cwd. */
+  readonly cwd?: string;
 }
 
 export function bootstrap(input: BootstrapInput): CliDeps {
@@ -62,10 +67,22 @@ export function bootstrap(input: BootstrapInput): CliDeps {
       env: env as Partial<Record<string, string>>,
       home,
       exists: existsSync,
+      applist: input.applist,
+      cwd: input.cwd,
     });
 
   const getStore = async (): Promise<ConfigStore> => {
     const paths = resolvePaths();
+    // An applist the user named that isn't there is a typo, not a first run
+    // (ADR 0044). Refuse here rather than in ConfigStore: the diagnostic
+    // surfaces (`config`, `doctor`) go through resolvePaths directly and
+    // should still be able to REPORT a missing file rather than fail on it.
+    if (paths.explicit && !existsSync(paths.applistPath)) {
+      throw new ErrApplistNotFound(
+        paths.applistPath,
+        paths.source === 'flag-applist' ? '--applist' : '$MACUP_APPLIST',
+      );
+    }
     const store = new ConfigStore(paths);
     const result = await store.load();
     if (result.migrated) {

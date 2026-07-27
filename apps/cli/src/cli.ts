@@ -22,6 +22,7 @@
 import type { ArgsDef, CommandDef } from 'citty';
 import { defineCommand, runMain } from 'citty';
 import {
+  extractApplistFlag,
   extractVerbosityFlags,
   findUnknownTopLevelFlags,
   rewriteDeprecatedVerbAliases,
@@ -56,6 +57,20 @@ import { runWizard } from './wizard-runner';
 export { detectShellFromEnv } from './commands/shell';
 
 rewriteFlagAliases(process.argv);
+// `--applist <path>` is stripped before anything else parses argv: it selects
+// the config the whole run reads and writes, so it belongs to bootstrap, not
+// to any one subcommand (#17, ADR 0044). The only error it can raise is a
+// missing value, and that happens before the error boundary below exists.
+let applistFlag: string | undefined;
+try {
+  applistFlag = extractApplistFlag(process.argv);
+} catch (err) {
+  if (err instanceof MacupError) {
+    console.error(`error: ${err.message}`);
+    process.exit(err.exitCode);
+  }
+  throw err;
+}
 const flags = extractVerbosityFlags(process.argv);
 // Deprecated `add`/`remove` verbs → `track`/`untrack` (ADR 0031). Rewritten in
 // argv (not registered as citty subcommands) so the aliases dispatch but stay
@@ -68,7 +83,7 @@ const trackablePluginIds = new Set(
 );
 const deprecatedVerbNotice = rewriteDeprecatedVerbAliases(process.argv, trackablePluginIds);
 if (deprecatedVerbNotice) console.warn(logui.warning(deprecatedVerbNotice));
-const deps = bootstrap(flags);
+const deps = bootstrap({ ...flags, applist: applistFlag });
 
 // SIGINT: trip the deps-level abort so in-flight subprocesses cancel,
 // then exit. Registered here (vs at module import) so importing any of
@@ -260,6 +275,9 @@ const KNOWN_TOP_LEVEL_FLAGS = new Set<string>([
   '-V',
   '--debug',
   '-D',
+  // Stripped from argv before citty, like the verbosity flags — listed so a
+  // future change that stops stripping it doesn't silently make it "unknown".
+  '--applist',
 ]);
 
 const main = defineCommand({

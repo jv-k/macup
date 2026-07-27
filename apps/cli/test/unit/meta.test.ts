@@ -94,3 +94,19 @@ describe('docsMetadata', () => {
     }
   });
 });
+
+describe('docsMetadata — --applist (#17)', () => {
+  const meta = docsMetadata();
+
+  it('documents --applist as a global flag', () => {
+    const flag = meta.globalFlags.find((f) => f.flag === '--applist');
+    expect(flag).toBeDefined();
+    expect(flag?.description).toBeTruthy();
+  });
+
+  it('documents $MACUP_APPLIST alongside the older $MACUP_CONFIG', () => {
+    const names = meta.envVars.map((e) => e.name);
+    expect(names).toContain('MACUP_APPLIST');
+    expect(names).toContain('MACUP_CONFIG');
+  });
+});

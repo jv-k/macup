@@ -149,3 +149,26 @@ describe('generateFishCompletions', () => {
     expect(out).toContain('cask');
   });
 });
+
+// #17: --applist takes a path, so every shell must both offer the flag and
+// complete a filename after it — an unlisted global flag is invisible to tab
+// completion even though the CLI accepts it.
+describe('--applist completion (#17)', () => {
+  it('zsh offers --applist with file completion', () => {
+    const out = generateZshCompletions(plugins);
+    expect(out).toContain('--applist');
+    expect(out).toMatch(/--applist\[[^\]]*\]:[^:]*:_files/);
+  });
+
+  it('bash offers --applist among the global flags and completes a file after it', () => {
+    const out = generateBashCompletions(plugins);
+    expect(out).toContain('--applist');
+    expect(out).toContain('compgen -f');
+  });
+
+  it('fish offers --applist and completes a path after it', () => {
+    const out = generateFishCompletions(plugins);
+    expect(out).toContain('-l applist');
+    expect(out).toMatch(/-l applist[^\n]*-r -F/);
+  });
+});

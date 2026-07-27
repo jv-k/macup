@@ -117,6 +117,11 @@ const GLOBAL_FLAGS: GlobalFlagDoc[] = [
     alias: '-D',
     description: 'Full raw trace of every shell call, routed to stderr.',
   },
+  {
+    flag: '--applist',
+    description:
+      'Path to the applist this run reads and writes, instead of the default. Relative paths resolve against the working directory and `~` expands.',
+  },
 ];
 
 // The stable process exit codes. A hand-maintained mirror of the exit
@@ -142,8 +147,14 @@ const EXIT_CODES: ExitCodeDoc[] = [
 const ENV_VARS: EnvVarDoc[] = [
   { name: 'NO_COLOR', description: 'When set to any value, disables colored output.' },
   {
+    name: 'MACUP_APPLIST',
+    description:
+      'Path to the applist file, for when passing `--applist` on every invocation is impractical (launchd, cron). The flag wins when both are set, and a path that does not exist is an error rather than a first run.',
+  },
+  {
     name: 'MACUP_CONFIG',
-    description: 'Explicit path to the applist file. Takes precedence over the default locations.',
+    description:
+      'Explicit path to the applist file, the spelling that predates `--applist`. Loses to `--applist` and `$MACUP_APPLIST`, and still creates the file on first write.',
   },
   {
     name: 'MACOS_UPDATETOOL_CONFIG',

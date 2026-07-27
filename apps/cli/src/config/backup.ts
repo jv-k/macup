@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { access, copyFile, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 import { ErrBackupNotFound } from '../errors';
 
 export interface BackupStorePaths {
@@ -15,13 +15,34 @@ export interface BackupEntry {
   readonly timestamp: string;
 }
 
+/**
+ * The backup-filename namespace for one applist: its basename without the
+ * YAML extension, reduced to the `[A-Za-z0-9-]` the filename grammar allows.
+ * Two applists in one config dir (`--applist work.yaml` beside the default)
+ * must not share a backup set, or restoring one would offer the other's
+ * snapshots (#17). The default `applist.yaml` reduces to `applist`, so
+ * existing backups keep listing and restoring unchanged.
+ */
+export function backupPrefixFor(applistPath: string): string {
+  const stem = basename(applistPath, extname(applistPath));
+  const safe = stem.replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+  // A stem of only separators (`_.yaml`) would leave nothing to namespace by;
+  // fall back rather than emit a filename the grammar can't parse back.
+  return safe === '' ? 'applist' : safe;
+}
+
 // Operation labels can contain hyphens (e.g. `sync-tracked`); the segment
 // separator is `_`, so hyphens in the operation don't confuse the split.
 // Trailing `(?:_\d+)?` matches the collision suffix uniqueBackupPath adds
 // when two same-operation backups land in the same second (C-1), so those
 // extra files still list and restore instead of silently disappearing.
-export const BACKUP_FILE_RE =
-  /^applist_([A-Za-z0-9-]+)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:_\d+)?\.yaml$/;
+// The prefix comes from backupPrefixFor, which already restricts it to
+// `[A-Za-z0-9-]` — no regex metacharacters survive, so it interpolates safely.
+export function backupFileRe(prefix: string): RegExp {
+  return new RegExp(
+    `^${prefix}_([A-Za-z0-9-]+)_(\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2})(?:_\\d+)?\\.yaml$`,
+  );
+}
 
 /** Second-resolution `YYYY-MM-DD_HH-MM-SS` stamp used in backup filenames. */
 export function backupTimestamp(now: Date): string {
@@ -39,14 +60,15 @@ export function backupTimestamp(now: Date): string {
 // name files the same way.
 export function uniqueBackupPath(
   backupDir: string,
+  prefix: string,
   operation: string,
   now: Date,
   exists: (p: string) => boolean = existsSync,
 ): string {
   const stamp = backupTimestamp(now);
-  let candidate = join(backupDir, `applist_${operation}_${stamp}.yaml`);
+  let candidate = join(backupDir, `${prefix}_${operation}_${stamp}.yaml`);
   for (let n = 2; exists(candidate); n++) {
-    candidate = join(backupDir, `applist_${operation}_${stamp}_${n}.yaml`);
+    candidate = join(backupDir, `${prefix}_${operation}_${stamp}_${n}.yaml`);
   }
   return candidate;
 }
@@ -60,8 +82,8 @@ async function pathExists(p: string): Promise<boolean> {
   }
 }
 
-function entryFor(dir: string, filename: string): BackupEntry | null {
-  const match = BACKUP_FILE_RE.exec(filename);
+function entryFor(dir: string, filename: string, re: RegExp): BackupEntry | null {
+  const match = re.exec(filename);
   if (!match) return null;
   return {
     path: join(dir, filename),
@@ -72,14 +94,21 @@ function entryFor(dir: string, filename: string): BackupEntry | null {
 }
 
 export class BackupStore {
-  constructor(readonly paths: BackupStorePaths) {}
+  /** Backup-filename namespace for this applist; see backupPrefixFor. */
+  private readonly prefix: string;
+  private readonly fileRe: RegExp;
+
+  constructor(readonly paths: BackupStorePaths) {
+    this.prefix = backupPrefixFor(paths.applistPath);
+    this.fileRe = backupFileRe(this.prefix);
+  }
 
   async list(): Promise<BackupEntry[]> {
     if (!(await pathExists(this.paths.backupDir))) return [];
     const entries = await readdir(this.paths.backupDir);
     const parsed: BackupEntry[] = [];
     for (const filename of entries) {
-      const entry = entryFor(this.paths.backupDir, filename);
+      const entry = entryFor(this.paths.backupDir, filename, this.fileRe);
       if (entry) parsed.push(entry);
     }
     // Newest first. The timestamp is second-resolution, so same-second
@@ -114,13 +143,13 @@ export class BackupStore {
   async snapshot(operation: string, now: Date = new Date()): Promise<BackupEntry | null> {
     if (!(await pathExists(this.paths.applistPath))) return null;
     await mkdir(this.paths.backupDir, { recursive: true });
-    const path = uniqueBackupPath(this.paths.backupDir, operation, now);
+    const path = uniqueBackupPath(this.paths.backupDir, this.prefix, operation, now);
     await copyFile(this.paths.applistPath, path);
-    return entryFor(this.paths.backupDir, basename(path));
+    return entryFor(this.paths.backupDir, basename(path), this.fileRe);
   }
 
   /**
-   * Deletes all applist_*.yaml files in backupDir. Returns count deleted.
+   * Deletes this applist's backups in backupDir. Returns count deleted.
    * When confirmed=false, is a no-op (returns 0) — the caller is expected
    * to wrap this in a confirmation prompt.
    */

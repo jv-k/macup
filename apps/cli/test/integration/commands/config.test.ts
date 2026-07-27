@@ -21,6 +21,7 @@ function paths(applistName = 'applist.yaml'): PathResolution {
     configDir: workDir,
     backupDir: join(workDir, 'backups'),
     source: 'home-macup',
+    explicit: false,
   };
 }
 

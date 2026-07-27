@@ -6,7 +6,7 @@
 
 import { constants, accessSync, existsSync } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { buildConfigReport } from '../../config';
 import type { CheckDeps, CheckResult, Section } from '../report';
 import { errorMessage } from './probe';
@@ -73,25 +73,42 @@ async function checkBackups(deps: CheckDeps): Promise<CheckResult> {
 
 export async function check(deps: CheckDeps): Promise<Section> {
   const results: CheckResult[] = [];
+
+  // Every other line in this section is about "the applist", and a reader
+  // assumes that means the default one. When the run was scoped to a named
+  // applist (#17), say which selector chose it before reporting on it.
+  if (deps.paths.explicit) {
+    const selector = deps.paths.source === 'flag-applist' ? '--applist' : '$MACUP_APPLIST';
+    results.push({
+      level: 'ok',
+      label: 'Applist',
+      detail: `${deps.paths.applistPath} — selected by ${selector}`,
+    });
+  }
+
   results.push(checkConfigDir(deps));
 
   const report = await buildConfigReport(deps.paths);
+  // The row is about the file this run actually opened, which is no longer
+  // always named applist.yaml (#17) — labelling it so named a file the run
+  // never touched.
+  const applistLabel = basename(report.applistPath);
   if (!report.exists) {
     results.push({
       level: 'ok',
-      label: 'applist.yaml',
+      label: applistLabel,
       detail: `${report.applistPath} — not created yet (defaults apply)`,
     });
   } else if (report.schemaValid) {
     results.push({
       level: 'ok',
-      label: 'applist.yaml',
+      label: applistLabel,
       detail: `${report.applistPath} — valid (${report.pinsCount} pins, ${report.skipCount} skips)`,
     });
   } else {
     results.push({
       level: 'error',
-      label: 'applist.yaml',
+      label: applistLabel,
       detail: `${report.applistPath} — ${report.schemaError ?? 'failed validation'}`,
       hint: 'fix the schema error, or restore a backup: macup restore',
     });

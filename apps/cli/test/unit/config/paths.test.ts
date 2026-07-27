@@ -101,3 +101,87 @@ describe('resolveConfigPaths', () => {
     expect(r.legacyMigration).toBeUndefined();
   });
 });
+
+describe('resolveConfigPaths — explicit applist selection (#17)', () => {
+  it('puts the --applist flag above every env var', () => {
+    const r = resolveConfigPaths({
+      applist: '/work/work.yaml',
+      env: { MACUP_APPLIST: '/env/new.yaml', MACUP_CONFIG: '/env/old.yaml' },
+      home: HOME,
+      exists: existsNone,
+    });
+    expect(r.applistPath).toBe('/work/work.yaml');
+    expect(r.source).toBe('flag-applist');
+    expect(r.explicit).toBe(true);
+  });
+
+  it('honours $MACUP_APPLIST above $MACUP_CONFIG when no flag is given', () => {
+    const r = resolveConfigPaths({
+      env: { MACUP_APPLIST: '/env/new.yaml', MACUP_CONFIG: '/env/old.yaml' },
+      home: HOME,
+      exists: existsNone,
+    });
+    expect(r.applistPath).toBe('/env/new.yaml');
+    expect(r.source).toBe('env-applist');
+    expect(r.explicit).toBe(true);
+  });
+
+  it('leaves the default resolution implicit, so a missing file is a first run', () => {
+    const r = resolveConfigPaths({ env: {}, home: HOME, exists: existsNone });
+    expect(r.explicit).toBe(false);
+  });
+
+  it('keeps $MACUP_CONFIG implicit, so its first-run behaviour is unchanged', () => {
+    const r = resolveConfigPaths({
+      env: { MACUP_CONFIG: '/env/old.yaml' },
+      home: HOME,
+      exists: existsNone,
+    });
+    expect(r.source).toBe('env-macup');
+    expect(r.explicit).toBe(false);
+  });
+
+  it('resolves a relative --applist against cwd', () => {
+    const r = resolveConfigPaths({
+      applist: 'lists/work.yaml',
+      env: {},
+      home: HOME,
+      cwd: '/projects/acme',
+      exists: existsNone,
+    });
+    expect(r.applistPath).toBe('/projects/acme/lists/work.yaml');
+    expect(r.backupDir).toBe('/projects/acme/lists/backups');
+  });
+
+  it('expands a leading ~ in --applist to the home directory', () => {
+    const r = resolveConfigPaths({
+      applist: '~/lists/work.yaml',
+      env: {},
+      home: HOME,
+      cwd: '/projects/acme',
+      exists: existsNone,
+    });
+    expect(r.applistPath).toBe('/home/user/lists/work.yaml');
+  });
+
+  it('expands a bare ~ and does not touch ~user or a mid-path tilde', () => {
+    const bare = resolveConfigPaths({ applist: '~', env: {}, home: HOME, exists: existsNone });
+    expect(bare.applistPath).toBe(HOME);
+    const other = resolveConfigPaths({
+      applist: '/tmp/~backup/work.yaml',
+      env: {},
+      home: HOME,
+      exists: existsNone,
+    });
+    expect(other.applistPath).toBe('/tmp/~backup/work.yaml');
+  });
+
+  it('expands $MACUP_APPLIST the same way as the flag', () => {
+    const r = resolveConfigPaths({
+      env: { MACUP_APPLIST: '~/work.yaml' },
+      home: HOME,
+      exists: existsNone,
+    });
+    expect(r.applistPath).toBe('/home/user/work.yaml');
+  });
+});

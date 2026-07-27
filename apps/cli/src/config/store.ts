@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { type Document, Scalar, YAMLMap, YAMLSeq, parseDocument } from 'yaml';
 import { ErrInvalidConfig } from '../errors';
 import type { SelectionPolicy } from '../plugins/selection';
-import { BACKUP_FILE_RE, uniqueBackupPath } from './backup';
+import { backupFileRe, backupPrefixFor, uniqueBackupPath } from './backup';
 import {
   type ApplistKey,
   ApplistSchema,
@@ -261,7 +261,12 @@ export class ConfigStore {
   // ./backup so mutation backups and pre-undo snapshots name files
   // identically. `operation` is the bare label (e.g. 'add', 'migration').
   private uniqueBackupPath(operation: string): string {
-    return uniqueBackupPath(this.paths.backupDir, operation, this.now());
+    return uniqueBackupPath(
+      this.paths.backupDir,
+      backupPrefixFor(this.paths.applistPath),
+      operation,
+      this.now(),
+    );
   }
 
   // An invalid config is nearly always recoverable — every mutation takes
@@ -271,9 +276,10 @@ export class ConfigStore {
   private async recoveryHint(): Promise<string> {
     try {
       // Match on what `macup restore` can actually offer — the same
-      // pattern BackupStore lists by. Counting every *.yaml would promise
-      // a rollback to files restore never shows.
-      const files = (await readdir(this.paths.backupDir)).filter((f) => BACKUP_FILE_RE.test(f));
+      // pattern BackupStore lists by, namespaced to THIS applist. Counting
+      // every *.yaml would promise a rollback to files restore never shows.
+      const re = backupFileRe(backupPrefixFor(this.paths.applistPath));
+      const files = (await readdir(this.paths.backupDir)).filter((f) => re.test(f));
       if (files.length === 0) return '';
       return `\n\nA backup of this file exists (${files.length} in ${this.paths.backupDir}).\nRun \`macup restore\` to roll back to a working version.`;
     } catch {

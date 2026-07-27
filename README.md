@@ -143,15 +143,28 @@ skip:
 
 ### Config resolution order
 
-1. `$MACUP_CONFIG` (explicit path)
-2. `$MACOS_UPDATETOOL_CONFIG` (legacy; emits deprecation warning)
-3. `$XDG_CONFIG_HOME/macup/applist.yaml`
-4. `~/.config/macup/applist.yaml`
-5. `~/.config/macos-updatetool/applist.yaml` (legacy; auto-migration prompt on first mutation)
+1. `--applist <path>` (this run only)
+2. `$MACUP_APPLIST`
+3. `$MACUP_CONFIG` (the spelling that predates `--applist`)
+4. `$MACOS_UPDATETOOL_CONFIG` (legacy; emits deprecation warning)
+5. `$XDG_CONFIG_HOME/macup/applist.yaml`
+6. `~/.config/macup/applist.yaml`
+7. `~/.config/macos-updatetool/applist.yaml` (legacy; auto-migration prompt on first mutation)
+
+### More than one applist
+
+`--applist <path>` points a run at a different list: separate work and personal packages, or a list a repo checks in (ADR 0044).
+
+```bash
+macup --applist ~/lists/work.yaml brew track ripgrep
+macup --applist ~/lists/work.yaml all update
+```
+
+`~` expands and a relative path resolves against the working directory. `MACUP_APPLIST` is the env form for launchd and cron jobs; the flag wins when both are set. An applist you name has to exist already. macup creates the default one on first write, but a named path that isn't there is almost always a typo, so it is reported as an error naming the absolute path.
 
 ### Backups
 
-Automatic timestamped backups are created before every config mutation (`add`, `remove`, `pin`, `skip`). If no changes occurred, the backup is deleted. Manage backups with:
+Automatic timestamped backups are created before every config mutation (`track`, `untrack`, `pin`, `skip`). If no changes occurred, no backup is written. Backups are named after the applist they came from (`work_track_<timestamp>.yaml`), so applists sharing a directory never share a backup set. Manage backups with:
 
 ```bash
 macup cleanup      # Delete all backup files (with confirmation)

@@ -89,7 +89,7 @@ Compose real modules together but keep the process boundary hermetic: stub the `
 
 **Cover:**
 - `parse → plan → execute` pipeline with a real fixture applist
-- **Config override precedence:** explicit `--config` / `MACUP_CONFIG` path wins over the default config location
+- **Config override precedence:** `--applist` beats `MACUP_APPLIST` beats `MACUP_CONFIG` beats the default config location (ADR 0044)
 - Partial-failure behavior: one manager fails, others continue; summary is correct
 - Dry-run mode: nothing is executed, but commands are logged
 - Plugin loading: enabled vs. disabled plugins produce the expected command set

@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { check as checkConfig } from '../../../src/commands/doctor/checks/config';
 import { check as checkDataIntegrity } from '../../../src/commands/doctor/checks/data-integrity';
 import { check as checkPlugins } from '../../../src/commands/doctor/checks/plugins';
 import type { CheckDeps } from '../../../src/commands/doctor/report';
@@ -54,6 +55,7 @@ function makeDeps(overrides: Partial<CheckDeps>): CheckDeps {
       configDir: '/tmp',
       backupDir: '/tmp/backups',
       source: 'home-macup',
+      explicit: false,
     },
     platform: 'darwin',
     arch: 'arm64',
@@ -165,7 +167,13 @@ describe('doctor — orphaned skip/pins keys', () => {
       return await checkDataIntegrity(
         makeDeps({
           plugins: knownPlugins(),
-          paths: { applistPath, configDir: dir, backupDir: join(dir, 'b'), source: 'home-macup' },
+          paths: {
+            applistPath,
+            configDir: dir,
+            backupDir: join(dir, 'b'),
+            source: 'home-macup',
+            explicit: false,
+          },
         }),
       );
     } finally {
@@ -200,5 +208,74 @@ describe('doctor — orphaned skip/pins keys', () => {
     const section = await runIntegrity('skip:\n  all:\n    brew:\n      - git\n');
     const details = section.results.map((r) => r.detail ?? '').join('\n');
     expect(details).toContain('skip.all must be a flat list');
+  });
+});
+
+// #17: when the run is scoped to a named applist, doctor's Config section
+// must say so — the whole report is otherwise indistinguishable from one
+// about the default applist, which is the file the reader assumes.
+describe('doctor — Config section names the selected applist (#17)', () => {
+  it('reports which selector chose an explicit applist', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'macup-doctor-applist-'));
+    const applistPath = join(dir, 'work.yaml');
+    await writeFile(applistPath, 'version: 1\n', 'utf8');
+    const section = await checkConfig(
+      makeDeps({
+        paths: {
+          applistPath,
+          configDir: dir,
+          backupDir: join(dir, 'backups'),
+          source: 'flag-applist',
+          explicit: true,
+        },
+      }),
+    );
+    const detail = section.results.map((r) => r.detail).join('\n');
+    expect(detail).toContain(applistPath);
+    expect(detail).toContain('--applist');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('says nothing extra for the default applist', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'macup-doctor-applist-'));
+    const applistPath = join(dir, 'applist.yaml');
+    await writeFile(applistPath, 'version: 1\n', 'utf8');
+    const section = await checkConfig(
+      makeDeps({
+        paths: {
+          applistPath,
+          configDir: dir,
+          backupDir: join(dir, 'backups'),
+          source: 'home-macup',
+          explicit: false,
+        },
+      }),
+    );
+    expect(section.results.map((r) => r.label)).not.toContain('Applist');
+    await rm(dir, { recursive: true, force: true });
+  });
+});
+
+// #17: the label was hard-coded `applist.yaml` back when that was the only
+// possible filename. Under --applist it named a file the run never opened.
+describe('doctor — applist label follows the selected file (#17)', () => {
+  it('labels the row with the actual applist basename', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'macup-doctor-label-'));
+    const applistPath = join(dir, 'work.yaml');
+    await writeFile(applistPath, 'version: 1\n', 'utf8');
+    const section = await checkConfig(
+      makeDeps({
+        paths: {
+          applistPath,
+          configDir: dir,
+          backupDir: join(dir, 'backups'),
+          source: 'flag-applist',
+          explicit: true,
+        },
+      }),
+    );
+    expect(section.results.map((r) => r.label)).toContain('work.yaml');
+    expect(section.results.map((r) => r.label)).not.toContain('applist.yaml');
+    await rm(dir, { recursive: true, force: true });
   });
 });

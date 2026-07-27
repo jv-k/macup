@@ -59,6 +59,50 @@ describe('StreamSink — line buffering', () => {
   });
 });
 
+describe('StreamSink — end-of-run flush', () => {
+  it('emits a trailing line that never got its newline', () => {
+    const { sink, streamed } = capture();
+    // An interactive prompt is the common case: it sits on the line waiting
+    // for input, so no newline ever arrives.
+    sink.onUserAction('==> Upgrading git\nPassword:', 'stdout');
+    expect(streamed).toEqual(['==> Upgrading git']);
+    sink.flush('user-action');
+    expect(streamed).toEqual(['==> Upgrading git', 'Password:']);
+  });
+
+  it('is a no-op when the buffer is empty', () => {
+    const { sink, streamed } = capture();
+    sink.onUserAction('done\n', 'stdout');
+    sink.flush('user-action');
+    sink.flush('user-action');
+    expect(streamed).toEqual(['done']);
+  });
+
+  it('drains stdout and stderr independently', () => {
+    const { sink, streamed } = capture();
+    sink.onUserAction('out-tail', 'stdout');
+    sink.onUserAction('err-tail', 'stderr');
+    sink.flush('user-action');
+    expect(streamed).toEqual(['out-tail', 'err-tail']);
+  });
+
+  it('surfaces a buffered error line on a query run', () => {
+    const { sink, notices } = capture();
+    sink.onQuery('Error: died mid-line', 'stderr');
+    expect(notices).toEqual([]);
+    sink.flush('query');
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toContain('died mid-line');
+  });
+
+  it('folds a carriage-return redraw in the buffered remainder', () => {
+    const { sink, streamed } = capture();
+    sink.onUserAction('30%\r100%', 'stdout');
+    sink.flush('user-action');
+    expect(streamed).toEqual(['100%']);
+  });
+});
+
 describe('StreamSink — error/warning surfacing', () => {
   it('surfaces an error line from query stderr', () => {
     const { sink, notices } = capture();
@@ -140,5 +184,24 @@ describe('StreamSink — end to end through StreamingExecRunner', () => {
     await exec.run('brew', ['upgrade', 'git'], { kind: 'user-action' });
     await exec.run('brew', ['outdated'], { kind: 'query' });
     expect(streamed).toEqual(['==> Upgrading git', 'Poured git']);
+  });
+
+  it('flushes a newline-less final line when the run resolves', async () => {
+    const { sink, streamed } = capture();
+    const exec = new StreamingExecRunner(
+      new StreamingFixtureRunner({
+        fixtures: [
+          {
+            cmd: 'brew',
+            args: ['upgrade', 'git'],
+            // No trailing newline — the runner must flush the remainder.
+            result: { stdout: '==> Upgrading git\nPassword:', stderr: '', exitCode: 0 },
+          },
+        ],
+      }),
+      sink,
+    );
+    await exec.run('brew', ['upgrade', 'git'], { kind: 'user-action' });
+    expect(streamed).toEqual(['==> Upgrading git', 'Password:']);
   });
 });

@@ -21,6 +21,10 @@ export interface UiSink {
   // Output from a `check` exec call (health, onPath). Always dropped
   // except --debug.
   onCheck(chunk: string, source: StreamSource): void;
+  // End of a run: emit anything still held in a line buffer. A process can
+  // exit (or sit on a prompt) without a trailing newline — `Password:` is the
+  // common one — and that remainder would otherwise never be shown.
+  flush?(kind: ExecRunKind): void;
 }
 
 // Default sink: drops every chunk. Used when no UI is attached so the
@@ -29,6 +33,7 @@ export const NULL_SINK: UiSink = {
   onUserAction: () => {},
   onQuery: () => {},
   onCheck: () => {},
+  flush: () => {},
 };
 
 export class StreamingExecRunner implements ExecRunner {
@@ -51,17 +56,23 @@ export class StreamingExecRunner implements ExecRunner {
     const callerStdout = opts.onStdout;
     const callerStderr = opts.onStderr;
     const route = this.routerFor(kind);
-    return this.inner.run(cmd, args, {
-      ...opts,
-      onStdout: (chunk) => {
-        route(chunk, 'stdout');
-        callerStdout?.(chunk);
-      },
-      onStderr: (chunk) => {
-        route(chunk, 'stderr');
-        callerStderr?.(chunk);
-      },
-    });
+    try {
+      return await this.inner.run(cmd, args, {
+        ...opts,
+        onStdout: (chunk) => {
+          route(chunk, 'stdout');
+          callerStdout?.(chunk);
+        },
+        onStderr: (chunk) => {
+          route(chunk, 'stderr');
+          callerStderr?.(chunk);
+        },
+      });
+    } finally {
+      // In `finally` so a failed run still shows whatever it printed before
+      // dying — that partial line is often the reason it died.
+      this.sink.flush?.(kind);
+    }
   }
 
   private routerFor(kind: ExecRunKind): (chunk: string, source: StreamSource) => void {

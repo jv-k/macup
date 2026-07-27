@@ -8,6 +8,7 @@
 // presentation).
 
 import type { StreamSource, UiSink } from '../exec/streaming';
+import type { ExecRunKind } from '../plugins/types';
 import * as log from './log';
 
 // Patterns scanned across query/check chunks so genuine failures aren't
@@ -53,6 +54,21 @@ export class StreamSink implements UiSink {
   onCheck(chunk: string, source: StreamSource): void {
     // Same treatment as queries — silent unless it's an actual failure.
     if (this.surface) this.eachLine(chunk, source, (line) => this.scanNotice(line));
+  }
+
+  // End of a run: drain each source's buffer. Without this a process that
+  // never emits a final newline — an interactive `Password:` prompt, or a
+  // crash mid-line — would leave its last line stuck in `tail` and unseen.
+  flush(kind: ExecRunKind): void {
+    for (const source of ['stdout', 'stderr'] as const) {
+      const rest = this.tail[source];
+      if (rest.length === 0) continue;
+      this.tail[source] = '';
+      const line = rest.includes('\r') ? (rest.split('\r').pop() ?? rest) : rest;
+      if (line.length === 0) continue;
+      if (kind === 'user-action') this.emitStream(line);
+      else if (this.surface) this.scanNotice(line);
+    }
   }
 
   // Buffer per source and invoke `handle` once per complete line. A trailing

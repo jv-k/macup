@@ -98,17 +98,20 @@ export function findUnknownTopLevelFlags(
   return unknown;
 }
 
-// Pull `--applist <path>` / `--applist=<path>` out of argv and return the
-// path, stripping the matched tokens so citty never sees them — the flag is a
-// global modifier consumed at bootstrap, like the verbosity flags, and every
-// subcommand would otherwise reject it (#17, ADR 0044).
+// Pull `--<name> <value>` / `--<name>=<value>` out of argv and return the
+// value, stripping the matched tokens so citty never sees them. These are
+// global modifiers consumed at bootstrap, like the verbosity flags, and every
+// subcommand would otherwise reject them (#17 / ADR 0044, #16).
 //
 // Scanning stops at the `--` end-of-flags marker so a package literally named
 // `--applist` stays a positional. Repeats take the last value, matching the
 // convention every other flag parser follows. A missing or empty value is a
-// usage error rather than a silent fallback to the default applist: the whole
-// point of the flag is to NOT write to the default one.
-export function extractApplistFlag(argv: string[]): string | undefined {
+// usage error rather than a silent fallback: the whole point of these flags is
+// to redirect something away from its default, so guessing is worse than
+// stopping.
+export function extractPathFlag(argv: string[], name: string, hint: string): string | undefined {
+  const flag = `--${name}`;
+  const inlinePrefix = `${flag}=`;
   let value: string | undefined;
   const kept: string[] = [];
   let terminated = false;
@@ -124,22 +127,22 @@ export function extractApplistFlag(argv: string[]): string | undefined {
       kept.push(tok);
       continue;
     }
-    if (tok === '--applist') {
+    if (tok === flag) {
       const next = argv[i + 1];
       // `--applist --json` means the value was forgotten, not that the next
-      // flag is a filename. The `=` spelling is the escape hatch for a path
+      // flag is a filename. The `=` spelling is the escape hatch for a value
       // that really does start with a dash.
       if (next === undefined || next === '' || next.startsWith('-')) {
-        throw new ErrUsage('--applist requires a path (e.g. --applist work.yaml)');
+        throw new ErrUsage(`${flag} requires a path (e.g. ${hint})`);
       }
       value = next;
       i++;
       continue;
     }
-    if (tok.startsWith('--applist=')) {
-      const inline = tok.slice('--applist='.length);
+    if (tok.startsWith(inlinePrefix)) {
+      const inline = tok.slice(inlinePrefix.length);
       if (inline === '') {
-        throw new ErrUsage('--applist requires a path (e.g. --applist work.yaml)');
+        throw new ErrUsage(`${flag} requires a path (e.g. ${hint})`);
       }
       value = inline;
       continue;
@@ -152,6 +155,16 @@ export function extractApplistFlag(argv: string[]): string | undefined {
     argv.push(...kept);
   }
   return value;
+}
+
+/** `--applist <path>`: the applist this run reads and writes (#17, ADR 0044). */
+export function extractApplistFlag(argv: string[]): string | undefined {
+  return extractPathFlag(argv, 'applist', '--applist work.yaml');
+}
+
+/** `--log <path>`: the file this run appends its subprocess log to (#16). */
+export function extractLogFlag(argv: string[]): string | undefined {
+  return extractPathFlag(argv, 'log', '--log ~/macup.log');
 }
 
 // Inspect argv for --debug/-D/--verbose/-V, return the parsed flags, and

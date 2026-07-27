@@ -23,6 +23,7 @@ import type { ArgsDef, CommandDef } from 'citty';
 import { defineCommand, runMain } from 'citty';
 import {
   extractApplistFlag,
+  extractLogFlag,
   extractVerbosityFlags,
   findUnknownTopLevelFlags,
   rewriteDeprecatedVerbAliases,
@@ -62,8 +63,10 @@ export { detectShellFromEnv } from './commands/shell';
 // (#17, ADR 0044). The only error it can raise is a missing value, and that
 // happens before the error boundary below exists.
 let applistFlag: string | undefined;
+let logFlag: string | undefined;
 try {
   applistFlag = extractApplistFlag(process.argv);
+  logFlag = extractLogFlag(process.argv);
 } catch (err) {
   if (err instanceof MacupError) {
     console.error(`error: ${err.message}`);
@@ -88,7 +91,7 @@ const trackablePluginIds = new Set(
 );
 const deprecatedVerbNotice = rewriteDeprecatedVerbAliases(process.argv, trackablePluginIds);
 if (deprecatedVerbNotice) console.warn(logui.warning(deprecatedVerbNotice));
-const deps = bootstrap({ ...flags, applist: applistFlag });
+const deps = bootstrap({ ...flags, applist: applistFlag, log: logFlag });
 
 // SIGINT: trip the deps-level abort so in-flight subprocesses cancel,
 // then exit. Registered here (vs at module import) so importing any of
@@ -240,8 +243,10 @@ const KNOWN_TOP_LEVEL_FLAGS = new Set<string>([
   '--debug',
   '-D',
   // Stripped from argv before citty, like the verbosity flags — listed so a
-  // future change that stops stripping it doesn't silently make it "unknown".
+  // future change that stops stripping them doesn't silently make them
+  // "unknown".
   '--applist',
+  '--log',
 ]);
 
 const main = defineCommand({

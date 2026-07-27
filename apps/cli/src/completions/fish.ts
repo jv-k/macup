@@ -17,6 +17,7 @@ export function generateFishCompletions(plugins: readonly Plugin[]): string {
     // said `complete -c macup -f` at the top, which would otherwise suppress
     // path completion for the applist too).
     'complete -c macup -l applist -r -F -d "Use an alternate applist file"',
+    'complete -c macup -l log -r -F -d "Append a subprocess log to a file"',
     '',
     // Nouns, not flags (ADR 0029) — so they complete as subcommands,
     // in the same position as a plugin id.

@@ -110,3 +110,15 @@ describe('docsMetadata — --applist (#17)', () => {
     expect(names).toContain('MACUP_CONFIG');
   });
 });
+
+describe('docsMetadata — --log (#16)', () => {
+  const meta = docsMetadata();
+
+  it('documents --log as a global flag', () => {
+    expect(meta.globalFlags.find((f) => f.flag === '--log')?.description).toBeTruthy();
+  });
+
+  it('documents $MACUP_LOG', () => {
+    expect(meta.envVars.map((e) => e.name)).toContain('MACUP_LOG');
+  });
+});

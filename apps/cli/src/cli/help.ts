@@ -126,6 +126,7 @@ export function buildHelp(deps: CliDeps): string {
     { label: '--verbose, -V', desc: 'Stream user-facing output to scrollback' },
     { label: '--debug, -D', desc: 'Trace every shell call to stderr (dev mode)' },
     { label: '--applist <path>', desc: 'Read and write an alternate applist file' },
+    { label: '--log <path>', desc: 'Append a subprocess log to a file (JSON lines)' },
   ];
   say(cols(optionRows, s.dim));
   say('');

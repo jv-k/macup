@@ -1,4 +1,4 @@
-# ADR 0045: Bundle `extends` flattens by union, and only pins and labels can conflict
+# ADR 0046: Bundle `extends` flattens by union, and only pins and labels can conflict
 
 > Status: accepted · Date: 2026-07-27 · Deciders: John Valai
 

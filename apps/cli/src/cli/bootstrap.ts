@@ -11,10 +11,11 @@
 
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { resolveConfigPaths, selectorLabel } from '../config/paths';
+import { expandUserPath, resolveConfigPaths, selectorLabel } from '../config/paths';
 import { ConfigStore } from '../config/store';
 import { ErrApplistNotFound } from '../errors';
 import { buildExecRunner } from '../exec/build';
+import { fileLogSink } from '../exec/logging';
 import { ExecaExecRunner } from '../exec/run';
 import { defaultRegistry } from '../plugins/registry';
 import { useColor } from '../runtime';
@@ -30,7 +31,9 @@ export interface BootstrapInput {
   readonly home?: string;
   /** `--applist <path>`, already stripped from argv (#17). */
   readonly applist?: string;
-  /** Base for a relative --applist; defaults to the live process cwd. */
+  /** `--log <path>`, already stripped from argv (#16). */
+  readonly log?: string;
+  /** Base for a relative --applist / --log; defaults to the live process cwd. */
   readonly cwd?: string;
   /** Filesystem probe; injectable so the applist guard is testable in-process. */
   readonly exists?: (path: string) => boolean;
@@ -52,7 +55,16 @@ export function bootstrap(input: BootstrapInput): CliDeps {
   const sigintController = new AbortController();
   const baseExec = new ExecaExecRunner();
   const streamingSink = useStreaming ? new StreamSink() : undefined;
-  const exec = buildExecRunner({ baseExec, debug: input.debug, streamingSink, color });
+
+  // File logging (#16, ADR 0045). The flag wins over the env var, matching
+  // --applist / $MACUP_APPLIST. Absent both, no sink is built and the runner
+  // is exactly what it was before, so the default path pays nothing.
+  const logPath = input.log ?? env.MACUP_LOG;
+  const logSink = logPath
+    ? fileLogSink(expandUserPath(logPath, home, input.cwd ?? process.cwd()))
+    : undefined;
+
+  const exec = buildExecRunner({ baseExec, debug: input.debug, streamingSink, color, logSink });
 
   // Frame-aware (ADR 0033): plugin warnings emitted mid-wizard must join
   // the gutter like every other line, so the Logger writes through the

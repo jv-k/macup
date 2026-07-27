@@ -216,6 +216,92 @@ describe('JSDoc coverage across src/ (#43)', () => {
     );
   });
 
+  it('checks members in every contract file it claims to', () => {
+    // A renamed or moved contract would silently stop being member-checked,
+    // which is the exact failure the two-level split exists to prevent.
+    const present = files.map((f) => relative(CLI_ROOT, f));
+    for (const contract of MEMBER_CHECKED) {
+      expect(present, `${contract} is member-checked but does not exist`).toContain(contract);
+    }
+  });
+
+  it('gives every file a module header, so hover on the import says what it is', () => {
+    // #130. The file summary is the one doc a reader gets before opening
+    // anything, and 28 files had none.
+    const missing: string[] = [];
+    for (const file of files) {
+      const text = readFileSync(file, 'utf8');
+      // The tag, not merely a leading block: `errors.ts` opens with
+      // MacupError's own docstring, which a "starts with /**" check accepted as
+      // a file summary.
+      const open = text.indexOf('/**');
+      const close = text.indexOf('*/');
+      const firstBlock = open === 0 && close > open ? text.slice(open, close + 2) : '';
+      if (!firstBlock.includes('@module')) missing.push(relative(CLI_ROOT, file));
+    }
+    expect(missing, `file(s) with no @module header:\n  ${missing.join('\n  ')}`).toEqual([]);
+  });
+
+  it('tags a function that can throw with @throws', () => {
+    // A caller cannot see a throw in a signature, so an untagged one is a
+    // surprise at runtime. Scoped to what a caller can reach: exported functions
+    // and public methods, and only a `throw` in the function's OWN body — one
+    // inside a callback it returns belongs to that callback.
+    const missing: string[] = [];
+
+    for (const file of files) {
+      const text = readFileSync(file, 'utf8');
+      const source = ts.createSourceFile(file, text, ts.ScriptTarget.ES2022, true);
+
+      const throwsDirectly = (body: ts.Node): boolean => {
+        let found = false;
+        const walk = (node: ts.Node) => {
+          if (found) return;
+          if (
+            ts.isFunctionDeclaration(node) ||
+            ts.isFunctionExpression(node) ||
+            ts.isArrowFunction(node) ||
+            ts.isMethodDeclaration(node)
+          ) {
+            return;
+          }
+          if (ts.isThrowStatement(node)) {
+            found = true;
+            return;
+          }
+          ts.forEachChild(node, walk);
+        };
+        ts.forEachChild(body, walk);
+        return found;
+      };
+
+      const check = (node: ts.FunctionDeclaration | ts.MethodDeclaration, reachable: boolean) => {
+        if (!node.body || !reachable) return;
+        if (!throwsDirectly(node.body)) return;
+        if (ts.getJSDocTags(node).some((tag) => tag.tagName.getText(source) === 'throws')) return;
+        const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
+        missing.push(
+          `${relative(CLI_ROOT, file)}:${line + 1} ${node.name?.getText(source) ?? '(anonymous)'}`,
+        );
+      };
+
+      const visit = (node: ts.Node) => {
+        if (ts.isFunctionDeclaration(node)) {
+          const mods = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined;
+          check(node, mods?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ?? false);
+        } else if (ts.isMethodDeclaration(node)) {
+          check(node, isPubliclyVisible(node));
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(source);
+    }
+
+    expect(missing, `function(s) that throw without @throws:\n  ${missing.join('\n  ')}`).toEqual(
+      [],
+    );
+  });
+
   it('keeps the exemption list honest, so a skip is a decision with a reason', () => {
     for (const [file, reason] of Object.entries(EXEMPT)) {
       expect(reason.length, `${file} is exempt without a reason`).toBeGreaterThan(20);

@@ -1,11 +1,15 @@
-// Custom --help / --version output for the root command. citty's built-in
-// renderers are plain/unstyled and don't know about our top-level
-// commands or pin/skip semantics, so we intercept these flags before
-// citty parses and emit our own output.
-//
-// Both functions take CliDeps so they can read the registry for the
-// PLUGINS section and pick up the resolved color flag without
-// re-deriving the predicate.
+/**
+ * Custom --help / --version output for the root command. citty's built-in
+ * renderers are plain/unstyled and don't know about our top-level
+ * commands or pin/skip semantics, so we intercept these flags before
+ * citty parses and emit our own output.
+ *
+ * Both functions take CliDeps so they can read the registry for the
+ * PLUGINS section and pick up the resolved color flag without
+ * re-deriving the predicate.
+ *
+ * @module
+ */
 
 import pc from 'picocolors';
 import * as logui from '../ui/log';

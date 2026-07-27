@@ -1,7 +1,11 @@
-// Minimal line-level diff for previewing a config revert (used by `macup
-// undo`, issue #6). Deliberately small: an LCS over whole lines, rendered
-// as +/- with a little surrounding context. Not a general patch tool —
-// applist files are short, so readability beats hunk-header fidelity.
+/**
+ * Minimal line-level diff for previewing a config revert (used by `macup
+ * undo`, issue #6). Deliberately small: an LCS over whole lines, rendered
+ * as +/- with a little surrounding context. Not a general patch tool —
+ * applist files are short, so readability beats hunk-header fidelity.
+ *
+ * @module
+ */
 
 import pc from 'picocolors';
 import { useColor as defaultUseColor } from '../runtime';

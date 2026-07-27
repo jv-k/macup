@@ -1,12 +1,16 @@
-// Bare `macup init` (#14): scan the machine and scaffold an applist from what
-// is already installed, so a new user does not type their existing setup back
-// in by hand. `macup init <shell>` keeps its own meaning (#24) — see init.ts,
-// which owns the dispatch between the two.
-//
-// Detection is a read-only pass over the registry. Every plugin the host knows
-// about already reports what it has installed through `list()`, so this asks
-// each available one and files the answers under the applist key that plugin's
-// track verb would have written to. Nothing here invents per-backend knowledge.
+/**
+ * Bare `macup init` (#14): scan the machine and scaffold an applist from what
+ * is already installed, so a new user does not type their existing setup back
+ * in by hand. `macup init <shell>` keeps its own meaning (#24) — see init.ts,
+ * which owns the dispatch between the two.
+ *
+ * Detection is a read-only pass over the registry. Every plugin the host knows
+ * about already reports what it has installed through `list()`, so this asks
+ * each available one and files the answers under the applist key that plugin's
+ * track verb would have written to. Nothing here invents per-backend knowledge.
+ *
+ * @module
+ */
 
 import type { ApplistKey } from '../config/schema';
 import { ErrPluginUnavailable } from '../errors';

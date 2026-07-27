@@ -1,8 +1,12 @@
-// Shell detection / type guard shared by --completions and
-// --install-completions. Detection reads $SHELL, takes the basename, and
-// returns it iff it's one of the three supported shells. Returns
-// undefined for sh / tcsh / unset / unrecognised — callers print their
-// own "unknown shell" error.
+/**
+ * Shell detection / type guard shared by --completions and
+ * --install-completions. Detection reads $SHELL, takes the basename, and
+ * returns it iff it's one of the three supported shells. Returns
+ * undefined for sh / tcsh / unset / unrecognised — callers print their
+ * own "unknown shell" error.
+ *
+ * @module
+ */
 
 /** The shells macup emits integration and completions for. */
 export type Shell = 'zsh' | 'bash' | 'fish';

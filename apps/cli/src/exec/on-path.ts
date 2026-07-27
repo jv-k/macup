@@ -1,9 +1,13 @@
-// Where does a binary resolve on $PATH? A leaf utility depending only on node's
-// fs/path, so the low-level exec runner can answer "is this on PATH?" without
-// importing the plugin registry (which imports every plugin). run.ts used to
-// reach up into plugins/registry for this — an inversion from the lowest layer
-// to the highest. The registry now re-exports these for its own PATH filtering
-// and the doctor report.
+/**
+ * Where does a binary resolve on $PATH? A leaf utility depending only on node's
+ * fs/path, so the low-level exec runner can answer "is this on PATH?" without
+ * importing the plugin registry (which imports every plugin). run.ts used to
+ * reach up into plugins/registry for this — an inversion from the lowest layer
+ * to the highest. The registry now re-exports these for its own PATH filtering
+ * and the doctor report.
+ *
+ * @module
+ */
 
 import { constants, accessSync } from 'node:fs';
 import { delimiter, join } from 'node:path';

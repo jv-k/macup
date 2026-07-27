@@ -1,9 +1,13 @@
-// Shared plumbing for plugin implementations. These are the loop, the filter,
-// and the JSON parse that every package-manager plugin needs. They used to be
-// copied into each plugin (the mutate loop six times, the onlyOutdated filter
-// seven times, the JSON parser twice verbatim), which is where the dropped
-// ctx.signal and the divergent error strings crept in. Owning them once keeps
-// the plugins to just the per-manager knowledge: which argv to run.
+/**
+ * Shared plumbing for plugin implementations. These are the loop, the filter,
+ * and the JSON parse that every package-manager plugin needs. They used to be
+ * copied into each plugin (the mutate loop six times, the onlyOutdated filter
+ * seven times, the JSON parser twice verbatim), which is where the dropped
+ * ctx.signal and the divergent error strings crept in. Owning them once keeps
+ * the plugins to just the per-manager knowledge: which argv to run.
+ *
+ * @module
+ */
 
 import type { MutateOptions, PackageRef, PackageStatus, PluginContext } from './types';
 
@@ -40,6 +44,7 @@ export function filterOutdated(
  * signal, tag output as a `user-action` so it streams to the gutter,
  * and throw a uniform error on a non-zero exit. A plugin supplies only the
  * argv for a ref via `command`.
+ * @throws Error naming the command and its exit code when the backend fails.
  */
 export async function mutateRefs(
   ctx: PluginContext,

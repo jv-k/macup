@@ -1,3 +1,13 @@
+/**
+ * The bash completion script, generated from the plugin manifests.
+ *
+ * Carries a file-wide shellcheck directive: the `$(compgen …)` word splitting is
+ * the standard bash-completion idiom, and macOS ships bash 3.2, so the
+ * `mapfile` alternative is unavailable.
+ *
+ * @module
+ */
+
 import type { Plugin } from '../plugins/types';
 import {
   TOP_LEVEL_COMMANDS,

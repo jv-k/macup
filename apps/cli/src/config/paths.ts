@@ -1,3 +1,13 @@
+/**
+ * Where config lives, and how that was decided.
+ *
+ * Resolution is CLI over env over default (ADR 0021, ADR 0044). Pure apart from
+ * an injected existence probe, so the precedence order is unit-testable without
+ * touching a real filesystem.
+ *
+ * @module
+ */
+
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 /**

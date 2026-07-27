@@ -1,26 +1,30 @@
-// argv pre-processing run BEFORE citty parses, for three purposes:
-//
-//   1) Rewrite `macup version` to `macup --version`, so both spellings of
-//      the one conventional flag work. Only the first positional gets
-//      rewritten — `macup brew track version` should not turn the trailing
-//      word into a flag.
-//
-//   2) Strip --debug / -D / --verbose / -V from argv before citty sees
-//      them. These are global modifiers consumed by the runtime; the
-//      subcommands shouldn't see them in `args` and shouldn't error on
-//      them either.
-//
-//   3) Rewrite the deprecated applist verbs `add` / `remove` to their
-//      `track` / `untrack` replacements (ADR 0031), so the aliases dispatch
-//      without being registered as citty subcommands — which keeps them out
-//      of per-plugin `--help` and the generated completions.
-//
-//   4) Pull `--applist <path>` out of argv, for the same reason as (2): it
-//      selects the config the whole run reads and writes, so it is consumed
-//      at bootstrap rather than by any one subcommand (#17, ADR 0044).
-//
-// All are pure transforms over argv, exported so cli.ts and any future
-// in-process tests can drive them deterministically without spawning.
+/**
+ * argv pre-processing run BEFORE citty parses, for three purposes:
+ *
+ *   1) Rewrite `macup version` to `macup --version`, so both spellings of
+ *      the one conventional flag work. Only the first positional gets
+ *      rewritten — `macup brew track version` should not turn the trailing
+ *      word into a flag.
+ *
+ *   2) Strip --debug / -D / --verbose / -V from argv before citty sees
+ *      them. These are global modifiers consumed by the runtime; the
+ *      subcommands shouldn't see them in `args` and shouldn't error on
+ *      them either.
+ *
+ *   3) Rewrite the deprecated applist verbs `add` / `remove` to their
+ *      `track` / `untrack` replacements (ADR 0031), so the aliases dispatch
+ *      without being registered as citty subcommands — which keeps them out
+ *      of per-plugin `--help` and the generated completions.
+ *
+ *   4) Pull `--applist <path>` out of argv, for the same reason as (2): it
+ *      selects the config the whole run reads and writes, so it is consumed
+ *      at bootstrap rather than by any one subcommand (#17, ADR 0044).
+ *
+ * All are pure transforms over argv, exported so cli.ts and any future
+ * in-process tests can drive them deterministically without spawning.
+ *
+ * @module
+ */
 
 import { ErrUsage } from '../errors';
 
@@ -121,6 +125,7 @@ export function findUnknownTopLevelFlags(
  * usage error rather than a silent fallback: the whole point of these flags is
  * to redirect something away from its default, so guessing is worse than
  * stopping.
+ * @throws ErrUsage when the flag is present with no value, or with a value that looks like another flag.
  */
 export function extractPathFlag(argv: string[], name: string, hint: string): string | undefined {
   const flag = `--${name}`;

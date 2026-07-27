@@ -1,3 +1,12 @@
+/**
+ * The zsh completion script, generated from the plugin manifests.
+ *
+ * Flags are declared on `_arguments` so each carries its own value spec, with
+ * positional states dispatching the plugin and command slots.
+ *
+ * @module
+ */
+
 import { SUPPORTED_SHELLS } from '../commands/shell';
 import type { Plugin } from '../plugins/types';
 import {

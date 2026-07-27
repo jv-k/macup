@@ -1,3 +1,13 @@
+/**
+ * Subtype argument handling: the explicit `--subtype`, plus brew's `--cask` and
+ * `--formula` shortcuts.
+ *
+ * Validation returns its message rather than throwing, so the caller decides the
+ * exit path.
+ *
+ * @module
+ */
+
 import type { Plugin } from '../plugins/types';
 
 /** The subtype flags a command may carry: the explicit `--subtype`, plus brew's `--cask`/`--formula` shortcuts. */

@@ -1,24 +1,28 @@
-// `macup init <shell>` — shell integration (zsh | bash | fish).
-//
-// Prints a snippet the user evals from their rc file:
-//
-//   eval "$(macup init zsh)"          # ~/.zshrc
-//   eval "$(macup init bash)"         # ~/.bashrc
-//   macup init fish | source          # ~/.config/fish/config.fish
-//
-// The snippet runs `macup check` in a disowned background job at most
-// once per session (guarded by exporting MACUP_CHECKED) and prints
-// `macup: <summary>` only when something is outdated. Invariants every
-// snippet must hold:
-//   - never blocks the prompt (background + disown),
-//   - never errors the shell (stderr swallowed, `command -v` guard,
-//     empty-summary guard so a crashed check prints nothing),
-//   - silent when everything is up to date.
-//
-// Namespace note: bare `macup init` (no shell) scaffolds the applist from
-// what is already installed (#14, ADR 0047). The two branches share only
-// the verb: the scaffolder lives in ./init-scaffold, and the dispatch
-// between them is the first thing run() does.
+/**
+ * `macup init <shell>` — shell integration (zsh | bash | fish).
+ *
+ * Prints a snippet the user evals from their rc file:
+ *
+ *   eval "$(macup init zsh)"          # ~/.zshrc
+ *   eval "$(macup init bash)"         # ~/.bashrc
+ *   macup init fish | source          # ~/.config/fish/config.fish
+ *
+ * The snippet runs `macup check` in a disowned background job at most
+ * once per session (guarded by exporting MACUP_CHECKED) and prints
+ * `macup: <summary>` only when something is outdated. Invariants every
+ * snippet must hold:
+ *   - never blocks the prompt (background + disown),
+ *   - never errors the shell (stderr swallowed, `command -v` guard,
+ *     empty-summary guard so a crashed check prints nothing),
+ *   - silent when everything is up to date.
+ *
+ * Namespace note: bare `macup init` (no shell) scaffolds the applist from
+ * what is already installed (#14, ADR 0047). The two branches share only
+ * the verb: the scaffolder lives in ./init-scaffold, and the dispatch
+ * between them is the first thing run() does.
+ *
+ * @module
+ */
 
 import { confirm, isCancel } from '@clack/prompts';
 import { defineCommand } from 'citty';

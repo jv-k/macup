@@ -1,9 +1,13 @@
-// `--logo` flag action: print the Apple logo at an optional scale.
-//
-// Scale is parsed as a number in the half-open range (0, 1]. Empty string
-// (bare `--logo`) means "use the default of 1.0". Invalid input writes an
-// error and sets exit code 1 — citty's args parser already accepts the
-// flag at the type level, but it doesn't validate the numeric range.
+/**
+ * `--logo` flag action: print the Apple logo at an optional scale.
+ *
+ * Scale is parsed as a number in the half-open range (0, 1]. Empty string
+ * (bare `--logo`) means "use the default of 1.0". Invalid input writes an
+ * error and sets exit code 1 — citty's args parser already accepts the
+ * flag at the type level, but it doesn't validate the numeric range.
+ *
+ * @module
+ */
 
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { renderAppleLogo } from '../ui/logo';

@@ -1,4 +1,15 @@
 /**
+ * The typed failures macup raises, and the exit codes they carry.
+ *
+ * A `MacupError` is a condition macup diagnosed and worded for the user; the
+ * CLI's error boundary prints its message alone. Anything else escaping is a
+ * bug, and keeps its stack trace so it reads like one. New failure modes add a
+ * subclass here rather than throwing a bare Error (`docs/CODING_STANDARDS.md`).
+ *
+ * @module
+ */
+
+/**
  * A failure macup diagnosed and worded for the user, as opposed to a crash.
  * The CLI's error boundary catches this and prints the message alone, so a
  * subclass's text is the whole of what the user sees — anything else escapes

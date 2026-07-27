@@ -1,3 +1,13 @@
+/**
+ * The applist schema: what `applist.yaml` may contain, and how a violation is
+ * worded for the user.
+ *
+ * One of the project's two contracts (`CLAUDE.md`). Every external input is
+ * validated through zod rather than parsed and cast.
+ *
+ * @module
+ */
+
 import { z } from 'zod';
 
 /**

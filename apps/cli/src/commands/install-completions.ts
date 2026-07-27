@@ -1,3 +1,13 @@
+/**
+ * `macup install-completions`: write the completion script where the shell will
+ * find it, detecting the shell when not told.
+ *
+ * The filesystem and environment are injected, so installation is exercised
+ * without writing into a real home directory.
+ *
+ * @module
+ */
+
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';

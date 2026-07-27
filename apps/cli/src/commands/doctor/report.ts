@@ -1,12 +1,16 @@
-// Typed report shape + renderers for `macup --doctor` (issue #42).
-//
-// Every check module (checks/*.ts) exports a uniform
-// `check(deps: CheckDeps): Promise<Section>`; the orchestrator in
-// ../doctor.ts runs them in parallel and hands the collected sections
-// to the renderers here. Text output goes through the color-aware
-// glyphs in src/ui/log so NO_COLOR / non-TTY stripping works the same
-// as everywhere else; JSON output is plain and uniform across
-// environments (it feeds bug reports and CI).
+/**
+ * Typed report shape + renderers for `macup --doctor` (issue #42).
+ *
+ * Every check module (checks/*.ts) exports a uniform
+ * `check(deps: CheckDeps): Promise<Section>`; the orchestrator in
+ * ../doctor.ts runs them in parallel and hands the collected sections
+ * to the renderers here. Text output goes through the color-aware
+ * glyphs in src/ui/log so NO_COLOR / non-TTY stripping works the same
+ * as everywhere else; JSON output is plain and uniform across
+ * environments (it feeds bug reports and CI).
+ *
+ * @module
+ */
 
 import type { PathResolution } from '../../config/paths';
 import type { ExecRunner, Logger, Plugin } from '../../plugins/types';

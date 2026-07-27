@@ -1,11 +1,15 @@
-// Adapter that turns `UiSink` events from the StreamingExecRunner into
-// gutter output (ADR 0043). `user-action` chunks stream line-by-line through
-// the log.ts print seam, so they hang off the wizard gutter (or stay flat for
-// a direct command) like every other line — no reserved rows, no box pane.
-// `query`/`check` chunks are dropped *except* lines matching error/warning
-// patterns, which surface as one-line notices so genuine failures aren't
-// swallowed. --debug bypasses this sink entirely (TracingExecRunner owns
-// presentation).
+/**
+ * Adapter that turns `UiSink` events from the StreamingExecRunner into
+ * gutter output (ADR 0043). `user-action` chunks stream line-by-line through
+ * the log.ts print seam, so they hang off the wizard gutter (or stay flat for
+ * a direct command) like every other line — no reserved rows, no box pane.
+ * `query`/`check` chunks are dropped *except* lines matching error/warning
+ * patterns, which surface as one-line notices so genuine failures aren't
+ * swallowed. --debug bypasses this sink entirely (TracingExecRunner owns
+ * presentation).
+ *
+ * @module
+ */
 
 import type { StreamSource, UiSink } from '../exec/streaming';
 import type { ExecRunKind } from '../plugins/types';

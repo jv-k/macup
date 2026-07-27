@@ -1,3 +1,12 @@
+/**
+ * The wizard's prompts: pick a target, then pick an action.
+ *
+ * Returns the choice as data for the runner to dispatch rather than acting on
+ * it, which is what keeps the interactive flow testable.
+ *
+ * @module
+ */
+
 import type { Plugin } from './plugins/types';
 
 /** What the user picked to act on: a plugin, and optionally one of its subtypes. */

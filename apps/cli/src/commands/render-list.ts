@@ -1,7 +1,11 @@
-// Pure rendering for `macup <plugin> list` output. Stateless, side-effect-
-// free; takes a PackageStatus[] and returns a multi-line string. Composing
-// these with the dispatch in from-manifest.ts keeps that file focused on
-// citty wiring rather than presentation.
+/**
+ * Pure rendering for `macup <plugin> list` output. Stateless, side-effect-
+ * free; takes a PackageStatus[] and returns a multi-line string. Composing
+ * these with the dispatch in from-manifest.ts keeps that file focused on
+ * citty wiring rather than presentation.
+ *
+ * @module
+ */
 
 import type { PackageStatus } from '../plugins/types';
 import * as log from '../ui/log';

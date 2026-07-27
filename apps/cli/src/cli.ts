@@ -1,23 +1,27 @@
-// macup — entry point.
-//
-// Layout:
-//   1. argv preprocessing (rewrite bare command words; strip global flags)
-//   2. bootstrap (assemble exec runner + stream sink + registry + deps)
-//   3. wire SIGINT → deps.abort()
-//   4. intercept --version / --help (citty's defaults are unstyled).
-//      Done before the registry availability probe so `macup --help`
-//      on a fresh machine doesn't print missing-binary warnings.
-//   5. adapt the action commands + per-plugin subcommands into one tree
-//   6. defineCommand({ subCommands, run })
-//   7. runMain
-//
-// Real work lives elsewhere:
-//   - src/cli/argv.ts          — argv preprocessing
-//   - src/cli/bootstrap.ts     — runtime wiring (exec/sink/registry/store/log)
-//   - src/cli/help.ts          — printVersionSplash, showCustomHelp
-//   - src/cli/types.ts         — CliDeps + ActionCommand shapes
-//   - src/commands/<name>.ts   — each ActionCommand + per-plugin subcommand factory
-//   - src/wizard-runner.ts     — interactive default action
+/**
+ * macup — entry point.
+ *
+ * Layout:
+ *   1. argv preprocessing (rewrite bare command words; strip global flags)
+ *   2. bootstrap (assemble exec runner + stream sink + registry + deps)
+ *   3. wire SIGINT → deps.abort()
+ *   4. intercept --version / --help (citty's defaults are unstyled).
+ *      Done before the registry availability probe so `macup --help`
+ *      on a fresh machine doesn't print missing-binary warnings.
+ *   5. adapt the action commands + per-plugin subcommands into one tree
+ *   6. defineCommand({ subCommands, run })
+ *   7. runMain
+ *
+ * Real work lives elsewhere:
+ *   - src/cli/argv.ts          — argv preprocessing
+ *   - src/cli/bootstrap.ts     — runtime wiring (exec/sink/registry/store/log)
+ *   - src/cli/help.ts          — printVersionSplash, showCustomHelp
+ *   - src/cli/types.ts         — CliDeps + ActionCommand shapes
+ *   - src/commands/<name>.ts   — each ActionCommand + per-plugin subcommand factory
+ *   - src/wizard-runner.ts     — interactive default action
+ *
+ * @module
+ */
 
 import type { ArgsDef, CommandDef } from 'citty';
 import { defineCommand, runMain } from 'citty';

@@ -1,3 +1,14 @@
+/**
+ * What the three completion generators agree on: which commands a plugin offers,
+ * which flags each command takes, and the stand-alone commands that sit where a
+ * plugin id would.
+ *
+ * Projected from the manifests and the command registry, so a new backend is
+ * completable without editing any generator.
+ *
+ * @module
+ */
+
 import { COMPLETABLE_COMMANDS } from '../cli/commands';
 import type { Plugin } from '../plugins/types';
 

@@ -1,3 +1,14 @@
+/**
+ * The factory that turns a plugin manifest into its citty command tree.
+ *
+ * This is why adding a backend needs no edit to dispatch, help, or completions
+ * (`CLAUDE.md`): only the verbs a manifest advertises are registered, with the
+ * flags each accepts, so the manifest is the input and the CLI surface is the
+ * output.
+ *
+ * @module
+ */
+
 import { confirm, isCancel } from '@clack/prompts';
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ConfigStore, SaveResult } from '../config/store';
@@ -161,6 +172,7 @@ function requireNames(rawArgs: string[], pluginId: string, command: string): str
  * Exported so the init scaffolder (#14) resolves a subtype to its applist key
  * the same way the track verb does, rather than keeping a third copy of the
  * configKeyFor-or-first-key fallback.
+ * @throws Error when the plugin declares no `configKeys`, which a track-capable manifest must.
  */
 export function resolveConfigKey(plugin: Plugin, subtype: string | undefined) {
   if (plugin.manifest.configKeyFor) {
@@ -355,6 +367,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           description: 'Packages to install (empty = install all tracked).',
         },
       },
+      /**
+       * @throws whatever the plugin or store raised, after logging it under
+       * `--verbose`. A MacupError reaches the user as a single line; anything
+       * else — including the bare Error `mutateRefs` raises on a non-zero exit —
+       * keeps its stack trace, which #122 tracks.
+       */
       async run({ args, rawArgs }) {
         // `all` is the composite: host-owned fan-out (ADR 0033), not a per-ref
         // loop. Only `all` is composite — system/xcode also have empty
@@ -451,6 +469,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           description: 'Optional package names to restrict the update to.',
         },
       },
+      /**
+       * @throws whatever the plugin or store raised, after logging it under
+       * `--verbose`. A MacupError reaches the user as a single line; anything
+       * else — including the bare Error `mutateRefs` raises on a non-zero exit —
+       * keeps its stack trace, which #122 tracks.
+       */
       async run({ args, rawArgs }) {
         // Only `all` is the composite (ADR 0033); system/xcode also have empty
         // configKeys but update via the generic outdated→update path below.

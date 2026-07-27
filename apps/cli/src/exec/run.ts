@@ -1,3 +1,13 @@
+/**
+ * The real runner: the one place in the codebase that starts a subprocess.
+ *
+ * Subscribes to the child's streams before awaiting it, so output appears as it
+ * arrives rather than at exit. A non-zero exit is a returned result, not a
+ * throw, because "the backend said no" is data every caller must reason about.
+ *
+ * @module
+ */
+
 import { ExecaError, execa } from 'execa';
 import type { ExecResult, ExecRunOptions, ExecRunner } from '../plugins/types';
 import { isOnPath } from './on-path';
@@ -12,6 +22,9 @@ import { isOnPath } from './on-path';
  * about rather than an exception.
  */
 export class ExecaExecRunner implements ExecRunner {
+  /**
+   * @throws Anything that is not an ExecaError, which means the failure was not the subprocess reporting a non-zero exit.
+   */
   async run(cmd: string, args: readonly string[], opts: ExecRunOptions = {}): Promise<ExecResult> {
     try {
       // Capture the subprocess synchronously so we can subscribe to its
@@ -53,6 +66,10 @@ export class ExecaExecRunner implements ExecRunner {
     }
   }
 
+  /**
+   * Run a command and parse its stdout as JSON.
+   * @throws Error when the command exits non-zero, so a caller expecting JSON never parses failure output, or SyntaxError when stdout is not JSON.
+   */
   async runJson<T = unknown>(
     cmd: string,
     args: readonly string[],

@@ -1,10 +1,14 @@
-// Doctor section 4: Data integrity (deep) — for every tracked package,
-// call plugin.list({}) and assert the name still resolves against the
-// underlying tool. Everything here is a warning, never an error: a
-// stale pin or an uninstalled tracked package is drift to surface, not
-// a broken installation (a genuinely broken plugin already errors in
-// the Plugins section — double-reporting it here would double-count one
-// root cause).
+/**
+ * Doctor section 4: Data integrity (deep) — for every tracked package,
+ * call plugin.list({}) and assert the name still resolves against the
+ * underlying tool. Everything here is a warning, never an error: a
+ * stale pin or an uninstalled tracked package is drift to surface, not
+ * a broken installation (a genuinely broken plugin already errors in
+ * the Plugins section — double-reporting it here would double-count one
+ * root cause).
+ *
+ * @module
+ */
 
 import { readFile } from 'node:fs/promises';
 import semver from 'semver';

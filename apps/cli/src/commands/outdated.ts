@@ -1,3 +1,12 @@
+/**
+ * `macup outdated`: one pane covering every available backend.
+ *
+ * A backend that cannot answer is reported as such rather than omitted, so an
+ * empty section and a broken probe never look the same (ADR 0036).
+ *
+ * @module
+ */
+
 import { defineCommand } from 'citty';
 import type { CliDeps } from '../cli/types';
 import { ErrPluginUnavailable } from '../errors';

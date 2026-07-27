@@ -1,20 +1,24 @@
-// Animated activity feedback wrapped around an async unit of work.
-//
-// Two presentation modes, one rendering path (ADR 0043):
-//   - withSpinner          : queries (list, outdated, health) produce no
-//                            streamed output, so an animated clack spinner is
-//                            the feedback. It draws on clack's gutter, so it
-//                            matches the wizard frame.
-//   - withUserActionSpinner: install/update stream their subprocess output as
-//                            gutter lines, so there is no animated spinner to
-//                            fight with. An activity header opens the section,
-//                            update() prints progress/counter lines, the sink
-//                            prints the streamed output, and one completion
-//                            line closes it.
-//
-// Both fall through to plain await when the bar is suppressed (e.g. under
-// --debug, where the TracingExecRunner streams output to stderr line-by-line)
-// or in non-TTY contexts (pipes, CI), so callers never gate on TTY themselves.
+/**
+ * Animated activity feedback wrapped around an async unit of work.
+ *
+ * Two presentation modes, one rendering path (ADR 0043):
+ *   - withSpinner          : queries (list, outdated, health) produce no
+ *                            streamed output, so an animated clack spinner is
+ *                            the feedback. It draws on clack's gutter, so it
+ *                            matches the wizard frame.
+ *   - withUserActionSpinner: install/update stream their subprocess output as
+ *                            gutter lines, so there is no animated spinner to
+ *                            fight with. An activity header opens the section,
+ *                            update() prints progress/counter lines, the sink
+ *                            prints the streamed output, and one completion
+ *                            line closes it.
+ *
+ * Both fall through to plain await when the bar is suppressed (e.g. under
+ * --debug, where the TracingExecRunner streams output to stderr line-by-line)
+ * or in non-TTY contexts (pipes, CI), so callers never gate on TTY themselves.
+ *
+ * @module
+ */
 
 import { spinner } from '@clack/prompts';
 import * as log from '../ui/log';
@@ -43,7 +47,12 @@ function titleOf(message: string): string {
   return message.replace(TRAILING_ELLIPSIS, '').trim();
 }
 
-/** Run `work` behind a spinner, for a query whose output is not shown. Skipped when the bar is suppressed or stdout is not a TTY. */
+/**
+ * Run `work` behind a spinner, for a query whose output is not shown. Skipped
+ * when the bar is suppressed or stdout is not a TTY.
+ * @throws whatever `work` threw, re-raised after the spinner is stopped so a
+ * failure is never hidden behind a running indicator.
+ */
 export async function withSpinner<T>(
   deps: SpinnerDeps,
   message: string,
@@ -63,7 +72,12 @@ export async function withSpinner<T>(
   }
 }
 
-/** {@link withSpinner} for a user-action, whose subprocess output streams into the gutter as it runs (ADR 0043). */
+/**
+ * {@link withSpinner} for a user-action, whose subprocess output streams into
+ * the gutter as it runs (ADR 0043). There is no spinner to stop in this mode, so
+ * the re-raise below is the only failure handling.
+ * @throws whatever `work` threw, unchanged.
+ */
 export async function withUserActionSpinner<T>(
   deps: SpinnerDeps,
   message: string,

@@ -83,6 +83,21 @@ tree. New code should match, not invent.
   report shape, per-field prose would restate the signature, which the rule
   above forbids. Prefer one line saying *why*; a deliberate omission goes in
   that test's `EXEMPT` map with a reason.
+- **Every file under `src/` opens with a `@module` block**, also enforced by that
+  test, and a function that can throw carries `@throws`. A caller cannot see a
+  throw in a signature, so an untagged one is a surprise at runtime. Two limits
+  worth knowing rather than discovering: the check reads only throws in a
+  function's own body, since one inside a callback it returns belongs to that
+  callback, and it reaches exported functions and public methods but not arrow
+  functions assigned to a const, which is the shape the backends under
+  `plugins/` use. Those are not covered yet (#130).
+- **One paragraph for a symbol, as many as it needs for a file.** #43 asked for
+  no multi-paragraph docstrings, which is right for a symbol. If a field needs
+  two paragraphs, the design is probably the thing to fix. It is wrong for a
+  module header, whose whole job is the context that does not fit anywhere else:
+  50 of the 67 headers use more than one paragraph and are better for it. Where
+  a symbol genuinely needs the room (the contracts: `Plugin`, `ConfigStore`,
+  `ExecRunner`), take it and expect to justify it in review.
 
 ## Testing
 

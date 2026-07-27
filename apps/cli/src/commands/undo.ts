@@ -1,13 +1,17 @@
-// `macup undo` — one-step revert to the most recent backup (issue #6).
-//
-// A shortcut over `--restore`: instead of picking from a list, undo takes
-// the newest backup, previews the change as a diff, and reverts on
-// confirmation. Before overwriting it snapshots the current applist (a
-// backup labelled `undo`), so the revert is itself undoable — a second
-// `macup undo` walks back the first.
-//
-// The core (runUndo) takes injected deps so tests drive every branch
-// without a real filesystem or TTY; runUndoAction wires it to the CLI.
+/**
+ * `macup undo` — one-step revert to the most recent backup (issue #6).
+ *
+ * A shortcut over `--restore`: instead of picking from a list, undo takes
+ * the newest backup, previews the change as a diff, and reverts on
+ * confirmation. Before overwriting it snapshots the current applist (a
+ * backup labelled `undo`), so the revert is itself undoable — a second
+ * `macup undo` walks back the first.
+ *
+ * The core (runUndo) takes injected deps so tests drive every branch
+ * without a real filesystem or TTY; runUndoAction wires it to the CLI.
+ *
+ * @module
+ */
 
 import { readFile } from 'node:fs/promises';
 import { confirm, isCancel, outro } from '@clack/prompts';

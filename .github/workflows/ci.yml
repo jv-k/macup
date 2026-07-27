@@ -5,18 +5,24 @@ on:
   push:
     branches: [main, develop]
 
-# One in-flight run per ref. A force-push mid-review (rebases, review fixups)
-# used to leave the superseded macOS matrix running to completion. Pushes to
-# main/develop are left alone so every merged commit keeps a completed run.
+# De-duplicate PR runs only. A force-push mid-review (rebases, review fixups)
+# used to leave the superseded matrix running to completion, so pull_request
+# events share a per-ref group and cancel the run they replace.
+#
+# Pushes get github.run_id, which is unique per run and so puts every one in a
+# group of its own. A shared group with cancel-in-progress: false would not
+# "leave them alone" — it queues them, serializing main/develop behind each
+# other. Every merged commit gets its own concurrent run this way.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
     name: Lint + typecheck
-    # biome and tsc are platform-independent, and macOS runners bill at 10x.
-    # The darwin-only surface is exercised by `test` and `compile-smoke`.
+    # biome and tsc are platform-independent, so this runs on the faster,
+    # less contended Linux pool. The darwin-only surface is exercised by
+    # `test` and `compile-smoke`.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -30,7 +30,10 @@ async function binDir(ctx: PluginContext): Promise<string> {
   }
   const [gobin = '', gopath = ''] = result.stdout.split('\n');
   if (gobin.trim()) return gobin.trim();
-  return `${gopath.trim()}/bin`;
+  // GOPATH may be a `:`-separated list; `go install` targets the first entry's
+  // bin when GOBIN is unset, so a bare join would yield an invalid `/a:/b/bin`.
+  const firstGopath = gopath.trim().split(':')[0] ?? '';
+  return `${firstGopath}/bin`;
 }
 
 interface GoBinary {

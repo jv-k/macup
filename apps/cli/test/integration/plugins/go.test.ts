@@ -117,6 +117,21 @@ describe('go plugin — list()', () => {
     expect(statuses.map((s) => s.ref.name)).toEqual(['honnef.co/go/tools/cmd/staticcheck']);
   });
 
+  it('uses the first entry of a `:`-separated GOPATH, not the raw list', async () => {
+    const envList: FixtureEntry = {
+      cmd: 'go',
+      args: ['env', 'GOBIN', 'GOPATH'],
+      result: { stdout: '\n/home/user/go:/opt/go\n', stderr: '', exitCode: 0 },
+    };
+    const listFirst: FixtureEntry = {
+      cmd: 'go',
+      // A naive join would query the invalid `/home/user/go:/opt/go/bin`.
+      args: ['version', '-m', '/home/user/go/bin'],
+      result: { stdout: '', stderr: '', exitCode: 0 },
+    };
+    expect(await goPlugin.list(ctx([envList, listFirst]), {})).toEqual([]);
+  });
+
   it('returns [] under only-outdated since currency is never determinable', async () => {
     const statuses = await goPlugin.list(ctx([ENV_GOPATH, LIST]), { onlyOutdated: true });
     expect(statuses).toEqual([]);

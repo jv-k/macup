@@ -1,0 +1,38 @@
+[
+  {
+    "cmd": "softwareupdate",
+    "args": ["--install", "macOS Tahoe 26.6-25G70", "--verbose"],
+    "result": {
+      "stdout": "macOS Tahoe 26.6-25G70: No such update\nNo updates are available.\nSoftware Update Tool\n\nFinding available software\n",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "softwareupdate",
+    "args": ["--install", "Safari17.5-20H30SafariSeed1", "--verbose"],
+    "result": {
+      "stdout": "Software Update Tool\n\nFinding available software\nDownloading Safari 17.5\nDownloaded Safari 17.5\nInstalling: 100.00% complete\nDone with Safari17.5-20H30SafariSeed1\n",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "softwareupdate",
+    "args": ["--install", "NoUpdatesTail-1.0", "--verbose"],
+    "result": {
+      "stdout": "Software Update Tool\n\nFinding available software\nDownloaded NoUpdatesTail\nDone.\nNo updates are available.\n",
+      "stderr": "",
+      "exitCode": 0
+    }
+  },
+  {
+    "cmd": "softwareupdate",
+    "args": ["--install", "NeedsRoot-1.0", "--verbose"],
+    "result": {
+      "stdout": "",
+      "stderr": "softwareupdate: must be run as root\n",
+      "exitCode": 1
+    }
+  }
+]

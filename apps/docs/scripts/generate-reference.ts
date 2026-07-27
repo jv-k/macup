@@ -86,7 +86,15 @@ function flagAvailability(meta: DocsMetadata): string {
     const cells = flags.map((f) => (accept.get(f)?.has(cmd) ? 'yes' : ' '));
     out += `| \`${cmd}\` | ${cells.join(' | ')} |\n`;
   }
-  out += '\n`outdated`, `check`, and `doctor` are [stand-alone commands](/docs/reference/commands) ';
+  // Derived, not spelled out: this sentence used to hardcode "outdated, check,
+  // and doctor", which went stale the moment `init` gained flags of its own
+  // (#14) and joined the matrix. The rows already know where they came from.
+  const standAlone = commands.filter((c) => meta.topLevelCommands.some((t) => t.name === c));
+  const names = standAlone.map((c) => `\`${c}\``);
+  const list =
+    names.length > 1 ? `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}` : names[0];
+  out += `\n${list} ${standAlone.length === 1 ? 'is a' : 'are'} `;
+  out += `[stand-alone command${standAlone.length === 1 ? '' : 's'}](/docs/reference/commands) `;
   out += '(`macup outdated`); the rest are per-plugin (`macup brew list`). ';
   out += '`--cask`, `--formula`, and `--subtype` are Homebrew only.\n';
   return out;

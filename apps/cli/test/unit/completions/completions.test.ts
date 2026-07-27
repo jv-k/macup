@@ -200,3 +200,32 @@ describe('--log completion (#16)', () => {
     expect(generateFishCompletions(plugins)).toMatch(/-l log[^\n]*-r -F/);
   });
 });
+
+// #14: bare `macup init` grew flags of its own, and a flag the CLI accepts but
+// no shell offers may as well not exist.
+describe('init flag completion (#14)', () => {
+  it('zsh offers --dry-run and --force after `init`', () => {
+    const out = generateZshCompletions(plugins);
+    expect(out).toContain('init:*)');
+    expect(out).toMatch(/init:\*\)[^\n]*--dry-run/);
+    expect(out).toMatch(/init:\*\)[^\n]*--force/);
+  });
+
+  it('bash offers them in the position after `init`', () => {
+    const out = generateBashCompletions(plugins);
+    expect(out).toMatch(/init\) COMPREPLY[^\n]*--dry-run/);
+    expect(out).toMatch(/init\) COMPREPLY[^\n]*--force/);
+  });
+
+  it('fish gates them on having seen `init`', () => {
+    const out = generateFishCompletions(plugins);
+    expect(out).toMatch(/__fish_seen_subcommand_from init[^\n]*-l dry-run/);
+    expect(out).toMatch(/__fish_seen_subcommand_from init[^\n]*-l force/);
+  });
+
+  it('still offers the shells to `init`, which keeps its positional', () => {
+    expect(generateZshCompletions(plugins)).toContain(
+      "init) _values 'shell' 'zsh' 'bash' 'fish' ;;",
+    );
+  });
+});

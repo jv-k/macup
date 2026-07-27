@@ -13,8 +13,32 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildInitCommand, renderInitSnippet } from '../../../src/commands/init';
 import { SUPPORTED_SHELLS } from '../../../src/commands/shell';
 
+// Bare `macup init` now scaffolds (#14), so the command needs deps. An empty
+// registry means the scan finds nothing, which keeps these argument-handling
+// tests away from the filesystem — the scaffolder has its own suite.
+const stubDeps = {
+  registry: [],
+  exec: {
+    run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+    runJson: async () => ({}),
+    onPath: () => false,
+  },
+  log: { info() {}, warn() {}, error() {}, debug() {} },
+  signal: new AbortController().signal,
+  resolvePaths: () => ({
+    applistPath: '/tmp/nonexistent/applist.yaml',
+    configDir: '/tmp/nonexistent',
+    backupDir: '/tmp/nonexistent/backups',
+    source: 'home-macup' as const,
+    explicit: false,
+  }),
+  getStore: async () => {
+    throw new Error('the scaffolder must not open a store when the scan is empty');
+  },
+} as unknown as Parameters<typeof buildInitCommand>[0];
+
 async function runInit(rawArgs: string[]): Promise<void> {
-  await runCommand(buildInitCommand() as CommandDef, { rawArgs });
+  await runCommand(buildInitCommand(stubDeps) as CommandDef, { rawArgs });
 }
 
 const savedExitCode = process.exitCode;
@@ -49,13 +73,21 @@ describe('macup init — argument handling', () => {
     expect(writeSpy).toHaveBeenCalledWith(renderInitSnippet('zsh'));
   });
 
-  it('bare `macup init` errors with a hint at `init <shell>` (reserved for #14)', async () => {
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('bare `macup init` scaffolds instead of erroring (#14)', async () => {
+    // The placeholder that pointed at `init <shell>` is gone. With an empty
+    // registry the scan finds nothing, which is reported rather than treated
+    // as a usage error.
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     await runInit([]);
-    expect(process.exitCode).toBe(1);
-    const stderr = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
-    expect(stderr).toContain('macup init <zsh|bash|fish>');
-    expect(stderr).toContain('config scaffolder');
+    expect(process.exitCode).toBe(0);
+    expect(logSpy.mock.calls.map((c) => c.join(' ')).join('\n')).toMatch(/no packages/i);
+  });
+
+  it('bare `macup init --dry-run` still writes nothing', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await runInit(['--dry-run']);
+    expect(process.exitCode).toBe(0);
+    expect(logSpy).toHaveBeenCalled();
   });
 
   it('rejects an unsupported shell with exit code 1', async () => {

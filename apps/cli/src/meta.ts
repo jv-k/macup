@@ -13,6 +13,7 @@
 
 import { FLAG_COMMAND_ALIASES } from './cli/argv';
 import { CHECK_ARGS } from './commands/check';
+import { INIT_ARGS } from './commands/init';
 import { OUTDATED_ARGS } from './commands/outdated';
 import {
   SUBTYPE_COMMANDS,
@@ -102,6 +103,7 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
   '--cask': 'Scope the command to Homebrew casks.',
   '--formula': 'Scope the command to Homebrew formulas.',
   '--subtype': 'Scope the command to one subtype by name (e.g. `--subtype=casks`).',
+  '--force': 'Proceed without the confirmation prompt, for unattended use.',
 };
 
 // Top-level flags, with the prose used for the reference. These are the
@@ -262,12 +264,17 @@ export function docsMetadata(): DocsMetadata {
         })),
       },
       {
-        // `init` takes a positional (<shell>), not flags. Empty flags
-        // keeps it out of the docs flag matrix (flagless rows drop);
-        // INIT_ARGS.shell.description stays the prose source of truth.
+        // `init` has one positional (<shell>) plus the scaffolder's flags
+        // (#14). The positional stays described by INIT_ARGS.shell.
         name: 'init',
         description: describeCommand('init'),
-        flags: [],
+        flags: Object.entries(INIT_ARGS)
+          .filter(([, def]) => (def as { type?: string }).type !== 'positional')
+          .map(([name, def]) => ({
+            flag: `--${name}`,
+            description:
+              FLAG_DESCRIPTIONS[`--${name}`] ?? (def as { description?: string }).description ?? '',
+          })),
       },
       // The command nouns (ADR 0029). Descriptions come from the same list
       // the shells complete from, so the reference and your tab key can't

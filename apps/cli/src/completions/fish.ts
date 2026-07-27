@@ -1,5 +1,10 @@
 import type { Plugin } from '../plugins/types';
-import { TOP_LEVEL_COMMANDS, commandsFor, flagsForCommand } from './shared';
+import {
+  TOP_LEVEL_COMMANDS,
+  TOP_LEVEL_COMMAND_FLAGS,
+  commandsFor,
+  flagsForCommand,
+} from './shared';
 
 export function generateFishCompletions(plugins: readonly Plugin[]): string {
   const lines: string[] = [
@@ -43,6 +48,16 @@ export function generateFishCompletions(plugins: readonly Plugin[]): string {
           `complete -c macup -n "__fish_seen_subcommand_from ${id}; and __fish_seen_subcommand_from ${cmd}" -l ${name} -d "${flag}"`,
         );
       }
+    }
+  }
+
+  lines.push('');
+  lines.push('# Flags on the stand-alone commands');
+  for (const [name, flags] of Object.entries(TOP_LEVEL_COMMAND_FLAGS)) {
+    for (const flag of flags) {
+      lines.push(
+        `complete -c macup -n "__fish_seen_subcommand_from ${name}" -l ${flag.replace(/^--/, '')} -d "${flag}"`,
+      );
     }
   }
 

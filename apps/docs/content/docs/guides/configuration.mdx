@@ -32,6 +32,25 @@ skip:
 See the [config schema reference](/docs/reference/config-schema) for every key
 and its type.
 
+## Starting from what you have
+
+`macup init` scans the machine and writes an applist from what is already
+installed, which beats typing it out:
+
+```bash
+macup init --dry-run
+macup init
+```
+
+It merges rather than replaces, so running it again on an existing applist adds
+only what is new and leaves pins, skip lists, and comments intact. A populated
+applist prompts first; under a pipe it refuses rather than rewriting a config
+unattended, and `--force` is how a script says yes in advance (ADR 0046).
+
+Note `macup init <shell>` is a different command. That one emits shell
+integration code to eval from your rc file, for example
+`eval "$(macup init zsh)"`.
+
 ## Resolution order
 
 1. `--applist <path>` (this run only)

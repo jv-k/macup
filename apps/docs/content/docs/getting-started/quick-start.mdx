@@ -34,6 +34,34 @@ bun variants.
 
 <Step>
 
+### Scaffold your applist
+
+Your machine already has the packages you care about, so macup can write the
+starting list for you instead of you typing it out.
+
+```bash
+macup init --dry-run   # see what it found
+macup init             # write it
+```
+
+It asks each available backend what is installed and records the names under
+the matching applist key. A backend you do not have is skipped, not an error.
+
+Running it again adds only what is new: it merges into the file rather than
+replacing it, so pins, skip lists, and your own comments survive. If the applist
+already tracks packages it asks first, and in a script it refuses unless you
+pass `--force` (ADR 0046).
+
+<Callout type="info">
+  Homebrew reports dependencies alongside the things you asked for, so the list
+  will be longer than what you would have written. Prune it with `macup brew
+  untrack <name>`.
+</Callout>
+
+</Step>
+
+<Step>
+
 ### Run the wizard
 
 Run `macup` with no arguments. It opens an interactive menu: pick a backend,

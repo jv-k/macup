@@ -26,20 +26,35 @@ export type ParsedArgs = Record<string, unknown>;
 
 /**
  * Everything a command is handed: the exec runner, the registry, config access,
- * and the machine facts. Assembled once by {@link bootstrap} and passed down,
- * so no command reaches for a global.
+ * and the machine facts. Assembled once by `bootstrap` (`src/cli/bootstrap.ts`)
+ * and passed down, so no command reaches for a global.
  */
 export interface CliDeps {
+  /** The assembled runner, decorators included. @see {@link ExecRunner} */
   readonly exec: ExecRunner;
+  /** Host-routed output. @see {@link Logger} */
   readonly log: Logger;
+  /** Suppress spinners and progress; set under `--debug`, where the tracer owns output. */
   readonly suppressBar: boolean;
+  /** `--verbose`. */
   readonly verbose: boolean;
+  /** `--debug`. */
   readonly debug: boolean;
+  /** Whether ANSI is wanted, resolved once from `NO_COLOR` and TTY state. */
   readonly color: boolean;
+  /** Plugins usable on this machine, already filtered by OS and PATH. */
   readonly registry: readonly Plugin[];
+  /** Where config lives for this run. Cheap and side-effect free, unlike {@link CliDeps.getStore}. */
   readonly resolvePaths: () => PathResolution;
+  /**
+   * Open the applist. Not side-effect free: loading migrates a pre-1.x layout
+   * and refuses a named-but-missing applist (ADR 0044), so a dry-run path uses
+   * {@link CliDeps.resolvePaths} instead.
+   */
   readonly getStore: () => Promise<ConfigStore>;
+  /** The environment, passed rather than read so tests can vary it. */
   readonly env: NodeJS.ProcessEnv;
+  /** Home directory, passed rather than read for the same reason as {@link CliDeps.env}. */
   readonly home: string;
   /** Host platform, resolved once at startup so commands don't read process.platform. */
   readonly platform: NodeJS.Platform;
@@ -57,6 +72,7 @@ export interface CliDeps {
 export interface ActionCommand {
   /** The command word: `macup <name>`. Also the key of the trigger arg in `args`. */
   readonly name: string;
+  /** One line, shown in help and the shells' completions. */
   readonly description: string;
   /**
    * The action's own arg schema. The entry keyed by `name` is the trigger:
@@ -65,5 +81,6 @@ export interface ActionCommand {
    * decide the subcommand's shape, so keep the two in step.
    */
   readonly args: ArgsDef;
+  /** Do the thing. Sets `process.exitCode` rather than calling exit, so piped output finishes flushing. */
   run(args: ParsedArgs, deps: CliDeps): Promise<void>;
 }

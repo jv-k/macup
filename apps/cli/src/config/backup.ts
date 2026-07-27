@@ -6,15 +6,21 @@ import { ErrBackupNotFound } from '../errors';
 
 /** Which applist a {@link BackupStore} is scoped to, and where its backups live. */
 export interface BackupStorePaths {
+  /** The applist these backups belong to; its basename namespaces their filenames. */
   readonly applistPath: string;
+  /** Where they live. May hold another applist's backups too, hence the namespacing. */
   readonly backupDir: string;
 }
 
 /** One backup file, with the operation and timestamp parsed back out of its name. */
 export interface BackupEntry {
+  /** Absolute path, for restoring and reporting. */
   readonly path: string;
+  /** Basename only, which is what the restore prompt shows. */
   readonly filename: string;
+  /** The label the mutation carried (`track`, `undo`, `migration`), parsed back out of the name. */
   readonly operation: string;
+  /** Second-resolution stamp, `YYYY-MM-DD_HH-MM-SS`, as it appears in the name. */
   readonly timestamp: string;
 }
 
@@ -128,6 +134,7 @@ export class BackupStore {
     this.fileRe = backupFileRe(this.prefix);
   }
 
+  /** This applist's backups, newest first. Same-second collisions tie-break on filename so ordering is deterministic rather than left to readdir. */
   async list(): Promise<BackupEntry[]> {
     if (!(await pathExists(this.paths.backupDir))) return [];
     const entries = await readdir(this.paths.backupDir);
@@ -153,6 +160,7 @@ export class BackupStore {
     return (await this.list())[0] ?? null;
   }
 
+  /** Copy a backup over the live applist. @throws ErrBackupNotFound when it vanished since listing. */
   async restore(entry: BackupEntry): Promise<void> {
     if (!(await pathExists(entry.path))) {
       throw new ErrBackupNotFound(entry.path);
@@ -196,6 +204,7 @@ export class BackupStore {
     return count;
   }
 
+  /** Size in bytes, for the restore prompt and doctor's report. */
   async size(entry: BackupEntry): Promise<number> {
     const s = await stat(entry.path);
     return s.size;

@@ -26,7 +26,7 @@ export interface PickerOption<Value> {
   disabled?: boolean;
 }
 
-/** @see the multi-select picker the wizard drives. */
+/** Rows, initial selection, and prompt text for the multi-select the wizard drives. */
 export interface PickerOptions<Value> {
   message: string;
   options: PickerOption<Value>[];

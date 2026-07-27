@@ -27,8 +27,11 @@ export interface SelectionPolicy extends SelectionScope {
  * upgrade is always explainable.
  */
 export interface SelectionResult {
+  /** Will be upgraded. */
   upgradable: PackageStatus[];
+  /** Outdated, but a pin holds them at or below the current version. */
   pinnedBlocked: PackageStatus[];
+  /** Excluded by the user entirely; skip wins over pin and over outdated (`CONTEXT.md`). */
   skipped: PackageStatus[];
   /**
    * Outdated with a pin, but latest-vs-pin couldn't be ordered (ADR 0034).

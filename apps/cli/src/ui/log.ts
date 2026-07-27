@@ -116,17 +116,17 @@ function invertedLabel(
   return color ? tone(forced.inverse(forced.bold(label))) : label.trim();
 }
 
-/** Inverse-video section pill in cyan, the top-level section pill. `count` renders as a parenthesised suffix. */
+/** Section pill for what the command is about. Cyan. `count` renders as a parenthesised suffix. */
 export function header(text: string, count?: number, color: boolean = useColorFn()): string {
   return invertedLabel(text, count, forced.cyan, color);
 }
 
-/** Inverse-video section pill in green, a nested section under a header. `count` renders as a parenthesised suffix. */
+/** Section pill for a completed group inside a section. Green. `count` renders as a parenthesised suffix. */
 export function subHeader(text: string, count?: number, color: boolean = useColorFn()): string {
   return invertedLabel(text, count, forced.green, color);
 }
 
-/** Inverse-video section pill in yellow, a section that needs attention. `count` renders as a parenthesised suffix. */
+/** Section pill for a group needing action. Yellow. `count` renders as a parenthesised suffix. */
 export function outdatedHeader(
   text: string,
   count?: number,
@@ -135,12 +135,12 @@ export function outdatedHeader(
   return invertedLabel(text, count, forced.yellow, color);
 }
 
-/** Inverse-video section pill in red, a section reporting failure. `count` renders as a parenthesised suffix. */
+/** Section pill for a group that failed. Red. `count` renders as a parenthesised suffix. */
 export function errorHeader(text: string, count?: number, color: boolean = useColorFn()): string {
   return invertedLabel(text, count, forced.red, color);
 }
 
-/** Inverse-video section pill in dim, a section that is present but not the point. `count` renders as a parenthesised suffix. */
+/** Section pill for a group that is present but not the point. Dim. `count` renders as a parenthesised suffix. */
 export function dimmedHeader(text: string, count?: number, color: boolean = useColorFn()): string {
   return invertedLabel(text, count, forced.dim, color);
 }
@@ -267,14 +267,14 @@ export function counter(idx: number, total: number, action: string, name: string
 
 // ── Verbose per-item trace (one dim line after the spinner) ─────
 
-/** One dim detail line, shown under `--verbose` after the spinner clears. */
+/** A dim secondary line under a message: doctor's per-finding hints, and the "did you mean" on an unknown flag. */
 export function trace(detail: string): string {
   const arrow = useColorFn() ? forced.dim('↳') : '↳';
   const body = useColorFn() ? forced.dim(detail) : detail;
   return `    ${arrow} ${body}`;
 }
 
-/** {@link trace} for something that went wrong: same shape, red. */
+/** {@link trace} for a failure: same dim secondary shape, red tone. */
 export function traceError(detail: string): string {
   const arrow = useColorFn() ? forced.red('↳') : '↳';
   const body = useColorFn() ? forced.dim(detail) : detail;
@@ -283,22 +283,22 @@ export function traceError(detail: string): string {
 
 // ── Message types ───────────────────────────────────────────────
 
-/** A neutral one-line notice. */
+/** One-line notice with no verdict attached: progress, or a fact the user should see. */
 export function info(msg: string): string {
   return `  ${SYM.info} ${useColorFn() ? forced.cyan(msg) : msg}`;
 }
 
-/** A one-line notice that something worked. */
+/** One-line notice that an operation completed. Paired with the success glyph. */
 export function success(msg: string): string {
   return `  ${SYM.success} ${useColorFn() ? forced.green(msg) : msg}`;
 }
 
-/** A one-line notice that something needs attention but did not fail the run. */
+/** One-line notice that something needs attention without having failed the run, so the exit code is unaffected. */
 export function warning(msg: string): string {
   return `  ${SYM.warning} ${useColorFn() ? forced.yellow(msg) : msg}`;
 }
 
-/** A one-line failure notice. Callers send this to stderr. */
+/** One-line failure notice. Callers route it to stderr, so piped stdout stays parseable. */
 export function error(msg: string): string {
   return `  ${SYM.error} ${useColorFn() ? forced.red(msg) : msg}`;
 }

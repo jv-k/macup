@@ -14,13 +14,17 @@ import {
 
 /** Where one applist and its backups live. */
 export interface ConfigStorePaths {
+  /** The applist this store reads and writes. */
   readonly applistPath: string;
+  /** Where its backups go. Shared between applists, which is why filenames are namespaced (ADR 0044). */
   readonly backupDir: string;
 }
 
 /** Outcome of a save. `changed: false` means the serialized form was identical, so nothing was written and no backup taken. */
 export interface SaveResult {
+  /** False when the serialized form was identical, so nothing was written. */
   changed: boolean;
+  /** The backup taken before overwriting; absent on a first-run write, which has nothing to back up. */
   backupPath?: string;
 }
 
@@ -169,7 +173,7 @@ function ensureSeq(doc: Document, key: ApplistKey): YAMLSeq {
  * - A no-op mutation writes nothing at all, rather than reflowing the file and
  *   spamming the backup directory (#48).
  *
- * @see {@link file://./backup.ts} for how the backups are named and listed
+ * Backup naming and listing live in `src/config/backup.ts`.
  */
 export class ConfigStore {
   private doc: Document | null = null;
@@ -187,6 +191,10 @@ export class ConfigStore {
     this.backupPrefix = backupPrefixFor(paths.applistPath);
   }
 
+  /**
+   * Read and validate the applist. Migrates a pre-1.x layout in place, which is the one side effect a read can have, so a dry-run path must not call this.
+   * @throws ErrInvalidConfig when the file does not satisfy the schema, or declares a newer version than this build understands.
+   */
   async load(): Promise<LoadResult> {
     let text: string;
     try {
@@ -304,12 +312,18 @@ export class ConfigStore {
     }
   }
 
+  /**
+   * The names tracked under one key, in file order.
+   */
   list(key: ApplistKey): readonly string[] {
     const seq = resolveSeq(this.requireDoc(), key);
     if (!seq) return [];
     return seq.items.map(scalarValue);
   }
 
+  /**
+   * Stage names under a key, ignoring ones already present. @returns what was added and what was already there.
+   */
   add(key: ApplistKey, names: readonly string[]): { added: string[]; skipped: string[] } {
     const doc = this.requireDoc();
     const existing = new Set(this.list(key));
@@ -328,6 +342,9 @@ export class ConfigStore {
     return { added, skipped };
   }
 
+  /**
+   * Stage a removal. @returns what was removed and what was not there to remove.
+   */
   remove(key: ApplistKey, names: readonly string[]): { removed: string[]; missing: string[] } {
     const doc = this.requireDoc();
     const current = this.list(key);
@@ -369,10 +386,16 @@ export class ConfigStore {
     return sub as YAMLMap;
   }
 
+  /**
+   * Stage a version ceiling. Per-subtype when `subtype` is given (ADR 0035).
+   */
   pin(pluginId: string, name: string, maxVersion: string, subtype?: string): void {
     this.pinTarget(pluginId, subtype).set(name, maxVersion);
   }
 
+  /**
+   * Stage removal of a ceiling. Silent when there was none.
+   */
   unpin(pluginId: string, name: string, subtype?: string): void {
     const pins = this.requireDoc().get('pins');
     if (!(pins instanceof YAMLMap)) return;
@@ -425,6 +448,9 @@ export class ConfigStore {
     return seq as YAMLSeq;
   }
 
+  /**
+   * Stage a skip. @throws ErrInvalidConfig when mixing a flat list with per-subtype skips, which ADR 0035 makes either/or.
+   */
   skip(pluginId: string, names: readonly string[], subtype?: string): void {
     const seq = this.skipTarget(pluginId, subtype);
     const existing = new Set(seq.items.map(scalarValue));
@@ -436,6 +462,9 @@ export class ConfigStore {
     }
   }
 
+  /**
+   * Stage removal of a skip. Silent when there was none.
+   */
   unskip(pluginId: string, names: readonly string[], subtype?: string): void {
     const skip = this.requireDoc().get('skip');
     if (!(skip instanceof YAMLMap)) return;
@@ -451,6 +480,9 @@ export class ConfigStore {
     list.items = list.items.filter((node) => !toRemove.has(scalarValue(node)));
   }
 
+  /**
+   * The pin and skip policy in force for one plugin, flattened out of both the flat and per-subtype shapes.
+   */
   selectionFor(pluginId: string): SelectionPolicy {
     const doc = this.requireDoc();
     const pinned = new Map<string, string>();
@@ -505,6 +537,10 @@ export class ConfigStore {
     return bySubtype.size > 0 ? { pinned, skipped, bySubtype } : { pinned, skipped };
   }
 
+  /**
+   * Persist staged changes, backing up first and writing atomically. `operation` labels the backup. A no-op writes nothing.
+   * @throws ErrInvalidConfig rather than writing a document that would not load back.
+   */
   async save(operation: string): Promise<SaveResult> {
     const doc = this.requireDoc();
     // Stamp version here too, not only in load(): a brand-new config has

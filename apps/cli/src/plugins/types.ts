@@ -1,8 +1,8 @@
 /**
  * The plugin contract: everything a backend must expose for the host to drive
  * it, and everything the host hands back. This file and
- * {@link file://../config/schema.ts} are the two contracts the rest of the
- * codebase is written against (see `CLAUDE.md`).
+ * `src/config/schema.ts` are the two contracts the rest of the codebase is
+ * written against (see `CLAUDE.md`).
  *
  * The vocabulary here is the project's, not a synonym of it — Plugin, Backend,
  * Manifest, Capability, Subtype, Tracked, Installed. `CONTEXT.md` defines each
@@ -54,16 +54,19 @@ export type UpdateStatus = 'current' | 'outdated' | 'unknown';
 
 /**
  * What a plugin reports about one package. `installed` and the applist's
- * tracked set are orthogonal: a package can be tracked but absent, or present
- * but untracked, and the host needs both to decide what to do.
+ * tracked set are orthogonal: a package can be tracked yet absent, or installed
+ * yet untracked, and the host needs both to decide what to do.
  */
 export interface PackageStatus {
+  /** Which package this is about. @see {@link PackageRef} */
   ref: PackageRef;
-  /** Present on this machine, as the backend reports it. */
+  /** Installed on this machine, as the backend reports it. Orthogonal to tracked. */
   installed: boolean;
+  /** The version on disk, when the backend reports one. */
   installedVersion?: string;
   /** Newest the backend offers; absent when it could not say. */
   latestVersion?: string;
+  /** @see {@link UpdateStatus} */
   updateStatus: UpdateStatus;
   /** The ceiling in force, echoed so output can explain a withheld upgrade. */
   pinnedAt?: string;
@@ -77,11 +80,17 @@ export interface PackageStatus {
  * `uninstall`) are signalled by method presence instead (ADR 0039).
  */
 export interface PluginCapabilities {
+  /** Always true: a backend that cannot be listed has nothing to show. */
   readonly list: true;
+  /** Can install a package the machine does not have. */
   readonly install: boolean;
+  /** Can upgrade an installed package. */
   readonly update: boolean;
+  /** Can record a package in the applist. False for update-only backends like `system`. */
   readonly track: boolean;
+  /** Can remove a package from the applist. Paired with {@link PluginCapabilities.track}. */
   readonly untrack: boolean;
+  /** Can report which packages are behind, so this backend appears in `macup outdated`. */
   readonly outdated: boolean;
 }
 
@@ -109,6 +118,7 @@ export interface PluginManifest {
   readonly requires: readonly string[];
   /** Applist keys this plugin's tracked packages live under. */
   readonly configKeys: readonly ApplistKey[];
+  /** @see {@link PluginCapabilities} */
   readonly capabilities: PluginCapabilities;
   /** Optional: plugin-specific version comparator. Default uses semver. */
   compareVersions?(a: string, b: string): -1 | 0 | 1;
@@ -126,8 +136,11 @@ export interface PluginManifest {
  * output (#120).
  */
 export interface ExecResult {
+  /** Everything the child wrote to stdout, whole, even when it was also streamed. */
   readonly stdout: string;
+  /** Everything the child wrote to stderr, whole. */
   readonly stderr: string;
+  /** The child's exit status. Zero does not by itself mean it did anything (#120). */
   readonly exitCode: number;
 }
 
@@ -150,10 +163,13 @@ export type ExecRunKind = 'user-action' | 'query' | 'check';
 export interface ExecRunOptions {
   /** Written to the child's stdin. */
   readonly input?: string;
+  /** Working directory for the child. Defaults to macup's own. */
   readonly cwd?: string;
   /** Cancels the child; the CLI wires this to SIGINT so Ctrl-C reaches subprocesses. */
   readonly signal?: AbortSignal;
+  /** Replaces the child's environment rather than extending it. */
   readonly env?: Readonly<Record<string, string>>;
+  /** How this call's output should be treated. @see {@link ExecRunKind} */
   readonly kind?: ExecRunKind;
   /**
    * Live-streaming hooks. When set, the runner forwards each stdout/stderr
@@ -162,6 +178,7 @@ export interface ExecRunOptions {
    * minutes. Buffering is unchanged when unset.
    */
   readonly onStdout?: (chunk: string) => void;
+  /** @see {@link ExecRunOptions.onStdout} */
   readonly onStderr?: (chunk: string) => void;
 }
 
@@ -173,6 +190,7 @@ export interface ExecRunOptions {
  * layer.
  */
 export interface ExecRunner {
+  /** Run a command to completion. A non-zero exit is a returned result, not a throw. */
   run(cmd: string, args: readonly string[], opts?: ExecRunOptions): Promise<ExecResult>;
   /** {@link run} plus a JSON parse; throws on a non-zero exit. */
   runJson<T = unknown>(cmd: string, args: readonly string[], opts?: ExecRunOptions): Promise<T>;
@@ -182,13 +200,17 @@ export interface ExecRunner {
 
 /**
  * Where a plugin writes prose. Routed by the host rather than going straight to
- * the console, so mid-wizard warnings join the same gutter as everything else
- * (ADR 0033).
+ * the console, so mid-wizard warnings join clack's gutter like every other line
+ * (ADR 0042, ADR 0043).
  */
 export interface Logger {
+  /** Neutral progress or result prose. */
   info(msg: string): void;
+  /** Something the user should know that did not fail the run. */
   warn(msg: string): void;
+  /** A failure, routed to stderr so piped stdout stays clean. */
   error(msg: string): void;
+  /** Detail only `--debug` surfaces. */
   debug(msg: string): void;
 }
 
@@ -198,8 +220,11 @@ export interface Logger {
  * cancelled, and reaches for nothing else.
  */
 export interface PluginContext {
+  /** The only sanctioned way to start a subprocess. @see {@link ExecRunner} */
   readonly exec: ExecRunner;
+  /** Where prose goes, so the host controls placement. @see {@link Logger} */
   readonly log: Logger;
+  /** Trips on Ctrl-C; pass it to every exec call so cancellation reaches the child. */
   readonly signal: AbortSignal;
 }
 
@@ -225,25 +250,33 @@ export interface SearchOptions {
 
 /** One hit from a plugin's package search (the wizard's add flow). */
 export interface SearchResult {
+  /** The name to pass back to `track` or `install`. */
   readonly name: string;
   /** Short blurb when the backend provides one (npm does; brew search doesn't). */
   readonly description?: string;
 }
 
 /**
- * One backend, behind the host's single contract. Adding a package manager is
- * a new file here plus one line in the registry, and nothing else (`CLAUDE.md`).
+ * One backend, behind the host's single contract. Adding a backend is a new
+ * file under `plugins/` plus one line in the registry, and nothing else
+ * (`CLAUDE.md`).
  *
  * `check()` is the availability gate and must throw `ErrPluginUnavailable`
- * rather than a bare `Error`, because the composite `all` catches exactly that
- * to skip a missing backend and carry on (ADR 0037).
+ * rather than a bare `Error` (ADR 0011), because the composite `all` catches
+ * exactly that class to isolate an unavailable backend and carry on (ADR 0033).
+ * Unavailable is a fact about the machine, not a user choice — `skip.all`
+ * (ADR 0037) is the separate mechanism for the latter.
  */
 export interface Plugin {
+  /** What this plugin declares about itself. @see {@link PluginManifest} */
   readonly manifest: PluginManifest;
-  /** @throws ErrPluginUnavailable when a required binary is missing on this machine. */
+  /** @throws ErrPluginUnavailable when a required binary does not resolve on PATH here. */
   check(ctx: PluginContext): Promise<void>;
+  /** Everything this backend knows about, installed or not, scoped by `opts`. */
   list(ctx: PluginContext, opts: ListOptions): Promise<PackageStatus[]>;
+  /** Install the named packages. Present only when the manifest advertises it. */
   install?(ctx: PluginContext, refs: readonly PackageRef[], opts: MutateOptions): Promise<void>;
+  /** Upgrade the named packages. Present only when the manifest advertises it. */
   update?(ctx: PluginContext, refs: readonly PackageRef[], opts: MutateOptions): Promise<void>;
   /**
    * Optional: search the backend's registry for packages matching `query`.

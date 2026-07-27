@@ -16,15 +16,21 @@ export type PathSource =
 
 /** A pre-1.x config location that will be moved on the next mutation. */
 export interface LegacyMigration {
+  /** Where the pre-1.x config is now. */
   from: string;
+  /** Where it will move on the next mutation. */
   to: string;
 }
 
 /** Everything downstream needs about where config lives, and how that was decided. */
 export interface PathResolution {
+  /** The applist this run reads and writes, absolute. */
   applistPath: string;
+  /** Its directory, which is also what `doctor` checks for writability. */
   configDir: string;
+  /** `backups/` beside the applist. */
   backupDir: string;
+  /** Which rule chose the path. @see {@link PathSource} */
   source: PathSource;
   /**
    * True when the user named this applist themselves, via `--applist` or
@@ -34,7 +40,9 @@ export interface PathResolution {
    * first-run behaviour predates the flag — stay implicit.
    */
   explicit: boolean;
+  /** Set when the chosen source is deprecated, so the caller can say so once. */
   deprecationWarning?: string;
+  /** Set when a pre-1.x config was found and will be moved. @see {@link LegacyMigration} */
   legacyMigration?: LegacyMigration;
 }
 
@@ -53,8 +61,11 @@ export function selectorLabel(paths: Pick<PathResolution, 'source'>): string {
  * resolution order unit-testable without touching a real filesystem.
  */
 export interface ResolveOptions {
+  /** The environment to read the override variables from. */
   env: Partial<Record<string, string>>;
+  /** Home directory, for `~` expansion and the default locations. */
   home: string;
+  /** Filesystem probe, injected so resolution is testable without a real disk. */
   exists: (path: string) => boolean;
   /** `--applist <path>`, already stripped from argv. Wins over every env var. */
   applist?: string;

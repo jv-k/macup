@@ -1,6 +1,7 @@
 import { createAllPlugin } from '../../plugins/all';
 import appstorePlugin from '../../plugins/appstore';
 import brewPlugin from '../../plugins/brew';
+import goPlugin from '../../plugins/go';
 import npmPlugin from '../../plugins/npm';
 import pipPlugin from '../../plugins/pip';
 import pnpmPlugin from '../../plugins/pnpm';
@@ -43,6 +44,7 @@ const INDIVIDUAL_PLUGINS: readonly Plugin[] = [
   npmPlugin,
   pnpmPlugin,
   pipPlugin,
+  goPlugin,
   appstorePlugin,
   xcodePlugin,
   systemPlugin,

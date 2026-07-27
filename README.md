@@ -67,11 +67,11 @@ These are commands, not flags: `macup restore`, never `macup --restore`. A flag 
 
 Three modes:
 
-- **default**: pinned status bar at the bottom row; install/upgrade flows open a bordered "box pane" just above the bar where subprocess output streams live (downloads, `Password:` prompts, success messages). List/outdated commands keep their formatted output as today; their internal `--json` chatter stays hidden, except `Error:` / `Warning:` lines which surface above the bar.
-- **`--verbose` / `-V`**: same UI, plus user-action subprocess chunks tee to scrollback so you have a grep-able copy of what brew/sudo/mas printed.
-- **`--debug` / `-D`**: full raw trace of every shell call (`$ cmd args  exit=N · Nms` + line-buffered live stdout/stderr), routed to stderr. Suppresses the bar, so you see the same thing you would see if you ran each underlying command yourself, plus timing.
+- **default**: install/upgrade flows stream their subprocess output (downloads, `Password:` prompts, success messages) as lines in the same gutter as the rest of the UI: one design language, no separate pane (ADR 0043). Queries (list, outdated, health) show a clack inline spinner while they run. List/outdated commands keep their formatted output; their internal `--json` chatter stays hidden, except `Error:` / `Warning:` lines, which surface as one-line notices.
+- **`--verbose` / `-V`**: the same, retained as the seam for future extra detail.
+- **`--debug` / `-D`**: full raw trace of every shell call (`$ cmd args  exit=N · Nms` + line-buffered live stdout/stderr), routed to stderr, so you see the same thing you would see if you ran each underlying command yourself, plus timing.
 
-Set `MACUP_STATUS_BAR=off` to fall back to the original ExecaExecRunner + clack inline spinner if your terminal misbehaves with DECSTBM scroll regions.
+Activity feedback is a single append-only path, so it renders identically on every terminal, under a pipe, and in CI. There is no capability probe or escape hatch to tune.
 
 ## Plugins
 

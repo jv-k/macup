@@ -8,7 +8,6 @@
     "track-without-installing",
     "reproduce-a-machine",
     "json-into-jq",
-    "use-macup-in-ci",
-    "disable-the-status-bar"
+    "use-macup-in-ci"
   ]
 }

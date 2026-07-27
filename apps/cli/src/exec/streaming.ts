@@ -4,16 +4,16 @@
 //   'query'        → ui.onQuery(chunk, source)        // usually a no-op
 //   'check'        → ui.onCheck(chunk, source)        // always a no-op
 //
-// The UI sink decides what to actually do with each kind — render to
-// box, log to scrollback, or drop. Plugins stay oblivious to the UI.
+// The UI sink decides what to actually do with each kind — stream to the
+// gutter, surface a notice, or drop. Plugins stay oblivious to the UI.
 
 import type { ExecResult, ExecRunKind, ExecRunOptions, ExecRunner } from '../plugins/types';
 
 export type StreamSource = 'stdout' | 'stderr';
 
 export interface UiSink {
-  // Output from a `user-action` exec call (install/update). In default
-  // mode this typically goes to the StatusBar's box pane.
+  // Output from a `user-action` exec call (install/update). Streams to the
+  // gutter line-by-line (ADR 0043).
   onUserAction(chunk: string, source: StreamSource): void;
   // Output from a `query` exec call (--json fetches, list, etc.).
   // Default: dropped. --debug routes it to scrollback.
@@ -21,6 +21,10 @@ export interface UiSink {
   // Output from a `check` exec call (health, onPath). Always dropped
   // except --debug.
   onCheck(chunk: string, source: StreamSource): void;
+  // End of a run: emit anything still held in a line buffer. A process can
+  // exit (or sit on a prompt) without a trailing newline — `Password:` is the
+  // common one — and that remainder would otherwise never be shown.
+  flush?(kind: ExecRunKind): void;
 }
 
 // Default sink: drops every chunk. Used when no UI is attached so the
@@ -29,6 +33,7 @@ export const NULL_SINK: UiSink = {
   onUserAction: () => {},
   onQuery: () => {},
   onCheck: () => {},
+  flush: () => {},
 };
 
 export class StreamingExecRunner implements ExecRunner {
@@ -41,7 +46,7 @@ export class StreamingExecRunner implements ExecRunner {
   }
 
   // Lets the host swap the sink at runtime — used during a single
-  // top-level command's lifetime to bind/unbind a StatusBar instance.
+  // top-level command's lifetime to bind/unbind a stream sink.
   setSink(sink: UiSink): void {
     this.sink = sink;
   }
@@ -51,17 +56,23 @@ export class StreamingExecRunner implements ExecRunner {
     const callerStdout = opts.onStdout;
     const callerStderr = opts.onStderr;
     const route = this.routerFor(kind);
-    return this.inner.run(cmd, args, {
-      ...opts,
-      onStdout: (chunk) => {
-        route(chunk, 'stdout');
-        callerStdout?.(chunk);
-      },
-      onStderr: (chunk) => {
-        route(chunk, 'stderr');
-        callerStderr?.(chunk);
-      },
-    });
+    try {
+      return await this.inner.run(cmd, args, {
+        ...opts,
+        onStdout: (chunk) => {
+          route(chunk, 'stdout');
+          callerStdout?.(chunk);
+        },
+        onStderr: (chunk) => {
+          route(chunk, 'stderr');
+          callerStderr?.(chunk);
+        },
+      });
+    } finally {
+      // In `finally` so a failed run still shows whatever it printed before
+      // dying — that partial line is often the reason it died.
+      this.sink.flush?.(kind);
+    }
   }
 
   private routerFor(kind: ExecRunKind): (chunk: string, source: StreamSource) => void {

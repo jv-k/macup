@@ -136,17 +136,11 @@ const EXIT_CODES: ExitCodeDoc[] = [
 ];
 
 // Environment variables macup reads, with the prose used for the reference.
-// A hand-maintained mirror of the reads in src/ui/terminal-caps.ts,
-// src/runtime.ts, and the config path resolution — update alongside any
-// change there. Centralized so the guides can link instead of repeat.
+// A hand-maintained mirror of the reads in src/runtime.ts and the config
+// path resolution — update alongside any change there. Centralized so the
+// guides can link instead of repeat.
 const ENV_VARS: EnvVarDoc[] = [
-  {
-    name: 'MACUP_STATUS_BAR',
-    description:
-      'Set to `off` to disable the pinned status bar, or `force` to keep it on even when `$TERM` is empty or `dumb`.',
-  },
   { name: 'NO_COLOR', description: 'When set to any value, disables colored output.' },
-  { name: 'TERM', description: 'An empty value or `dumb` disables the status bar.' },
   {
     name: 'MACUP_CONFIG',
     description: 'Explicit path to the applist file. Takes precedence over the default locations.',

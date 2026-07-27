@@ -11,10 +11,10 @@
 // promptTrackedSetPicker, applySyncTracked) sit together instead of
 // scattered through a 988-line file.
 
-import { isCancel, note, select, spinner, text } from '@clack/prompts';
+import { isCancel, note, select, text } from '@clack/prompts';
 import { type CommandDef, runCommand } from 'citty';
-import pc from 'picocolors';
 import type { CliDeps } from './cli/types';
+import { withSpinner } from './commands/spinner';
 import type { Plugin, PluginContext } from './plugins/types';
 import * as logui from './ui/log';
 import { pageableAutocompleteMultiselect } from './ui/picker';
@@ -42,17 +42,17 @@ function pickerMaxItems(total: number): number {
 // summary. Keyboard hints (PgUp/PgDn, type-to-filter) live in the
 // picker's own dim help footer below the option list.
 function pickerMessage(title: string, summary: string, color: boolean): string {
-  if (!color) return `${title}  ·  ${summary}`;
-  return `${title}  ${pc.dim(`· ${summary}`)}`;
+  return `${title}  ${logui.paint(color).dim(`· ${summary}`)}`;
 }
 
 // "About macup" panel rendered via clack note() when the user picks the
 // Help row at the target prompt. Stays a one-shot — the wizard returns
 // to pickTarget() afterward.
 function printAboutScreen(color: boolean): void {
-  const dim = (t: string) => (color ? pc.dim(t) : t);
-  const code = (t: string) => (color ? pc.bold(t) : t);
-  const head = (t: string) => (color ? pc.bold(pc.cyan(t)) : t);
+  const c = logui.paint(color);
+  const dim = c.dim;
+  const code = c.bold;
+  const head = (t: string) => c.bold(c.cyan(t));
 
   const lines: string[] = [];
   lines.push('macup tracks and updates developer packages on macOS — Homebrew formulas/casks,');
@@ -100,14 +100,14 @@ async function promptTrackedSetPicker(
 ): Promise<readonly string[] | null> {
   const plugin = deps.registry.find((p) => p.manifest.id === target.pluginId);
   if (!plugin) {
-    console.error(`error: plugin "${target.pluginId}" is not registered`);
+    logui.printErr(`error: plugin "${target.pluginId}" is not registered`);
     return null;
   }
   const configKey = plugin.manifest.configKeyFor
     ? plugin.manifest.configKeyFor(target.subtype)
     : plugin.manifest.configKeys[0];
   if (!configKey) {
-    console.error(`error: plugin "${target.pluginId}" has no tracked applist key`);
+    logui.printErr(`error: plugin "${target.pluginId}" has no tracked applist key`);
     return null;
   }
   const ctx: PluginContext = {
@@ -116,18 +116,18 @@ async function promptTrackedSetPicker(
     signal: deps.signal,
   };
   const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
-  const s = spinner();
-  s.start(`Loading ${label} packages…`);
+  // Same spinner seam (and the same message voice) as `macup <plugin> list`,
+  // so a wait looks identical inside and outside the wizard.
   let statuses: Awaited<ReturnType<typeof plugin.list>>;
   try {
-    await plugin.check(ctx);
-    statuses = await plugin.list(ctx, { subtype: target.subtype });
+    statuses = await withSpinner(deps, `Fetching ${label} packages…`, async () => {
+      await plugin.check(ctx);
+      return plugin.list(ctx, { subtype: target.subtype });
+    });
   } catch (err) {
-    s.stop(`Couldn't load ${label} packages.`);
-    console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+    logui.printErr(`error: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
-  s.stop(`Loaded ${label} packages.`);
 
   const store = await deps.getStore();
   const trackedNames = store.list(configKey);
@@ -152,7 +152,7 @@ async function promptTrackedSetPicker(
   const packages = [...union.values()].sort((a, b) => a.name.localeCompare(b.name));
 
   if (packages.length === 0) {
-    console.log(logui.info(`No packages available for ${label}.`));
+    logui.print(logui.info(`No packages available for ${label}.`));
     return null;
   }
 
@@ -198,7 +198,7 @@ async function promptSearchAndPick(
 ): Promise<readonly string[] | null> {
   const plugin = deps.registry.find((p) => p.manifest.id === target.pluginId);
   if (!plugin?.search) {
-    console.error(`error: plugin "${target.pluginId}" does not support search`);
+    logui.printErr(`error: plugin "${target.pluginId}" does not support search`);
     return null;
   }
   const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
@@ -211,21 +211,20 @@ async function promptSearchAndPick(
   if (isCancel(query) || typeof query !== 'string') return null;
 
   const ctx: PluginContext = { exec: deps.exec, log: deps.log, signal: deps.signal };
-  const s = spinner();
-  s.start(`Searching ${label} for “${query.trim()}”…`);
   let results: Awaited<ReturnType<NonNullable<typeof plugin.search>>>;
   try {
-    await plugin.check(ctx);
-    results = await plugin.search(ctx, query.trim(), { subtype: target.subtype });
+    results = await withSpinner(deps, `Searching ${label} for “${query.trim()}”…`, async () => {
+      await plugin.check(ctx);
+      // plugin.search is guarded non-null above; re-narrow for the closure.
+      return plugin.search?.(ctx, query.trim(), { subtype: target.subtype }) ?? [];
+    });
   } catch (err) {
-    s.stop(`Search failed for ${label}.`);
-    console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+    logui.printErr(`error: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
-  s.stop(`Searched ${label}.`);
 
   if (results.length === 0) {
-    console.log(logui.info(`No ${label} packages matched “${query.trim()}”.`));
+    logui.print(logui.info(`No ${label} packages matched “${query.trim()}”.`));
     return null;
   }
 
@@ -267,18 +266,18 @@ async function applySyncTracked(
   const { target, adds, removes } = result;
   const plugin = deps.registry.find((p) => p.manifest.id === target.pluginId);
   if (!plugin) {
-    console.error(`error: plugin "${target.pluginId}" is not registered`);
+    logui.printErr(`error: plugin "${target.pluginId}" is not registered`);
     return;
   }
   const key = plugin.manifest.configKeyFor
     ? plugin.manifest.configKeyFor(target.subtype)
     : plugin.manifest.configKeys[0];
   if (!key) {
-    console.error(`error: plugin "${target.pluginId}" has no tracked applist key`);
+    logui.printErr(`error: plugin "${target.pluginId}" has no tracked applist key`);
     return;
   }
   if (adds.length === 0 && removes.length === 0) {
-    console.log(`\n${logui.header('TRACKED')} no changes`);
+    logui.print(`\n${logui.header('TRACKED')} no changes`);
     return;
   }
   const store = await deps.getStore();
@@ -291,15 +290,16 @@ async function applySyncTracked(
     // save the on-disk state and the wizard's view of "tracked" will
     // diverge for the rest of this session. Surface the error rather
     // than silently continuing.
-    console.error(
+    logui.printErr(
       `error: failed to save tracked-list changes (${err instanceof Error ? err.message : String(err)})`,
     );
     return;
   }
+  const c = logui.paint(deps.color);
   const parts: string[] = [];
-  for (const a of adds) parts.push(deps.color ? pc.green(`+${a}`) : `+${a}`);
-  for (const r of removes) parts.push(deps.color ? pc.red(`-${r}`) : `-${r}`);
-  console.log(`\n${logui.header('TRACKED')} ${parts.join(' ')}`);
+  for (const a of adds) parts.push(c.green(`+${a}`));
+  for (const r of removes) parts.push(c.red(`-${r}`));
+  logui.print(`\n${logui.header('TRACKED')} ${parts.join(' ')}`);
 }
 
 // Sentinel for "a prompt threw" — distinct from `null`, which is the
@@ -310,8 +310,8 @@ export const PICKER_FAILED = Symbol('picker-failed');
 // user lands, then the cause. Never swallow the cause — a bug that unwinds
 // silently is a bug nobody reports.
 function reportPickerFailure(what: string, unwindsTo: string, err: unknown): void {
-  console.error(`\n${logui.error(`The ${what} failed — ${unwindsTo}.`)}`);
-  console.error(logui.traceError(err instanceof Error ? err.message : String(err)));
+  logui.printErr(`\n${logui.error(`The ${what} failed — ${unwindsTo}.`)}`);
+  logui.printErr(logui.traceError(err instanceof Error ? err.message : String(err)));
 }
 
 /**
@@ -375,6 +375,22 @@ export async function runWizard(
     }),
   );
 
+  // Frame mode (ADR 0042): from here to wizard exit, everything printed
+  // through log.print/printErr joins clack's gray gutter, so prompts and
+  // the output between them read as one continuous session transcript.
+  // Direct invocations never set this — their output stays flat.
+  logui.setFrame(true);
+  try {
+    await wizardLoop(deps, pluginSubCommands);
+  } finally {
+    logui.setFrame(false);
+  }
+}
+
+async function wizardLoop(
+  deps: CliDeps,
+  pluginSubCommands: Record<string, CommandDef>,
+): Promise<void> {
   // Two-level loop:
   //   outer: pickTarget → choose category (or Esc to exit)
   //   inner: pickAction → choose action, execute, repeat (Esc → outer)
@@ -425,7 +441,7 @@ export async function runWizard(
             // Sticky inverted-pill header — printed on every prompt
             // iteration so the user always sees which category they're
             // operating on.
-            console.log(`\n${logui.header(pluginCategoryFor(t, deps.registry))}`);
+            logui.print(`\n${logui.header(pluginCategoryFor(t, deps.registry))}`);
             const choice = await select({
               message: 'What do you want to do?',
               options: opts.map((o) => ({ label: o.label, value: o.value })),
@@ -440,19 +456,22 @@ export async function runWizard(
               log: deps.log,
               signal: deps.signal,
             };
-            const s = spinner();
-            s.start(`Checking ${plugin.manifest.displayName} for outdated packages…`);
             try {
-              await plugin.check(ctx);
-              const statuses = await plugin.list(ctx, {
-                subtype: t.subtype,
-                onlyOutdated: true,
-              });
-              s.stop(`Checked ${plugin.manifest.displayName}.`);
+              // Same message + spinner seam as `macup <plugin> update`'s
+              // pre-check, so the wizard's wait is indistinguishable from
+              // the direct command's.
+              const statuses = await withSpinner(
+                deps,
+                `Checking ${plugin.manifest.displayName} for outdated packages…`,
+                async () => {
+                  await plugin.check(ctx);
+                  return plugin.list(ctx, { subtype: t.subtype, onlyOutdated: true });
+                },
+              );
               if (statuses.length === 0) {
                 // Print BEFORE returning so the user sees the message
                 // before pickAction's loop re-renders the action prompt.
-                console.log(logui.info('Already up-to-date.'));
+                logui.print(logui.info('Already up-to-date.'));
                 return [];
               }
               return statuses.map((st) => ({
@@ -461,8 +480,7 @@ export async function runWizard(
                 latestVersion: st.latestVersion,
               }));
             } catch (err) {
-              s.stop(`Couldn't check ${plugin.manifest.displayName}.`);
-              console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+              logui.printErr(`error: ${err instanceof Error ? err.message : String(err)}`);
               return [];
             }
           },
@@ -476,7 +494,9 @@ export async function runWizard(
                   value: r.name,
                 };
                 if (r.currentVersion && r.latestVersion) {
-                  opt.hint = `${r.currentVersion} → ${r.latestVersion}`;
+                  // Same version-transition rendering as the list view's
+                  // outdated rows (yellow current, dim arrow, green latest).
+                  opt.hint = logui.versionTransition(r.currentVersion, r.latestVersion, deps.color);
                 }
                 return opt;
               }),
@@ -520,13 +540,12 @@ export async function runWizard(
         ? ` ${result.packages.map((p) => (p.includes(' ') ? `'${p}'` : p)).join(' ')}`
         : '';
       const label = `${result.target.pluginId} ${result.command}${subtypeFrag}${pkgFrag}`;
-      const badge = deps.color ? pc.inverse(pc.bold(pc.green(' macup '))) : 'macup';
-      const styledLabel = deps.color ? pc.bold(label) : label;
-      console.log(`\n${badge} ${styledLabel}`);
+      const styledLabel = logui.paint(deps.color).bold(label);
+      logui.print(`\n${logui.badge('macup', deps.color)} ${styledLabel}`);
 
       const cmd = pluginSubCommands[result.target.pluginId];
       if (!cmd) {
-        console.error(`error: plugin "${result.target.pluginId}" is not available`);
+        logui.printErr(`error: plugin "${result.target.pluginId}" is not available`);
         continue;
       }
       try {
@@ -539,15 +558,16 @@ export async function runWizard(
         // command-content column; continuation lines (e.g. multi-line
         // stderr from brew's xcrun + Warning + Error blocks) sit one
         // indent deeper.
-        const dim = (s: string) => (deps.color ? pc.dim(s) : s);
-        const arrow = deps.color ? pc.dim('↳') : '↳';
+        const c = logui.paint(deps.color);
+        const dim = c.dim;
+        const arrow = c.dim('↳');
         const lines = msg.split('\n');
         const head = lines[0] ?? msg;
-        console.error(
+        logui.printErr(
           `  ${arrow} ${dim(`${result.target.pluginId} ${result.command} failed: ${head}`)}`,
         );
         for (const line of lines.slice(1)) {
-          console.error(`    ${dim(line)}`);
+          logui.printErr(`    ${dim(line)}`);
         }
       }
       // Reset exit code between submenu actions so a previous failure

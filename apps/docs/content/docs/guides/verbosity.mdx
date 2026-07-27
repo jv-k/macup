@@ -7,15 +7,16 @@ description: Default, verbose, and debug output modes.
 
 macup has three output modes:
 
-- default: a pinned status bar on the bottom row. Install and upgrade flows
-  open a bordered box just above the bar where subprocess output streams live,
-  including download progress and `Password:` prompts. `Error:` and `Warning:`
-  lines surface above the bar.
-- `--verbose` / `-V`: the same UI, plus subprocess output is teed to
-  scrollback so you keep a grep-able copy.
+- default: install and upgrade flows stream their subprocess output (download
+  progress, `Password:` prompts, success messages) as lines in the same gutter
+  as the rest of the UI, so it reads as one transcript. Queries (list, outdated,
+  health) show an inline spinner while they run. `Error:` and `Warning:` lines
+  from internal queries surface as one-line notices.
+- `--verbose` / `-V`: the seam kept for future extra detail beyond the default
+  gutter stream.
 - `--debug` / `-D`: a full raw trace of every shell call routed to stderr,
-  with timing. The bar is suppressed, so you see exactly what each underlying
-  command printed.
+  with timing, so you see exactly what each underlying command printed.
 
-Set `MACUP_STATUS_BAR=off` to fall back to a plain inline spinner if your
-terminal misbehaves with scroll regions.
+Activity feedback is a single append-only path, so it renders identically on
+every terminal, under a pipe, and in CI. There is no capability probe or escape
+hatch to configure.

@@ -5,7 +5,6 @@ import { commandsFromManifest } from '../../../src/commands/from-manifest';
 import type { ConfigStore } from '../../../src/config/store';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
 import type { Plugin, PluginManifest } from '../../../src/plugins/types';
-import { StatusBar } from '../../../src/ui/status-bar';
 
 function fakePlugin(): Plugin {
   return {
@@ -51,7 +50,6 @@ function build(plugin: Plugin) {
     exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake', 'fakeall'] }),
     log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
     getStore: async () => emptyStore(),
-    bar: new StatusBar(),
     suppressBar: true,
     signal: new AbortController().signal,
   });

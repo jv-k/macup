@@ -1,9 +1,9 @@
-import { spinner } from '@clack/prompts';
 import { defineCommand } from 'citty';
 import type { CliDeps } from '../cli/types';
 import { ErrPluginUnavailable } from '../errors';
 import type { PackageStatus, Plugin, PluginContext } from '../plugins/types';
-import { painter } from '../ui/color';
+import * as log from '../ui/log';
+import { withSpinner } from './spinner';
 
 export interface OutdatedPluginSummary {
   pluginId: string;
@@ -132,54 +132,51 @@ export interface FormatOptions {
  *
  *     ! brew      (8 outdated)  deno · gh · netlify-cli · pipenv +4
  *     ! npm       (3 outdated)  bun · eslint · prettier
- *     ✓ pnpm      up to date
+ *     ✔ pnpm      up to date
  *     ? appstore  unavailable: mas not on PATH
  *
  *     11 packages outdated · run `macup all update` to upgrade
  */
-/**
- * Inverse-video bold pill matching log.ts header() styling, parameterised
- * on `color` so callers (including tests) don't have to monkey with
- * NO_COLOR or TTY detection. Rendered as `\n  <pill>\n` so it can be
- * printed standalone above a spinner before aggregation begins.
- */
-export function formatOutdatedHeader(opts: { color?: boolean } = {}): string {
-  const color = opts.color ?? false;
-  const label = ' OUTDATED ';
-  if (!color) return `\n  ${label.trim()}\n`;
-  const c = painter(color);
-  return `\n  ${c.yellow(c.inverse(c.bold(label)))}\n`;
-}
-
 export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions = {}): string {
   const color = opts.color ?? false;
   const maxNames = opts.maxNames ?? 6;
-  const { green, yellow, dim } = painter(color);
+  const { green, yellow, dim } = log.paint(color);
 
   const idPad = Math.max(4, ...report.plugins.map((p) => p.pluginId.length));
+  // Pad the "(N outdated)" column so the package-name lists start in one
+  // column across rows.
+  const countPad = Math.max(
+    0,
+    ...report.plugins.map((p) =>
+      p.outdated.length > 0 ? `(${p.outdated.length} outdated)`.length : 0,
+    ),
+  );
 
   const lines: string[] = [];
   for (const p of report.plugins) {
     const id = p.pluginId.padEnd(idPad);
     if (!p.available) {
-      lines.push(`  ${dim('?')} ${id}  ${dim(`unavailable: ${p.reason ?? 'unknown'}`)}`);
+      lines.push(
+        `  ${dim(log.GLYPHS.question)} ${id}  ${dim(`unavailable: ${p.reason ?? 'unknown'}`)}`,
+      );
       continue;
     }
     if (p.outdated.length === 0) {
       // Don't claim "up to date" when currency couldn't be verified (ADR 0036).
       if (p.uncheckable.length > 0) {
-        lines.push(`  ${yellow('?')} ${id}  ${dim(`${p.uncheckable.length} uncheckable`)}`);
+        lines.push(
+          `  ${yellow(log.GLYPHS.question)} ${id}  ${dim(`${p.uncheckable.length} uncheckable`)}`,
+        );
       } else {
-        lines.push(`  ${green('✓')} ${id}  ${dim('up to date')}`);
+        lines.push(`  ${green(log.GLYPHS.success)} ${id}  ${dim('up to date')}`);
       }
       continue;
     }
     const names = p.outdated.slice(0, maxNames).map((s) => s.ref.name);
     const more = p.outdated.length > maxNames ? ` +${p.outdated.length - maxNames}` : '';
     const namesStr = `${names.join(' · ')}${more}`;
-    lines.push(
-      `  ${yellow('!')} ${id}  ${yellow(`(${p.outdated.length} outdated)`)}  ${dim(namesStr)}`,
-    );
+    const count = `(${p.outdated.length} outdated)`.padEnd(countPad);
+    lines.push(`  ${yellow(log.GLYPHS.warning)} ${id}  ${yellow(count)}  ${dim(namesStr)}`);
   }
 
   lines.push('');
@@ -239,23 +236,23 @@ export function buildOutdatedCommand(deps: CliDeps) {
       // Print the pill upfront so it stays visible above the spinner
       // throughout aggregation (mirrors the wizard's sticky-category
       // pattern).
-      process.stdout.write(formatOutdatedHeader({ color: deps.color }));
+      process.stdout.write(`\n  ${log.outdatedHeader('Outdated', undefined, deps.color)}\n`);
 
-      const useSpinner = process.stdout.isTTY === true;
-      const s = useSpinner ? spinner() : null;
-      s?.start('Checking plugins…');
-      const report = await buildOutdatedReport({
-        plugins: deps.registry,
-        makeCtx: () => ({
-          exec: deps.exec,
-          log: deps.log,
-          signal: deps.signal,
+      // Same spinner seam as every other query wait (list/health): clack's
+      // inline spinner, which draws on the gutter (ADR 0043).
+      const report = await withSpinner(deps, 'Checking plugins…', async (update) =>
+        buildOutdatedReport({
+          plugins: deps.registry,
+          makeCtx: () => ({
+            exec: deps.exec,
+            log: deps.log,
+            signal: deps.signal,
+          }),
+          onProgress: (e) => {
+            update(`Checking plugins… (${e.completed}/${e.total}) ${e.displayName}`);
+          },
         }),
-        onProgress: (e) => {
-          s?.message(`Checking plugins… (${e.completed}/${e.total}) ${e.displayName}`);
-        },
-      });
-      s?.stop(`Checked ${report.plugins.length} plugin(s).`);
+      );
       console.log(formatOutdatedReport(report, { color: deps.color }));
     },
   });

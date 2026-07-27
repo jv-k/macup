@@ -104,22 +104,6 @@ so redirecting one changes behavior differently from redirecting another.
 - Color is auto-disabled when stdout is not a TTY or when `NO_COLOR` is set.
   Piped output is uncolored without a flag.
 
-## Status bar in CI
-
-The pinned status bar needs a TTY with scroll-region support. Force it off when
-your terminal or CI runner misbehaves:
-
-```bash
-# Disable the pinned status bar (e.g. in CI)
-MACUP_STATUS_BAR=off macup all update
-```
-
-[Disable the status bar](/docs/recipes/disable-the-status-bar) covers the
-variable, the `$TERM` values that disable the bar on their own, and what turning
-it off does and does not change. The
-[environment variables reference](/docs/reference/environment-variables) lists
-every variable macup reads.
-
 ## Keeping stdout clean
 
 `--debug` suppresses the bar and routes the full shell-call trace to stderr, so

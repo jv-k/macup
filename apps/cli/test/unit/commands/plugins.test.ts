@@ -109,8 +109,8 @@ describe('formatPluginsReport', () => {
 
     expect(out).toContain('plugins: 1 / 2 available');
     expect(out).toContain('platform: darwin');
-    expect(out).toMatch(/✓\s+brew\s+Homebrew/);
-    expect(out).toMatch(/✗\s+mas\s+App Store\s+missing: mas/);
+    expect(out).toMatch(/✔\s+brew\s+Homebrew/);
+    expect(out).toMatch(/✖\s+mas\s+App Store\s+missing: mas/);
     expect(out).toContain('list, install, update, track, untrack');
   });
 

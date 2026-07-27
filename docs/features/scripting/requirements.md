@@ -26,10 +26,13 @@ PRD goal G5: macup is scriptable, with `--json` output and stable exit codes for
 9. Bare-word forms of the flag-styled top-level commands (`macup version`, `config`, `cleanup`, `restore`, `logo`, `plugins`, `install-completions`) are rewritten to their `--flag` form at argv preprocessing; only the first positional is rewritten, so `macup brew track config` keeps `config` as a package name.
 10. The `macup/meta` export (`docsMetadata()`) projects the registry, per-command flags, config schema, exit codes, and env vars into a JSON-serializable object consumed by the docs generator; the parts backed by live CLI data structures cannot drift, while the exit-code and env-var tables are maintained mirrors of the control flow in cli.ts and terminal-caps.ts.
 
+11. `--log <path>` and `$MACUP_LOG` append one JSON-lines record per subprocess to a file: timestamp, command, redacted arguments, exit code, duration, stdout, and stderr (ADR 0045). The flag wins over the env var, `~` expands, relative paths resolve against cwd, and the file is created 0600 and appended to across runs. It is a side channel: terminal output is byte-identical with and without it, it composes with `--debug` and `--verbose` rather than replacing them, and a log path that cannot be written is reported once without failing the run.
+
 ## Source of truth
 
 - apps/cli/src/cli.ts (SIGINT handler, exit paths, unknown-flag rejection)
-- apps/cli/src/cli/argv.ts (alias rewriting, verbosity extraction)
+- apps/cli/src/cli/argv.ts (alias rewriting, verbosity and value-flag extraction)
+- apps/cli/src/exec/logging.ts (the log record, redaction, and the file sink)
 - apps/cli/src/meta.ts (exit codes and env vars, single aggregation point)
 - apps/cli/src/runtime.ts (color/TTY predicates)
 - apps/cli/test/unit/commands/json-output.test.ts, apps/cli/test/unit/cli/argv.test.ts, apps/cli/test/unit/meta.test.ts
@@ -39,7 +42,6 @@ PRD goal G5: macup is scriptable, with `--json` output and stable exit codes for
 
 - `--json` for the remaining commands (PRD roadmap item #8).
 - `macup check` for shell prompts and cron (PRD roadmap item #9).
-- File logging via `--log` / `MACUP_LOG` (PRD roadmap item #16).
 
 ## Out of scope
 

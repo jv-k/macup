@@ -6,7 +6,7 @@ export function generateBashCompletions(plugins: readonly Plugin[]): string {
   // restore` is a noun, not a flag (ADR 0029). Only the true modifiers
   // are left on the flag list.
   const ids = [...plugins.map((p) => p.manifest.id), ...TOP_LEVEL_COMMANDS.map((c) => c.name)];
-  const globalFlags = '--help --version --verbose --debug --applist';
+  const globalFlags = '--help --version --verbose --debug --applist --log';
 
   const pluginCases = plugins
     .map(
@@ -41,8 +41,8 @@ _macup() {
   cur="\${COMP_WORDS[COMP_CWORD]}"
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
 
-  # --applist takes a path, and it can appear anywhere before the command.
-  if [[ "\$prev" == "--applist" ]]; then
+  # These take a path, and can appear anywhere before the command.
+  if [[ "\$prev" == "--applist" || "\$prev" == "--log" ]]; then
     COMPREPLY=( $(compgen -f -- "$cur") )
     return
   fi
@@ -65,7 +65,7 @@ ${flagCases}
     esac
     # --applist is usable alongside plugin/action args, so offer it here too,
     # appended rather than replacing the per-command flags above.
-    COMPREPLY+=( $(compgen -W "--applist" -- "$cur") )
+    COMPREPLY+=( $(compgen -W "--applist --log" -- "$cur") )
     return
   fi
 }

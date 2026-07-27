@@ -118,6 +118,11 @@ const GLOBAL_FLAGS: GlobalFlagDoc[] = [
     description: 'Full raw trace of every shell call, routed to stderr.',
   },
   {
+    flag: '--log',
+    description:
+      'Append a record per subprocess to this file, as JSON lines: the command, its exit code, how long it took, and its output. A side channel — terminal output is unchanged.',
+  },
+  {
     flag: '--applist',
     description:
       'Path to the applist this run reads and writes, instead of the default. Relative paths resolve against the working directory and `~` expands.',
@@ -146,6 +151,11 @@ const EXIT_CODES: ExitCodeDoc[] = [
 // guides can link instead of repeat.
 const ENV_VARS: EnvVarDoc[] = [
   { name: 'NO_COLOR', description: 'When set to any value, disables colored output.' },
+  {
+    name: 'MACUP_LOG',
+    description:
+      'Path to a subprocess log file, equivalent to `--log`. Useful for launchd and cron runs; the flag wins when both are set.',
+  },
   {
     name: 'MACUP_APPLIST',
     description:

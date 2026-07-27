@@ -121,3 +121,41 @@ Preview commands without running them with `--dry-run` (see
 # Print the commands that would run, without executing
 macup brew update --dry-run
 ```
+
+## Logging a run to disk
+
+`--log <path>` appends a record for every subprocess macup runs: what it ran,
+the exit code, how long it took, and the output. Nothing on the terminal
+changes, so it composes with everything above.
+
+```bash
+macup --log ~/macup.log all update
+```
+
+Set `MACUP_LOG` instead when passing the flag every time is impractical, in a
+launchd or cron job say. The flag wins when both are set.
+
+Each line is one JSON object (ADR 0045), so multi-line output stays on a single
+line and the file is safe to append to from more than one run at once:
+
+```bash
+# Every command that failed, most recent last
+jq -r 'select(.exitCode != 0) | "\(.ts) \(.cmd) \(.args | join(" ")) -> \(.exitCode)"' ~/macup.log
+
+# The slowest ten commands
+jq -s 'sort_by(-.durationMs) | .[:10] | .[] | "\(.durationMs)ms \(.cmd)"' -r ~/macup.log
+```
+
+The file is appended to, never truncated, so a scheduled run builds a history
+rather than replacing one.
+
+<Callout type="warn">
+  The log contains whole subprocess output, so treat it as sensitive. macup
+  creates it `0600` and masks credential-shaped arguments such as `--token` and
+  passwords in URLs, but it does not attempt to redact the output itself, since
+  there is no way to do that without risking either missing a secret or
+  mangling the log. Skim it before attaching it to a bug report.
+</Callout>
+
+A log path that cannot be written is reported once and the run carries on: a
+broken log should not cost you the update.

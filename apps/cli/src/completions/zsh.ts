@@ -62,6 +62,7 @@ _macup() {
     '(-V --verbose)'{-V,--verbose}'[Stream output to scrollback]' \\
     '(-D --debug)'{-D,--debug}'[Trace every shell call to stderr]' \\
     '--applist[Use an alternate applist file]:applist:_files -g "*.(yaml|yml)"' \\
+    '--log[Append a subprocess log to a file]:logfile:_files' \\
     '1:plugin:->plugin' \\
     '2:command:->command' \\
     '*:: :->rest'

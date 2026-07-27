@@ -93,6 +93,28 @@ describe('#120: a system install softwareupdate no-ops is a failure', () => {
     ).rejects.toThrow(/no such update/i);
     expect(exec.calls).toEqual([['softwareupdate', '--install', NOOP_LABEL, '--verbose']]);
   });
+
+  it('catches a no-op on a later ref, not just the first', async () => {
+    // The mirror of the case above: the check lives inside the loop, so a
+    // genuine install followed by a no-op must still fail the run. Without
+    // this, a check applied only to the first ref would look correct.
+    const exec = new RecordingExecRunner({
+      fixtures: await fixtures(),
+      onPath: ['softwareupdate'],
+    });
+    const ctx: PluginContext = { exec, log: silentLog, signal: new AbortController().signal };
+    await expect(
+      systemPlugin.install?.(
+        ctx,
+        [
+          { kind: 'system', name: REAL_LABEL },
+          { kind: 'system', name: NOOP_LABEL },
+        ],
+        {},
+      ),
+    ).rejects.toThrow(/no such update/i);
+    expect(exec.calls).toHaveLength(2);
+  });
 });
 
 describe('#120: what must keep working', () => {

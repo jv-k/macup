@@ -21,8 +21,14 @@ import type { ConfigStore } from '../config/store';
 import type { Plugin } from '../plugins/types';
 import type { ExecRunner, Logger } from '../plugins/types';
 
+/** citty's parsed args, untyped at this boundary because each command knows its own shape. */
 export type ParsedArgs = Record<string, unknown>;
 
+/**
+ * Everything a command is handed: the exec runner, the registry, config access,
+ * and the machine facts. Assembled once by {@link bootstrap} and passed down,
+ * so no command reaches for a global.
+ */
 export interface CliDeps {
   readonly exec: ExecRunner;
   readonly log: Logger;
@@ -43,6 +49,11 @@ export interface CliDeps {
   readonly abort: () => void;
 }
 
+/**
+ * A command noun with no plugin of its own (`restore`, `doctor`, `cleanup`).
+ * Adapted into a citty subcommand by the entry point, which is what let these
+ * stop being root flags without rewriting each one (ADR 0029).
+ */
 export interface ActionCommand {
   /** The command word: `macup <name>`. Also the key of the trigger arg in `args`. */
   readonly name: string;

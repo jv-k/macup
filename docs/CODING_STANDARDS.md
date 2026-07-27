@@ -73,6 +73,12 @@ tree. New code should match, not invent.
   contract, XDG fallback order, legacy path migration) deserve inline
   comments.
 - Remove stale comments rather than layering corrections.
+- **Every exported symbol in `src/` carries JSDoc**, enforced by
+  `test/unit/jsdoc-coverage.test.ts` rather than by review (#43). It walks the
+  TypeScript AST and names the file, line, and symbol still missing one, so a
+  new export fails the suite until it is documented. Prefer one line saying
+  *why* over a paragraph restating the signature; a deliberate omission goes in
+  that file's `EXEMPT` map with its reason.
 
 ## Testing
 

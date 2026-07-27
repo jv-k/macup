@@ -9,6 +9,7 @@ import { renderList } from './render-list';
 import { type SpinnerDeps, withSpinner, withUserActionSpinner } from './spinner';
 import { pluginHasSubtypes, resolveSubtypeOrExit } from './subtype';
 
+/** What the generated per-plugin commands need. @see {@link commandsFromManifest} */
 export interface CommandDeps extends SpinnerDeps {
   readonly exec: ExecRunner;
   readonly log: Logger;
@@ -156,9 +157,11 @@ function requireNames(rawArgs: string[], pluginId: string, command: string): str
   return names;
 }
 
-// Exported so the init scaffolder (#14) resolves a subtype to its applist key
-// the same way the track verb does, rather than keeping a third copy of the
-// configKeyFor-or-first-key fallback.
+/**
+ * Exported so the init scaffolder (#14) resolves a subtype to its applist key
+ * the same way the track verb does, rather than keeping a third copy of the
+ * configKeyFor-or-first-key fallback.
+ */
 export function resolveConfigKey(plugin: Plugin, subtype: string | undefined) {
   if (plugin.manifest.configKeyFor) {
     return plugin.manifest.configKeyFor(subtype);
@@ -177,6 +180,14 @@ function subtypeCliFlag(subtype: string | undefined): string {
   return '';
 }
 
+/**
+ * Build a plugin's whole command tree from its manifest: only the verbs it
+ * advertises, with the flags each accepts.
+ *
+ * This single factory is why adding a backend needs no edit to dispatch, help,
+ * or completions (`CLAUDE.md`) — the manifest is the input and the CLI surface
+ * is the output.
+ */
 export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): CommandDef {
   const { manifest } = plugin;
   const hasSubtypes = pluginHasSubtypes(plugin);

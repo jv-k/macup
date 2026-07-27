@@ -6,6 +6,12 @@ import {
   flagsForCommand,
 } from './shared';
 
+/**
+ * The bash completion script, generated from the plugin manifests so a new
+ * backend is completable without editing this file.
+ *
+ * Emitted with a file-wide shellcheck directive: the `$(compgen …)` word splitting is the standard idiom, and macOS ships bash 3.2 so the `mapfile` alternative is unavailable.
+ */
 export function generateBashCompletions(plugins: readonly Plugin[]): string {
   // Stand-alone commands complete where a plugin id would go — `macup
   // restore` is a noun, not a flag (ADR 0029). Only the true modifiers

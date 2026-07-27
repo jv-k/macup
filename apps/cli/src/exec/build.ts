@@ -3,6 +3,7 @@ import { LoggingExecRunner } from './logging';
 import { StreamingExecRunner, type UiSink } from './streaming';
 import { TracingExecRunner } from './tracing';
 
+/** Which decorators to wrap the base runner in. @see {@link buildExecRunner} */
 export interface BuildExecRunnerOptions {
   readonly baseExec: ExecRunner;
   // --debug / -D : raw full trace via TracingExecRunner. Wins over
@@ -24,6 +25,14 @@ export interface BuildExecRunnerOptions {
   readonly tracePrint?: (line: string) => void;
 }
 
+/**
+ * Assemble the runner for this invocation.
+ *
+ * `--debug` and a streaming sink are alternative ways of showing the SAME
+ * output on the terminal, so they exclude each other. File logging writes
+ * somewhere else entirely, so it layers on top of whichever is active
+ * (ADR 0045).
+ */
 export function buildExecRunner(opts: BuildExecRunnerOptions): ExecRunner {
   const terminal = opts.debug
     ? new TracingExecRunner(opts.baseExec, { color: opts.color, print: opts.tracePrint })

@@ -4,11 +4,13 @@ import { access, copyFile, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/p
 import { basename, extname, join } from 'node:path';
 import { ErrBackupNotFound } from '../errors';
 
+/** Which applist a {@link BackupStore} is scoped to, and where its backups live. */
 export interface BackupStorePaths {
   readonly applistPath: string;
   readonly backupDir: string;
 }
 
+/** One backup file, with the operation and timestamp parsed back out of its name. */
 export interface BackupEntry {
   readonly path: string;
   readonly filename: string;
@@ -42,13 +44,15 @@ export function backupPrefixFor(applistPath: string): string {
   return safe === '' ? `applist-${digest}` : `${safe}-${digest}`;
 }
 
-// Operation labels can contain hyphens (e.g. `sync-tracked`); the segment
-// separator is `_`, so hyphens in the operation don't confuse the split.
-// Trailing `(?:_\d+)?` matches the collision suffix uniqueBackupPath adds
-// when two same-operation backups land in the same second (C-1), so those
-// extra files still list and restore instead of silently disappearing.
-// The prefix comes from backupPrefixFor, which already restricts it to
-// `[A-Za-z0-9-]` — no regex metacharacters survive, so it interpolates safely.
+/**
+ * Operation labels can contain hyphens (e.g. `sync-tracked`); the segment
+ * separator is `_`, so hyphens in the operation don't confuse the split.
+ * Trailing `(?:_\d+)?` matches the collision suffix uniqueBackupPath adds
+ * when two same-operation backups land in the same second (C-1), so those
+ * extra files still list and restore instead of silently disappearing.
+ * The prefix comes from backupPrefixFor, which already restricts it to
+ * `[A-Za-z0-9-]` — no regex metacharacters survive, so it interpolates safely.
+ */
 export function backupFileRe(prefix: string): RegExp {
   return new RegExp(
     `^${prefix}_([A-Za-z0-9-]+)_(\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2})(?:_\\d+)?\\.yaml$`,
@@ -64,11 +68,13 @@ export function backupTimestamp(now: Date): string {
   );
 }
 
-// A backup path that does not exist yet. Second-resolution timestamps mean
-// two same-operation backups within one second would otherwise collide and
-// lose one (C-1), so append an incrementing suffix. Shared by ConfigStore
-// (mutation backups) and BackupStore.snapshot (pre-undo backups) so both
-// name files the same way.
+/**
+ * A backup path that does not exist yet. Second-resolution timestamps mean
+ * two same-operation backups within one second would otherwise collide and
+ * lose one (C-1), so append an incrementing suffix. Shared by ConfigStore
+ * (mutation backups) and BackupStore.snapshot (pre-undo backups) so both
+ * name files the same way.
+ */
 export function uniqueBackupPath(
   backupDir: string,
   prefix: string,
@@ -104,6 +110,14 @@ function entryFor(dir: string, filename: string, re: RegExp): BackupEntry | null
   };
 }
 
+/**
+ * The backup set belonging to one applist: list, restore, snapshot, clean up.
+ *
+ * Scoped, not directory-wide. Two applists can share a config directory
+ * (`--applist work.yaml` beside the default), and a restore that offered the
+ * other one's snapshots would overwrite the wrong file, so every operation is
+ * filtered to this applist's filename namespace (ADR 0044).
+ */
 export class BackupStore {
   /** Backup-filename namespace for this applist; see backupPrefixFor. */
   private readonly prefix: string;

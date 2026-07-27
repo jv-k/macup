@@ -14,6 +14,7 @@ import { getVersion } from '../version';
 import { TOP_LEVEL_COMMANDS } from './commands';
 import type { CliDeps } from './types';
 
+/** `--version`: the version with the logo, rather than citty's bare unstyled default. */
 export function printVersionSplash(deps: CliDeps): void {
   console.log(
     logui.splashBlock({

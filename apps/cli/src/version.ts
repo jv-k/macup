@@ -4,6 +4,7 @@
 // to resolve inside the compiled binary.
 import pkg from '../package.json';
 
+/** The running version, read from the bundled package manifest. Reported by `--version` and the docs metadata. */
 export function getVersion(): string {
   return pkg.version;
 }

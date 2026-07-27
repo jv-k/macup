@@ -9,6 +9,7 @@ export interface SelectionScope {
   readonly skipped: ReadonlySet<string>;
 }
 
+/** The whole pin/skip policy for one plugin: its flat scope plus any per-subtype layers. */
 export interface SelectionPolicy extends SelectionScope {
   /**
    * Per-subtype layers, keyed by subtype name (e.g. 'casks'). A package whose
@@ -19,6 +20,12 @@ export interface SelectionPolicy extends SelectionScope {
   readonly bySubtype?: ReadonlyMap<string, SelectionScope>;
 }
 
+/**
+ * Outdated packages sorted into what will and will not be upgraded, with the
+ * reason preserved. Precedence is skip over pin over outdated (`CONTEXT.md`),
+ * and each bucket is reported rather than silently dropped so a withheld
+ * upgrade is always explainable.
+ */
 export interface SelectionResult {
   upgradable: PackageStatus[];
   pinnedBlocked: PackageStatus[];
@@ -33,9 +40,11 @@ export interface SelectionResult {
   uncheckable: PackageStatus[];
 }
 
-// `null` means "can't order these two" — distinct from 0 ("equal"). It routes
-// a pin to `pinUnenforceable` instead of silently letting the upgrade through
-// as if the ceiling had been honored (ADR 0034).
+/**
+ * `null` means "can't order these two" — distinct from 0 ("equal"). It routes
+ * a pin to `pinUnenforceable` instead of silently letting the upgrade through
+ * as if the ceiling had been honored (ADR 0034).
+ */
 export type VersionComparator = (a: string, b: string) => -1 | 0 | 1 | null;
 
 const semverCompare: VersionComparator = (a, b) => {

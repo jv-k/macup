@@ -6,6 +6,12 @@ import {
   flagsForCommand,
 } from './shared';
 
+/**
+ * The fish completion script, generated from the plugin manifests so a new
+ * backend is completable without editing this file.
+ *
+ * Disables file completion globally, then re-enables it per flag that takes a path.
+ */
 export function generateFishCompletions(plugins: readonly Plugin[]): string {
   const lines: string[] = [
     '# Auto-generated from plugin manifests. Do not edit.',

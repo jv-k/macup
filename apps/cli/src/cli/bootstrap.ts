@@ -23,6 +23,11 @@ import * as logui from '../ui/log';
 import { StreamSink } from '../ui/stream-sink';
 import type { CliDeps } from './types';
 
+/**
+ * What bootstrap needs from the outside world. The env, home, cwd, and
+ * existence probe are all overridable so the whole startup path can be driven
+ * in-process by a test rather than only by spawning the binary.
+ */
 export interface BootstrapInput {
   readonly debug: boolean;
   readonly verbose: boolean;
@@ -39,6 +44,15 @@ export interface BootstrapInput {
   readonly exists?: (path: string) => boolean;
 }
 
+/**
+ * Assemble everything the commands need: the exec runner with its decorators,
+ * the plugin registry, config path resolution, and the store accessor.
+ *
+ * Also the natural seam for tests — construct deps here and the rest of the CLI
+ * follows, with no subprocess and no real config.
+ *
+ * @returns the dependency bag every command receives
+ */
 export function bootstrap(input: BootstrapInput): CliDeps {
   const env = input.env ?? process.env;
   const home = input.home ?? homedir();

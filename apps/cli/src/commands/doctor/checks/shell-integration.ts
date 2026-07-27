@@ -8,6 +8,7 @@ import { resolveInstallPath } from '../../install-completions';
 import { SUPPORTED_SHELLS, detectShellFromEnv } from '../../shell';
 import type { CheckDeps, CheckResult, Section } from '../report';
 
+/** Doctor section: whether the shell snippet and completions are installed where the shell will find them. */
 export async function check(deps: CheckDeps): Promise<Section> {
   const title = 'Shell integration';
   const shell = detectShellFromEnv(deps.env);

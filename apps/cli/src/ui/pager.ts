@@ -25,6 +25,7 @@ const CLEAR_LINE = '\x1b[2K';
 type TtyIn = Readable & { isTTY?: boolean; setRawMode?: (raw: boolean) => void };
 type TtyOut = Writable & { isTTY?: boolean; rows?: number; columns?: number };
 
+/** @see the pager that owns the terminal while long help output is read. */
 export interface PagerOptions {
   input?: TtyIn;
   output?: TtyOut;

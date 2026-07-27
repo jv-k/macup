@@ -4,6 +4,7 @@
 // preserve that effect here with an injectable RNG for determinism
 // under tests and NO_COLOR compliance for scripting/CI.
 
+/** The logo as rows of block characters, scaled at render time rather than stored per size. */
 export const APPLE_LOGO: readonly string[] = [
   '                                 _.',
   '                             _/=\\:<',
@@ -31,6 +32,7 @@ export const APPLE_LOGO: readonly string[] = [
   '             "{}<as: "           "*)}do>"',
 ];
 
+/** @see {@link renderAppleLogo} */
 export interface LogoRenderOptions {
   /** When false, returns the raw ASCII art with no ANSI sequences. Defaults to true. */
   color?: boolean;
@@ -86,6 +88,7 @@ function colourise(ch: string, random: () => number): string {
   return `${ESC}[38;5;${n}m${ch}${RESET}`;
 }
 
+/** The logo at a given scale, clamped to the terminal width so a narrow window never wraps it into noise. */
 export function renderAppleLogo(opts: LogoRenderOptions = {}): string {
   const color = opts.color ?? true;
   const lines = sample2D(APPLE_LOGO, opts.scale ?? 1);
@@ -117,6 +120,7 @@ export interface CreditsRenderOptions {
   repo?: string;
 }
 
+/** The author and version block shown beside the logo on the splash. */
 export function renderCredits(opts: CreditsRenderOptions = {}): string {
   const color = opts.color ?? true;
   const author = (opts.author ?? 'John Valai').toLowerCase();

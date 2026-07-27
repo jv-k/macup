@@ -1,10 +1,12 @@
 import type { Plugin } from './plugins/types';
 
+/** What the user picked to act on: a plugin, and optionally one of its subtypes. */
 export interface Target {
   readonly pluginId: string;
   readonly subtype?: string;
 }
 
+/** What the user chose to do, as data — dispatched by the runner rather than executed here, so the wizard stays testable. */
 export type ActionResult =
   | {
       readonly kind: 'dispatch';
@@ -19,6 +21,7 @@ export type ActionResult =
       readonly removes: readonly string[];
     };
 
+/** One entry in the action menu, including the verbs a plugin does not advertise (shown disabled rather than hidden). */
 export type WizardActionOption =
   | 'list'
   | 'update'
@@ -140,6 +143,7 @@ function buildGroups(plugins: readonly Plugin[]): Array<{
   return out;
 }
 
+/** Prompt for a plugin (and subtype). @returns null when the user cancels. */
 export async function pickTarget(deps: TargetDeps): Promise<Target | null> {
   const { selectTarget, plugins, printAbout } = deps;
   const groups = buildGroups(plugins);
@@ -192,6 +196,7 @@ function diffTracked(
   return { adds, removes };
 }
 
+/** Prompt for what to do with `target`. @returns null when the user cancels. */
 export async function pickAction(deps: ActionDeps, target: Target): Promise<ActionResult | null> {
   const plugin = deps.plugins.find((p) => p.manifest.id === target.pluginId);
   if (!plugin) {

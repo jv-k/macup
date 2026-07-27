@@ -2,6 +2,7 @@ import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import type { Plugin, PluginCapabilities } from '../plugins/types';
 import { GLYPHS, paint } from '../ui/log';
 
+/** One plugin's availability on this machine, with the resolved binary path when it has one. */
 export interface PluginStatus {
   id: string;
   displayName: string;
@@ -17,6 +18,7 @@ export interface PluginStatus {
   category?: string;
 }
 
+/** The availability overview, plus the counts the header line quotes. */
 export interface PluginsReport {
   platform: NodeJS.Platform;
   total: number;
@@ -24,11 +26,13 @@ export interface PluginsReport {
   statuses: PluginStatus[];
 }
 
+/** Machine facts, injected so availability can be asserted without the real PATH. */
 export interface PluginsReportDeps {
   platform: NodeJS.Platform;
   onPath: (binary: string) => boolean;
 }
 
+/** Which plugins are usable here and why the rest are not. */
 export function buildPluginsReport(
   plugins: readonly Plugin[],
   deps: PluginsReportDeps,
@@ -75,6 +79,7 @@ export function buildPluginsReport(
   };
 }
 
+/** Rendering choices for the plugins overview. */
 export interface FormatOptions {
   /** If true, wraps status glyphs and labels in ANSI. Otherwise plain ASCII. */
   color?: boolean;
@@ -129,6 +134,7 @@ export function formatPluginsReport(report: PluginsReport, opts: FormatOptions =
   return lines.join('\n');
 }
 
+/** `macup plugins`: one line per plugin, flagging any whose binary is missing. */
 export async function runPlugins(_args: ParsedArgs, deps: CliDeps): Promise<void> {
   const report = buildPluginsReport(deps.registry, {
     platform: deps.platform,
@@ -137,6 +143,7 @@ export async function runPlugins(_args: ParsedArgs, deps: CliDeps): Promise<void
   console.log(formatPluginsReport(report, { color: deps.color }));
 }
 
+/** `macup plugins`. */
 export class PluginsAction implements ActionCommand {
   readonly name = 'plugins';
   readonly description = 'List built-in plugins and whether each is available on this machine.';

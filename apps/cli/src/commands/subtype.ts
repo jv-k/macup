@@ -1,5 +1,6 @@
 import type { Plugin } from '../plugins/types';
 
+/** The subtype flags a command may carry: the explicit `--subtype`, plus brew's `--cask`/`--formula` shortcuts. */
 export interface SubtypeArgs {
   readonly subtype?: string;
   readonly cask?: boolean;
@@ -35,6 +36,7 @@ export function subtypeFromArgs(plugin: Plugin, args: SubtypeArgs): string | und
   return subtypes[0];
 }
 
+/** Outcome of validating subtype args, carrying the message rather than throwing so the caller controls the exit path. */
 export type ValidationResult = { ok: true } | { ok: false; error: string };
 
 /**

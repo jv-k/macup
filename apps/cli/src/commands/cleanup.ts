@@ -2,12 +2,14 @@ import { confirm, isCancel } from '@clack/prompts';
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { BackupStore } from '../config/backup';
 
+/** Injected so the confirmation and output are the caller's, keeping the decision logic testable. */
 export interface CleanupDeps {
   readonly backups: BackupStore;
   readonly confirm: () => Promise<boolean>;
   readonly print: (line: string) => void;
 }
 
+/** Delete this applist's backups after confirmation. @returns how many files were removed. */
 export async function runCleanup(deps: CleanupDeps): Promise<number> {
   const entries = await deps.backups.list();
   if (entries.length === 0) {
@@ -31,6 +33,7 @@ export async function runCleanup(deps: CleanupDeps): Promise<number> {
   return count;
 }
 
+/** Wires {@link runCleanup} to the real backup store and a clack prompt. */
 export async function runCleanupAction(_args: ParsedArgs, deps: CliDeps): Promise<void> {
   const paths = deps.resolvePaths();
   const backups = new BackupStore(paths);
@@ -47,6 +50,7 @@ export async function runCleanupAction(_args: ParsedArgs, deps: CliDeps): Promis
   });
 }
 
+/** `macup cleanup`. */
 export class CleanupAction implements ActionCommand {
   readonly name = 'cleanup';
   readonly description = 'Interactively delete all backup files.';

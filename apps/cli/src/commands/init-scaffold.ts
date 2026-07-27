@@ -28,6 +28,7 @@ export interface SkippedBackend {
   readonly reason: string;
 }
 
+/** What a scan found, with unavailable and failed backends kept apart from the results. */
 export interface DetectionPlan {
   readonly groups: DetectedGroup[];
   /** Backend missing from this machine — the ordinary case, not a failure. */
@@ -147,6 +148,7 @@ export interface ScaffoldStore {
   save(operation: string): Promise<{ changed: boolean; backupPath?: string }>;
 }
 
+/** @see {@link runInitScaffold} */
 export interface ScaffoldInput {
   readonly plan: DetectionPlan;
   readonly store: ScaffoldStore;

@@ -19,6 +19,7 @@
 import { spinner } from '@clack/prompts';
 import * as log from '../ui/log';
 
+/** What the spinner helpers need to decide whether to animate at all. */
 export interface SpinnerDeps {
   // True when another renderer owns the screen (e.g. --debug's tracer).
   readonly suppressBar: boolean;
@@ -42,6 +43,7 @@ function titleOf(message: string): string {
   return message.replace(TRAILING_ELLIPSIS, '').trim();
 }
 
+/** Run `work` behind a spinner, for a query whose output is not shown. Skipped when the bar is suppressed or stdout is not a TTY. */
 export async function withSpinner<T>(
   deps: SpinnerDeps,
   message: string,
@@ -61,6 +63,7 @@ export async function withSpinner<T>(
   }
 }
 
+/** {@link withSpinner} for a user-action, whose subprocess output streams into the gutter as it runs (ADR 0043). */
 export async function withUserActionSpinner<T>(
   deps: SpinnerDeps,
   message: string,

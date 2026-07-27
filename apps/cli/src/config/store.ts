@@ -12,16 +12,19 @@ import {
   formatApplistIssues,
 } from './schema';
 
+/** Where one applist and its backups live. */
 export interface ConfigStorePaths {
   readonly applistPath: string;
   readonly backupDir: string;
 }
 
+/** Outcome of a save. `changed: false` means the serialized form was identical, so nothing was written and no backup taken. */
 export interface SaveResult {
   changed: boolean;
   backupPath?: string;
 }
 
+/** Outcome of a load, reporting the one side effect a read can have: a legacy-layout migration. */
 export interface LoadResult {
   /** True iff the on-disk file was rewritten from a pre-1.x flat layout. */
   migrated: boolean;
@@ -42,10 +45,12 @@ function scalarValue(node: unknown): string {
   return String(node);
 }
 
-// Crash-safe write: write to a sibling tmp file, then rename. POSIX rename
-// is atomic on the same filesystem, so a half-written tmp never replaces
-// the live config — at worst it lingers as an orphan after a hard crash.
-// Exported so tests can exercise the same path without rebinding fs.
+/**
+ * Crash-safe write: write to a sibling tmp file, then rename. POSIX rename
+ * is atomic on the same filesystem, so a half-written tmp never replaces
+ * the live config — at worst it lingers as an orphan after a hard crash.
+ * Exported so tests can exercise the same path without rebinding fs.
+ */
 export async function atomicWriteFile(filePath: string, contents: string): Promise<void> {
   const tmpPath = `${filePath}.tmp`;
   await writeFile(tmpPath, contents, 'utf8');
@@ -153,6 +158,19 @@ function ensureSeq(doc: Document, key: ApplistKey): YAMLSeq {
   return seq as YAMLSeq;
 }
 
+/**
+ * Read/write access to one applist, and the only sanctioned path for mutating
+ * it. Three guarantees callers depend on, all of them earned the hard way:
+ *
+ * - Comments and formatting on untouched lines survive, because edits go
+ *   through the YAML CST rather than a parse/stringify round trip.
+ * - Every changing write is preceded by a timestamped backup and lands via a
+ *   temp file plus rename, so a crash cannot leave a half-written applist.
+ * - A no-op mutation writes nothing at all, rather than reflowing the file and
+ *   spamming the backup directory (#48).
+ *
+ * @see {@link file://./backup.ts} for how the backups are named and listed
+ */
 export class ConfigStore {
   private doc: Document | null = null;
   private originalText = '';

@@ -15,6 +15,7 @@ import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { type BackupEntry, BackupStore } from '../config/backup';
 import { computeLineDiff, formatDiff, hasDiff } from '../ui/diff';
 
+/** Injected so the diff, prompt, and output belong to the caller. @see {@link runUndo} */
 export interface UndoDeps {
   readonly backups: BackupStore;
   /** Current applist text, or null when the file doesn't exist yet. */
@@ -25,6 +26,12 @@ export interface UndoDeps {
   readonly print: (line: string) => void;
 }
 
+/**
+ * Revert to the most recent backup, showing the diff first.
+ *
+ * Snapshots the current applist before overwriting it, so the undo is itself
+ * undoable. @returns the entry restored, or null when there was nothing to undo.
+ */
 export async function runUndo(deps: UndoDeps): Promise<BackupEntry | null> {
   const target = await deps.backups.latest();
   if (!target) {
@@ -61,6 +68,7 @@ export async function runUndo(deps: UndoDeps): Promise<BackupEntry | null> {
   return target;
 }
 
+/** Wires {@link runUndo} to the real backup store and clack prompts. */
 export async function runUndoAction(_args: ParsedArgs, deps: CliDeps): Promise<void> {
   const paths = deps.resolvePaths();
   const backups = new BackupStore(paths);
@@ -90,6 +98,7 @@ export async function runUndoAction(_args: ParsedArgs, deps: CliDeps): Promise<v
   outro('Done.');
 }
 
+/** `macup undo`. */
 export class UndoAction implements ActionCommand {
   readonly name = 'undo';
   readonly description = 'Revert the applist to the most recent backup (with a diff preview).';

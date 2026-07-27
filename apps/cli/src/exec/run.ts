@@ -2,6 +2,15 @@ import { ExecaError, execa } from 'execa';
 import type { ExecResult, ExecRunOptions, ExecRunner } from '../plugins/types';
 import { isOnPath } from './on-path';
 
+/**
+ * The real runner: the one place in the codebase that starts a subprocess.
+ *
+ * Subscribes to the child's streams before awaiting it, so callers see output
+ * as it arrives rather than only at exit — buffered exec would leave a long
+ * `brew upgrade` silent for minutes. A non-zero exit is a returned result, not
+ * a throw, because "the backend said no" is data every caller has to reason
+ * about rather than an exception.
+ */
 export class ExecaExecRunner implements ExecRunner {
   async run(cmd: string, args: readonly string[], opts: ExecRunOptions = {}): Promise<ExecResult> {
     try {

@@ -302,8 +302,10 @@ async function applySyncTracked(
   logui.print(`\n${logui.header('TRACKED')} ${parts.join(' ')}`);
 }
 
-// Sentinel for "a prompt threw" — distinct from `null`, which is the
-// user deliberately hitting Esc.
+/**
+ * Sentinel for "a prompt threw" — distinct from `null`, which is the
+ * user deliberately hitting Esc.
+ */
 export const PICKER_FAILED = Symbol('picker-failed');
 
 // Both boundaries below report the same way: name what broke and where the
@@ -352,6 +354,14 @@ async function pickTargetSafely(wizardDeps: TargetDeps): Promise<Target | null> 
   }
 }
 
+/**
+ * The interactive session bare `macup` opens: pick a target, pick an action,
+ * dispatch, repeat.
+ *
+ * Reports a failed action inline and keeps going rather than exiting, so one
+ * unavailable backend does not end the session. On a non-TTY it prints the logo
+ * and a hint instead of prompting (`docs/CODING_STANDARDS.md`).
+ */
 export async function runWizard(
   deps: CliDeps,
   pluginSubCommands: Record<string, CommandDef>,

@@ -12,8 +12,10 @@ import type { PathResolution } from '../../config/paths';
 import type { ExecRunner, Logger, Plugin } from '../../plugins/types';
 import * as logui from '../../ui/log';
 
+/** Severity of one finding. The worst level present decides the exit code. */
 export type CheckLevel = 'ok' | 'warn' | 'error';
 
+/** One finding: what was checked, what was found, and a hint for fixing it. */
 export interface CheckResult {
   level: CheckLevel;
   label: string;
@@ -22,6 +24,7 @@ export interface CheckResult {
   hint?: string;
 }
 
+/** A named group of findings, rendered as one block. */
 export interface Section {
   title: string;
   results: readonly CheckResult[];
@@ -51,18 +54,21 @@ export interface CheckDeps {
   readonly probeTimeoutMs: number;
 }
 
+/** Counts per level, so the reader sees the shape of the report before reading it. */
 export interface DoctorSummary {
   ok: number;
   warnings: number;
   errors: number;
 }
 
+/** The whole diagnostic, shared by the text and JSON renderers so they cannot diverge. */
 export interface DoctorReport {
   version: string;
   sections: readonly Section[];
   summary: DoctorSummary;
 }
 
+/** Assemble sections into a report and compute its summary. */
 export function buildReport(version: string, sections: readonly Section[]): DoctorReport {
   const summary: DoctorSummary = { ok: 0, warnings: 0, errors: 0 };
   for (const section of sections) {
@@ -86,6 +92,7 @@ function glyphFor(level: CheckLevel): string {
   return logui.SYM.error;
 }
 
+/** The human report. */
 export function renderText(report: DoctorReport): string {
   const lines: string[] = [];
   for (const section of report.sections) {
@@ -106,6 +113,7 @@ export function renderText(report: DoctorReport): string {
   return lines.join('\n');
 }
 
+/** The same report for `--json`, stable enough to assert on in a script. */
 export function renderJson(report: DoctorReport): string {
   return JSON.stringify(report, null, 2);
 }

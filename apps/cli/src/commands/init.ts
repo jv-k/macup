@@ -27,8 +27,10 @@ import { ApplistKeySchema } from '../config/schema';
 import { countDetected, detectInstalled, runInitScaffold } from './init-scaffold';
 import { SUPPORTED_SHELLS, type Shell, isShell } from './shell';
 
-// Arg defs live outside the factory so macup/meta can project them into
-// the generated reference.
+/**
+ * Arg defs live outside the factory so macup/meta can project them into
+ * the generated reference.
+ */
 export const INIT_ARGS = {
   shell: {
     type: 'positional',
@@ -105,6 +107,7 @@ end
 `;
 }
 
+/** The shell integration snippet to eval from an rc file. Invariants it must hold are listed at the top of this file. */
 export function renderInitSnippet(shell: Shell): string {
   switch (shell) {
     case 'zsh':
@@ -116,6 +119,7 @@ export function renderInitSnippet(shell: Shell): string {
   }
 }
 
+/** `macup init`: the applist scaffolder bare, or shell integration with a shell argument (ADR 0047). */
 export function buildInitCommand(deps: CliDeps) {
   return defineCommand({
     meta: {

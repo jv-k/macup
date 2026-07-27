@@ -39,6 +39,7 @@ export const GLYPHS = {
 // of the theme live in one module.)
 const forced = pc.createColors(true);
 
+/** The colour functions a renderer needs, injected so output can be styled or plain without branching at each call. */
 export interface Painter {
   green(s: string): string;
   yellow(s: string): string;
@@ -115,14 +116,17 @@ function invertedLabel(
   return color ? tone(forced.inverse(forced.bold(label))) : label.trim();
 }
 
+/** Inverse-video section pill in cyan, the top-level section pill. `count` renders as a parenthesised suffix. */
 export function header(text: string, count?: number, color: boolean = useColorFn()): string {
   return invertedLabel(text, count, forced.cyan, color);
 }
 
+/** Inverse-video section pill in green, a nested section under a header. `count` renders as a parenthesised suffix. */
 export function subHeader(text: string, count?: number, color: boolean = useColorFn()): string {
   return invertedLabel(text, count, forced.green, color);
 }
 
+/** Inverse-video section pill in yellow, a section that needs attention. `count` renders as a parenthesised suffix. */
 export function outdatedHeader(
   text: string,
   count?: number,
@@ -131,10 +135,12 @@ export function outdatedHeader(
   return invertedLabel(text, count, forced.yellow, color);
 }
 
+/** Inverse-video section pill in red, a section reporting failure. `count` renders as a parenthesised suffix. */
 export function errorHeader(text: string, count?: number, color: boolean = useColorFn()): string {
   return invertedLabel(text, count, forced.red, color);
 }
 
+/** Inverse-video section pill in dim, a section that is present but not the point. `count` renders as a parenthesised suffix. */
 export function dimmedHeader(text: string, count?: number, color: boolean = useColorFn()): string {
   return invertedLabel(text, count, forced.dim, color);
 }
@@ -211,6 +217,7 @@ export function versionTransition(
   return `${forced.yellow(current)} ${forced.dim(GLYPHS.arrow)} ${forced.green(latest)}`;
 }
 
+/** A package row that needs nothing. `pad` right-pads the name so a block of rows aligns. */
 export function pkgUpToDate(name: string, version: string, pad: number): string {
   const padded = name.padEnd(pad);
   return `  ${SYM.success} ${useColorFn() ? forced.bold(padded) : padded} ${useColorFn() ? forced.green(version) : version}`;
@@ -231,14 +238,17 @@ export function pkgOutdated(
   return `  ${SYM.warning} ${useColorFn() ? forced.bold(padded) : padded} ${versionTransition(current.padEnd(curPad), latest)}`;
 }
 
+/** A tracked package that is absent from the machine: dimmed and italic, since it is intent rather than state. */
 export function pkgNotInstalled(name: string, pad: number): string {
   const padded = name.padEnd(pad);
   return `  ${SYM.error} ${useColorFn() ? forced.italic(forced.dim(padded)) : padded}`;
 }
 
-// Installed, but currency couldn't be determined (updateStatus 'unknown').
-// A yellow `?` (SYM.question) marks it as "not verified", distinct from the
-// green up-to-date glyph (ADR 0036).
+/**
+ * Installed, but currency couldn't be determined (updateStatus 'unknown').
+ * A yellow `?` (SYM.question) marks it as "not verified", distinct from the
+ * green up-to-date glyph (ADR 0036).
+ */
 export function pkgUncheckable(name: string, version: string, pad: number): string {
   const padded = name.padEnd(pad);
   const nm = useColorFn() ? pc.dim(padded) : padded;
@@ -248,6 +258,7 @@ export function pkgUncheckable(name: string, version: string, pad: number): stri
 
 // ── Per-package progress counter ────────────────────────────────
 
+/** `3/12 upgrading ripgrep` — per-item progress during a bulk run. */
 export function counter(idx: number, total: number, action: string, name: string): string {
   const prefix = useColorFn() ? forced.dim(`${idx}/${total}`) : `${idx}/${total}`;
   const styled = useColorFn() ? forced.green(name) : name;
@@ -256,12 +267,14 @@ export function counter(idx: number, total: number, action: string, name: string
 
 // ── Verbose per-item trace (one dim line after the spinner) ─────
 
+/** One dim detail line, shown under `--verbose` after the spinner clears. */
 export function trace(detail: string): string {
   const arrow = useColorFn() ? forced.dim('↳') : '↳';
   const body = useColorFn() ? forced.dim(detail) : detail;
   return `    ${arrow} ${body}`;
 }
 
+/** {@link trace} for something that went wrong: same shape, red. */
 export function traceError(detail: string): string {
   const arrow = useColorFn() ? forced.red('↳') : '↳';
   const body = useColorFn() ? forced.dim(detail) : detail;
@@ -270,18 +283,22 @@ export function traceError(detail: string): string {
 
 // ── Message types ───────────────────────────────────────────────
 
+/** A neutral one-line notice. */
 export function info(msg: string): string {
   return `  ${SYM.info} ${useColorFn() ? forced.cyan(msg) : msg}`;
 }
 
+/** A one-line notice that something worked. */
 export function success(msg: string): string {
   return `  ${SYM.success} ${useColorFn() ? forced.green(msg) : msg}`;
 }
 
+/** A one-line notice that something needs attention but did not fail the run. */
 export function warning(msg: string): string {
   return `  ${SYM.warning} ${useColorFn() ? forced.yellow(msg) : msg}`;
 }
 
+/** A one-line failure notice. Callers send this to stderr. */
 export function error(msg: string): string {
   return `  ${SYM.error} ${useColorFn() ? forced.red(msg) : msg}`;
 }
@@ -366,6 +383,7 @@ export function wrapText(text: string, width: number): string[] {
   return out;
 }
 
+/** One label/description pair for the column formatter. */
 export interface ColumnRow {
   /** Left column. May carry ANSI — it's measured with visualWidth and never wrapped. */
   label: string;

@@ -8,6 +8,7 @@
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { renderAppleLogo } from '../ui/logo';
 
+/** `macup logo`: print the logo, optionally scaled. */
 export async function runLogo(args: ParsedArgs, deps: CliDeps): Promise<void> {
   let scale = 1;
   if (args.logo !== '') {
@@ -22,6 +23,7 @@ export async function runLogo(args: ParsedArgs, deps: CliDeps): Promise<void> {
   console.log(renderAppleLogo({ color: deps.color, scale }));
 }
 
+/** `macup logo`. */
 export class LogoAction implements ActionCommand {
   readonly name = 'logo';
   readonly description = 'Print the Apple logo (optional scale: 0.25, 0.5, 0.75, or 1).';

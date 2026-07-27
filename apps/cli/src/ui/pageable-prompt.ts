@@ -6,6 +6,7 @@ interface OptionLike {
   disabled?: boolean;
 }
 
+/** @see the paging behaviour this adds to clack's autocomplete, for lists longer than the terminal. */
 export interface PageableAutocompleteOptions<T extends OptionLike> extends AutocompleteOptions<T> {
   /**
    * Fixed step size for PgUp/PgDn. Defaults to 10. Ignored when

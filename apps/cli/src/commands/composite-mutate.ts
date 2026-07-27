@@ -3,6 +3,7 @@ import { ErrPluginUnavailable } from '../errors';
 import { resolveSelection } from '../plugins/selection';
 import type { MutateOptions, PackageRef, Plugin, PluginContext } from '../plugins/types';
 
+/** Which mutating verb the composite is fanning out. */
 export type CompositeMode = 'install' | 'update';
 
 /** Why a constituent won't run, or the refs it will act on (status 'planned'). */
@@ -13,6 +14,7 @@ export interface ConstituentPlan {
   readonly message?: string;
 }
 
+/** How one backend fared inside an `all` run. Recorded per backend so a single failure is isolated rather than aborting the fan-out (ADR 0033). */
 export interface ConstituentOutcome {
   readonly pluginId: string;
   /**

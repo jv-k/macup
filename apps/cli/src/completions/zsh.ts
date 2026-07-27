@@ -10,6 +10,12 @@ import {
 
 const esc = (s: string): string => s.replace(/'/g, "'\\''");
 
+/**
+ * The zsh completion script, generated from the plugin manifests so a new
+ * backend is completable without editing this file.
+ *
+ * Flags are declared on `_arguments` so each can carry its own value spec, with positional states for the plugin and command slots.
+ */
 export function generateZshCompletions(plugins: readonly Plugin[]): string {
   // Each plugin gets a `name:description` entry so zsh shows the
   // displayName next to the id in the completion menu. The stand-alone

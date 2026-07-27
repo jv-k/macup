@@ -6,8 +6,10 @@
 import pc from 'picocolors';
 import { useColor as defaultUseColor } from '../runtime';
 
+/** How one line of a diff relates to the change: unchanged, added, or removed. */
 export type DiffTag = 'context' | 'add' | 'del';
 
+/** One rendered diff line, tagged so the caller styles rather than re-parses it. */
 export interface DiffLine {
   tag: DiffTag;
   text: string;

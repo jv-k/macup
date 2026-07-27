@@ -127,11 +127,12 @@ describe('--log writes a subprocess log (#16)', () => {
 
   it('finishes the run even when the log path cannot be written', async () => {
     // A directory where the file should be: every append fails, but the
-    // command the user asked for still has to complete.
+    // command the user asked for still has to complete. Asserted directly
+    // rather than against a second baseline spawn — every spawn is real
+    // process startup, and this file adds enough of them already.
     const { dir, env } = sandbox();
     const { code } = await run(env, `--log "${dir}" ${PROBE}`);
-    const baseline = await run(env, PROBE);
-    expect(code).toBe(baseline.code);
+    expect(code).toBe(0);
   });
 });
 

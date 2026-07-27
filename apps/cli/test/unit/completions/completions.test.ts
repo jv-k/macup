@@ -182,3 +182,21 @@ describe('--applist completes past the first position (#17)', () => {
     expect(afterFirstPosition).toContain('--applist');
   });
 });
+
+// #16: --log takes a path, so every shell must offer it and complete a file
+// after it, in the same positions --applist works in.
+describe('--log completion (#16)', () => {
+  it('zsh offers --log with file completion', () => {
+    expect(generateZshCompletions(plugins)).toMatch(/--log\[[^\]]*\]:[^:]*:_files/);
+  });
+
+  it('bash offers --log in the first position and past it', () => {
+    const out = generateBashCompletions(plugins);
+    expect(out).toContain('--log');
+    expect(out.slice(out.indexOf('COMP_CWORD} -ge 3'))).toContain('--log');
+  });
+
+  it('fish offers --log and completes a path after it', () => {
+    expect(generateFishCompletions(plugins)).toMatch(/-l log[^\n]*-r -F/);
+  });
+});

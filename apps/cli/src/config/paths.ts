@@ -51,12 +51,15 @@ export interface ResolveOptions {
 }
 
 /**
- * Absolute path for a user-supplied applist location: `~` expands to home,
- * then anything relative resolves against cwd. Only a leading `~` alone or
- * followed by a separator expands — `~user` is another account's home, which
- * we can't resolve, and a mid-path `~` is an ordinary directory name.
+ * Absolute path for a user-supplied file location: `~` expands to home, then
+ * anything relative resolves against cwd. Only a leading `~` alone or followed
+ * by a separator expands — `~user` is another account's home, which we can't
+ * resolve, and a mid-path `~` is an ordinary directory name.
+ *
+ * Shared by every path a user can name on the command line (`--applist`, #17;
+ * `--log`, #16), so they cannot drift into spelling `~` differently.
  */
-function expandPath(input: string, home: string, cwd: string): string {
+export function expandUserPath(input: string, home: string, cwd: string): string {
   let path = input;
   if (path === '~') path = home;
   else if (path.startsWith('~/')) path = join(home, path.slice(2));
@@ -86,11 +89,13 @@ export function resolveConfigPaths(opts: ResolveOptions): PathResolution {
   // CLI > env > default (see docs/CODING_STANDARDS.md — config precedence is
   // invariant). `--applist` is the only CLI tier, so it leads.
   if (opts.applist) {
-    return finalise(expandPath(opts.applist, home, cwd), 'flag-applist', { explicit: true });
+    return finalise(expandUserPath(opts.applist, home, cwd), 'flag-applist', { explicit: true });
   }
 
   if (env.MACUP_APPLIST) {
-    return finalise(expandPath(env.MACUP_APPLIST, home, cwd), 'env-applist', { explicit: true });
+    return finalise(expandUserPath(env.MACUP_APPLIST, home, cwd), 'env-applist', {
+      explicit: true,
+    });
   }
 
   if (env.MACUP_CONFIG) {

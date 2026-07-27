@@ -1,3 +1,14 @@
+/**
+ * The pin and skip resolver: which outdated packages will actually be upgraded,
+ * and why the rest will not.
+ *
+ * Precedence is skip over pin over outdated (`CONTEXT.md`), and every withheld
+ * package is reported rather than silently dropped, so a pin is never a silent
+ * no-op (ADR 0034).
+ *
+ * @module
+ */
+
 import semver from 'semver';
 import type { PackageStatus } from './types';
 

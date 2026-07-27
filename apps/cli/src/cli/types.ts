@@ -1,19 +1,23 @@
-// Cross-cutting types for the CLI's top-level dispatch.
-//
-// `CliDeps` is the bag of everything wired up at startup (exec runner,
-// status bar, plugin registry, lazy config store, log, env-resolved
-// paths, color/verbose/debug flags). It's threaded through every
-// ActionCommand.run(); each action grabs what it needs and ignores the
-// rest. A single deps shape keeps the wiring trivial — no per-action
-// wiring in cli.ts.
-//
-// `ActionCommand` covers the stand-alone commands: `macup cleanup`,
-// `restore`, `logo`, `plugins`, `config`, `completions`,
-// `install-completions`, `undo`, `doctor`. Each carries its own `args`
-// schema and a `run()`; cli.ts adapts them into citty subcommands
-// (ADR 0029). They were `FlagAction`s — flag-triggered actions on the
-// main command with a `matches()` predicate — back when they were
-// spelled `--restore`.
+/**
+ * Cross-cutting types for the CLI's top-level dispatch.
+ *
+ * `CliDeps` is the bag of everything wired up at startup (exec runner,
+ * status bar, plugin registry, lazy config store, log, env-resolved
+ * paths, color/verbose/debug flags). It's threaded through every
+ * ActionCommand.run(); each action grabs what it needs and ignores the
+ * rest. A single deps shape keeps the wiring trivial — no per-action
+ * wiring in cli.ts.
+ *
+ * `ActionCommand` covers the stand-alone commands: `macup cleanup`,
+ * `restore`, `logo`, `plugins`, `config`, `completions`,
+ * `install-completions`, `undo`, `doctor`. Each carries its own `args`
+ * schema and a `run()`; cli.ts adapts them into citty subcommands
+ * (ADR 0029). They were `FlagAction`s — flag-triggered actions on the
+ * main command with a `matches()` predicate — back when they were
+ * spelled `--restore`.
+ *
+ * @module
+ */
 
 import type { ArgsDef } from 'citty';
 import type { PathResolution } from '../config/paths';

@@ -1,7 +1,11 @@
-// Doctor section 5: Shell integration — detect the current shell from
-// $SHELL and check whether a completions file exists at the path
-// --install-completions would write to. Missing completions are a
-// warning whose hint is the one-liner that fixes it.
+/**
+ * Doctor section 5: Shell integration — detect the current shell from
+ * $SHELL and check whether a completions file exists at the path
+ * --install-completions would write to. Missing completions are a
+ * warning whose hint is the one-liner that fixes it.
+ *
+ * @module
+ */
 
 import { existsSync } from 'node:fs';
 import { resolveInstallPath } from '../../install-completions';

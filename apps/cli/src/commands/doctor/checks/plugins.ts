@@ -1,9 +1,13 @@
-// Doctor section 3: Plugins (deep) — for every built-in plugin, not just
-// the registry-filtered set: binary on PATH → version probe → an actual
-// plugin.list({ onlyOutdated: true }) call under a timeout. "Installed"
-// is not "working". A missing binary is a warning (the plugin is simply
-// disabled); a list() that throws anything other than
-// ErrPluginUnavailable is an error.
+/**
+ * Doctor section 3: Plugins (deep) — for every built-in plugin, not just
+ * the registry-filtered set: binary on PATH → version probe → an actual
+ * plugin.list({ onlyOutdated: true }) call under a timeout. "Installed"
+ * is not "working". A missing binary is a warning (the plugin is simply
+ * disabled); a list() that throws anything other than
+ * ErrPluginUnavailable is an error.
+ *
+ * @module
+ */
 
 import { pathTo } from '../../../plugins/registry';
 import type { Plugin } from '../../../plugins/types';

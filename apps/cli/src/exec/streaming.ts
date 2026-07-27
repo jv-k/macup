@@ -1,11 +1,15 @@
-// Decorator that routes subprocess chunks to the right destination based
-// on the call's kind. Three sinks:
-//   'user-action'  → ui.onUserAction(chunk, source)
-//   'query'        → ui.onQuery(chunk, source)        // usually a no-op
-//   'check'        → ui.onCheck(chunk, source)        // always a no-op
-//
-// The UI sink decides what to actually do with each kind — stream to the
-// gutter, surface a notice, or drop. Plugins stay oblivious to the UI.
+/**
+ * Decorator that routes subprocess chunks to the right destination based
+ * on the call's kind. Three sinks:
+ *   'user-action'  → ui.onUserAction(chunk, source)
+ *   'query'        → ui.onQuery(chunk, source)        // usually a no-op
+ *   'check'        → ui.onCheck(chunk, source)        // always a no-op
+ *
+ * The UI sink decides what to actually do with each kind — stream to the
+ * gutter, surface a notice, or drop. Plugins stay oblivious to the UI.
+ *
+ * @module
+ */
 
 import type { ExecResult, ExecRunKind, ExecRunOptions, ExecRunner } from '../plugins/types';
 
@@ -94,6 +98,10 @@ export class StreamingExecRunner implements ExecRunner {
     return (c, s) => this.sink.onCheck(c, s);
   }
 
+  /**
+   * Run a command and parse its stdout as JSON.
+   * @throws Error when the command exits non-zero, so a caller expecting JSON never parses failure output.
+   */
   async runJson<T = unknown>(
     cmd: string,
     args: readonly string[],

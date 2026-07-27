@@ -1,13 +1,17 @@
-// Startup wiring. Reads the parsed verbosity flags, constructs the
-// status bar, picks the right exec runner via the buildExecRunner
-// factory, and assembles a CliDeps bag for everything downstream.
-//
-// Kept here (vs inline in cli.ts) so the entry point can stay declarative:
-//   const flags = extractVerbosityFlags(process.argv);
-//   const deps  = bootstrap(flags);
-//   …register commands, run main…
-// The bootstrap is also the natural seam for tests that want to drive
-// the CLI in-process with stubbed deps.
+/**
+ * Startup wiring. Reads the parsed verbosity flags, constructs the
+ * status bar, picks the right exec runner via the buildExecRunner
+ * factory, and assembles a CliDeps bag for everything downstream.
+ *
+ * Kept here (vs inline in cli.ts) so the entry point can stay declarative:
+ *   const flags = extractVerbosityFlags(process.argv);
+ *   const deps  = bootstrap(flags);
+ *   …register commands, run main…
+ * The bootstrap is also the natural seam for tests that want to drive
+ * the CLI in-process with stubbed deps.
+ *
+ * @module
+ */
 
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';

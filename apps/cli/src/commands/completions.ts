@@ -1,10 +1,14 @@
-// `--completions <shell>` flag action: emit shell-completion source for
-// zsh / bash / fish to stdout. The bare form (`--completions`) auto-
-// detects the shell from $SHELL via detectShellFromEnv().
-//
-// This is the read-only sibling of --install-completions: same shell
-// resolution, but writes to stdout instead of the XDG completions path.
-// Useful for `eval "$(macup --completions)"` setups.
+/**
+ * `--completions <shell>` flag action: emit shell-completion source for
+ * zsh / bash / fish to stdout. The bare form (`--completions`) auto-
+ * detects the shell from $SHELL via detectShellFromEnv().
+ *
+ * This is the read-only sibling of --install-completions: same shell
+ * resolution, but writes to stdout instead of the XDG completions path.
+ * Useful for `eval "$(macup --completions)"` setups.
+ *
+ * @module
+ */
 
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { generateBashCompletions } from '../completions/bash';

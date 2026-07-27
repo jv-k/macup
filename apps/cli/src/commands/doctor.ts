@@ -1,10 +1,14 @@
-// `macup --doctor` — sectioned self-diagnostic (issue #42).
-//
-// Orchestration only: assemble CheckDeps from the CLI's runtime bag,
-// run the five check modules in parallel, and render. The checks live
-// in doctor/checks/*.ts and the report shape + renderers in
-// doctor/report.ts. Exit semantics: 0 when clean or warnings-only, 1 on
-// any error — warnings never fail the exit.
+/**
+ * `macup --doctor` — sectioned self-diagnostic (issue #42).
+ *
+ * Orchestration only: assemble CheckDeps from the CLI's runtime bag,
+ * run the five check modules in parallel, and render. The checks live
+ * in doctor/checks/*.ts and the report shape + renderers in
+ * doctor/report.ts. Exit semantics: 0 when clean or warnings-only, 1 on
+ * any error — warnings never fail the exit.
+ *
+ * @module
+ */
 
 import { release } from 'node:os';
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';

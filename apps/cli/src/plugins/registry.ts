@@ -1,3 +1,13 @@
+/**
+ * The chokepoint between the backends under `plugins/` and the rest of the app.
+ *
+ * Holds the closed set of built-ins and filters it by supported OS and by which
+ * binaries resolve on PATH. Adding a backend is one import and one line here
+ * (`CLAUDE.md`).
+ *
+ * @module
+ */
+
 import { createAllPlugin } from '../../plugins/all';
 import appstorePlugin from '../../plugins/appstore';
 import brewPlugin from '../../plugins/brew';

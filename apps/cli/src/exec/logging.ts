@@ -1,12 +1,16 @@
-// File logging (#16): an ExecRunner decorator that appends one record per
-// subprocess to a file, for cron and launchd runs, audit trails, and bug
-// reports. ADR 0010 makes the ExecRunner the single seam every command passes
-// through, which is what lets this be one decorator rather than a call at
-// every shell-out site.
-//
-// It is a pure side channel. Terminal output is byte-identical with and
-// without it, so unlike --debug and --verbose it composes with whatever else
-// is wrapping the runner instead of replacing it.
+/**
+ * File logging (#16): an ExecRunner decorator that appends one record per
+ * subprocess to a file, for cron and launchd runs, audit trails, and bug
+ * reports. ADR 0010 makes the ExecRunner the single seam every command passes
+ * through, which is what lets this be one decorator rather than a call at
+ * every shell-out site.
+ *
+ * It is a pure side channel. Terminal output is byte-identical with and
+ * without it, so unlike --debug and --verbose it composes with whatever else
+ * is wrapping the runner instead of replacing it.
+ *
+ * @module
+ */
 
 import { appendFileSync, chmodSync, mkdirSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -154,6 +158,10 @@ export class LoggingExecRunner implements ExecRunner {
   // Routed through this.run so JSON-extracting calls are logged too — they are
   // subprocesses like any other, and a bug report that silently omitted them
   // would be missing exactly the calls that shape what macup decided to do.
+  /**
+   * Run a command and parse its stdout as JSON.
+   * @throws Error when the command exits non-zero, so a caller expecting JSON never parses failure output.
+   */
   async runJson<T = unknown>(
     cmd: string,
     args: readonly string[],

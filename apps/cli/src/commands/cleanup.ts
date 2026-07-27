@@ -1,3 +1,12 @@
+/**
+ * `macup cleanup`: delete this applist's backups after confirming.
+ *
+ * The decision logic takes its prompt and its output as parameters, so the
+ * confirm-then-delete flow is testable without a terminal.
+ *
+ * @module
+ */
+
 import { confirm, isCancel } from '@clack/prompts';
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { BackupStore } from '../config/backup';

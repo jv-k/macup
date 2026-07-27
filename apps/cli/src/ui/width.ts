@@ -1,8 +1,12 @@
-// Visual cell width, ANSI-aware. One definition, shared by the layout/help
-// code (re-exported from ui/log) and the status bar. These used to carry two
-// different ANSI regexes that disagreed on what to strip: ui/log matched only
-// SGR colour sequences, the status bar matched every CSI sequence. Measuring a
-// styled string now strips the same set in both places.
+/**
+ * Visual cell width, ANSI-aware. One definition, shared by the layout/help
+ * code (re-exported from ui/log) and the status bar. These used to carry two
+ * different ANSI regexes that disagreed on what to strip: ui/log matched only
+ * SGR colour sequences, the status bar matched every CSI sequence. Measuring a
+ * styled string now strips the same set in both places.
+ *
+ * @module
+ */
 
 // Strip every CSI escape sequence — colour AND cursor movement — so a measured
 // string counts only the cells it actually occupies.

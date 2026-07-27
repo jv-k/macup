@@ -1,3 +1,14 @@
+/**
+ * Read/write access to one applist, and the only sanctioned path for mutating it.
+ *
+ * Three guarantees callers depend on: comments and formatting on untouched lines
+ * survive (edits go through the YAML CST, not a parse/stringify round trip),
+ * every changing write is preceded by a backup and lands via a temp file plus
+ * rename, and a no-op mutation writes nothing at all (#48).
+ *
+ * @module
+ */
+
 import { copyFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Document, Scalar, YAMLMap, YAMLSeq, parseDocument } from 'yaml';

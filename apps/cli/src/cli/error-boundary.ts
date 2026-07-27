@@ -1,15 +1,19 @@
-// citty's runMain catches whatever escapes a command and hands it to
-// consola, which prints the message followed by an internal stack trace.
-// For a MacupError — a condition we diagnosed and worded FOR the user,
-// like an invalid applist — that trace buries the advice under noise and
-// reads like a crash. citty's own CLIError (the escape hatch runMain
-// checks for) isn't exported, so the boundary lives here instead: catch
-// MacupError at each command's edge, print just the message, and set the
-// exit code. Anything else still escapes with its trace intact.
-//
-// Lives in its own module (rather than inline in cli.ts) so it can be
-// exercised directly — cli.ts runs the whole CLI on import, so anything
-// defined there is untestable without spawning a process.
+/**
+ * citty's runMain catches whatever escapes a command and hands it to
+ * consola, which prints the message followed by an internal stack trace.
+ * For a MacupError — a condition we diagnosed and worded FOR the user,
+ * like an invalid applist — that trace buries the advice under noise and
+ * reads like a crash. citty's own CLIError (the escape hatch runMain
+ * checks for) isn't exported, so the boundary lives here instead: catch
+ * MacupError at each command's edge, print just the message, and set the
+ * exit code. Anything else still escapes with its trace intact.
+ *
+ * Lives in its own module (rather than inline in cli.ts) so it can be
+ * exercised directly — cli.ts runs the whole CLI on import, so anything
+ * defined there is untestable without spawning a process.
+ *
+ * @module
+ */
 
 import type { ArgsDef, CommandDef } from 'citty';
 import { MacupError } from '../errors';

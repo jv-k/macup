@@ -1,16 +1,20 @@
-// An in-process pager for output that outgrows the terminal.
-//
-// The help screen is ~83 lines against a 24-row terminal, so the logo,
-// usage and half the plugin table scrolled away before the user could read
-// them. `git` solves this by piping to $PAGER, but that means spawning a
-// process, and ExecRunner (the one sanctioned way to do that here) buffers
-// output rather than handing a child the TTY, which is exactly what a pager
-// needs. Paging in-process sidesteps both: no subprocess, no $PAGER to
-// disagree with, and it drives over injectable streams so tests exercise
-// the real thing without a terminal.
-//
-// Piped output is left exactly as it was. `macup --help | grep` and CI logs
-// must not learn that this module exists.
+/**
+ * An in-process pager for output that outgrows the terminal.
+ *
+ * The help screen is ~83 lines against a 24-row terminal, so the logo,
+ * usage and half the plugin table scrolled away before the user could read
+ * them. `git` solves this by piping to $PAGER, but that means spawning a
+ * process, and ExecRunner (the one sanctioned way to do that here) buffers
+ * output rather than handing a child the TTY, which is exactly what a pager
+ * needs. Paging in-process sidesteps both: no subprocess, no $PAGER to
+ * disagree with, and it drives over injectable streams so tests exercise
+ * the real thing without a terminal.
+ *
+ * Piped output is left exactly as it was. `macup --help | grep` and CI logs
+ * must not learn that this module exists.
+ *
+ * @module
+ */
 
 import { emitKeypressEvents } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';

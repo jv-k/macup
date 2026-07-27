@@ -1,3 +1,13 @@
+/**
+ * Assembles the exec runner for one invocation from its decorators.
+ *
+ * `--debug` and the streaming sink are alternative ways of showing the same
+ * output on the terminal, so they exclude each other; file logging writes
+ * elsewhere, so it layers on top (ADR 0045).
+ *
+ * @module
+ */
+
 import type { ExecRunner } from '../plugins/types';
 import { LoggingExecRunner } from './logging';
 import { StreamingExecRunner, type UiSink } from './streaming';

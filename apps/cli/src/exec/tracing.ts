@@ -1,3 +1,13 @@
+/**
+ * `--debug`: a full trace of every shell call on stderr.
+ *
+ * Announces each command before running it, streams its output line-buffered,
+ * and closes with the exit code and elapsed time, so a long-running call is
+ * visible rather than silent.
+ *
+ * @module
+ */
+
 import pc from 'picocolors';
 import type { ExecResult, ExecRunOptions, ExecRunner } from '../plugins/types';
 
@@ -97,6 +107,10 @@ export class TracingExecRunner implements ExecRunner {
 
   // Routed through this.run so JSON-extracting calls trace too. The
   // upstream ExecaExecRunner implements runJson the same way (run + parse).
+  /**
+   * Run a command and parse its stdout as JSON.
+   * @throws Error when the command exits non-zero, so a caller expecting JSON never parses failure output.
+   */
   async runJson<T = unknown>(
     cmd: string,
     args: readonly string[],

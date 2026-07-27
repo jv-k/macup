@@ -1,8 +1,12 @@
-// ASCII-art Apple logo with scattered programming keywords.
-// Ported from bin/macos-updatetool (commit 1864090). The original zsh
-// rendered each character in a random 256-colour ANSI foreground; we
-// preserve that effect here with an injectable RNG for determinism
-// under tests and NO_COLOR compliance for scripting/CI.
+/**
+ * ASCII-art Apple logo with scattered programming keywords.
+ * Ported from bin/macos-updatetool (commit 1864090). The original zsh
+ * rendered each character in a random 256-colour ANSI foreground; we
+ * preserve that effect here with an injectable RNG for determinism
+ * under tests and NO_COLOR compliance for scripting/CI.
+ *
+ * @module
+ */
 
 /** The logo as rows of block characters, scaled at render time rather than stored per size. */
 export const APPLE_LOGO: readonly string[] = [

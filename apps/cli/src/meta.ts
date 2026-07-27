@@ -1,15 +1,19 @@
-// macup/meta — serializable documentation metadata.
-//
-// The single aggregation point for the docs site's generated reference.
-// Where the CLI has a live data structure — the plugin registry, the
-// completion command/flag tables, the config schema, the outdated arg
-// defs, the bare-word alias list, the version — this module projects it
-// directly, so those parts of the reference cannot drift. Exit codes
-// and env-var reads have no such structure (they are scattered control
-// flow); their tables below are hand-maintained mirrors and CAN drift —
-// update them when the mirrored source changes. Exported via the
-// package's "./meta" entry (dist/meta.mjs) and consumed by
-// apps/docs/scripts/generate-reference.ts.
+/**
+ * macup/meta — serializable documentation metadata.
+ *
+ * The single aggregation point for the docs site's generated reference.
+ * Where the CLI has a live data structure — the plugin registry, the
+ * completion command/flag tables, the config schema, the outdated arg
+ * defs, the bare-word alias list, the version — this module projects it
+ * directly, so those parts of the reference cannot drift. Exit codes
+ * and env-var reads have no such structure (they are scattered control
+ * flow); their tables below are hand-maintained mirrors and CAN drift —
+ * update them when the mirrored source changes. Exported via the
+ * package's "./meta" entry (dist/meta.mjs) and consumed by
+ * apps/docs/scripts/generate-reference.ts.
+ *
+ * @module
+ */
 
 import { FLAG_COMMAND_ALIASES } from './cli/argv';
 import { CHECK_ARGS } from './commands/check';

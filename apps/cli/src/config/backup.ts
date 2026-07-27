@@ -1,3 +1,13 @@
+/**
+ * Backup naming, listing, and restore for one applist.
+ *
+ * Filenames are namespaced by the applist's basename, because two applists can
+ * share a config directory and a restore that offered the other one's snapshots
+ * would overwrite the wrong file (ADR 0044).
+ *
+ * @module
+ */
+
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { access, copyFile, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/promises';

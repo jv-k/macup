@@ -1,15 +1,19 @@
-// Concrete TTY-side wiring for the interactive wizard. Imports the
-// abstract picker primitives from ./wizard (pickTarget, pickAction) and
-// supplies the clack callbacks, the package-loading IO, the
-// configstore-backed sync-tracked apply, and the dispatch back into
-// citty's per-plugin subcommand for the chosen action.
-//
-// runWizard() is the default-action body that used to be inlined inside
-// cli.ts's main.run(). Extracting it lets cli.ts shrink to a thin entry
-// point and gives the wizard runtime a place where its helpers
-// (pickerMessage, pickerMaxItems, printAboutScreen, pluginCategoryFor,
-// promptTrackedSetPicker, applySyncTracked) sit together instead of
-// scattered through a 988-line file.
+/**
+ * Concrete TTY-side wiring for the interactive wizard. Imports the
+ * abstract picker primitives from ./wizard (pickTarget, pickAction) and
+ * supplies the clack callbacks, the package-loading IO, the
+ * configstore-backed sync-tracked apply, and the dispatch back into
+ * citty's per-plugin subcommand for the chosen action.
+ *
+ * runWizard() is the default-action body that used to be inlined inside
+ * cli.ts's main.run(). Extracting it lets cli.ts shrink to a thin entry
+ * point and gives the wizard runtime a place where its helpers
+ * (pickerMessage, pickerMaxItems, printAboutScreen, pluginCategoryFor,
+ * promptTrackedSetPicker, applySyncTracked) sit together instead of
+ * scattered through a 988-line file.
+ *
+ * @module
+ */
 
 import { isCancel, note, select, text } from '@clack/prompts';
 import { type CommandDef, runCommand } from 'citty';

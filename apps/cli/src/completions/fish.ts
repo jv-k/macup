@@ -1,3 +1,12 @@
+/**
+ * The fish completion script, generated from the plugin manifests.
+ *
+ * File completion is disabled globally and re-enabled per flag that takes a
+ * path, so a package name never completes to a filename.
+ *
+ * @module
+ */
+
 import type { Plugin } from '../plugins/types';
 import {
   TOP_LEVEL_COMMANDS,

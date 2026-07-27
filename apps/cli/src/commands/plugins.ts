@@ -1,3 +1,13 @@
+/**
+ * `macup plugins`: which backends are usable on this machine, and why the rest
+ * are not.
+ *
+ * Machine facts are injected, so availability is assertable without depending on
+ * the developer's PATH.
+ *
+ * @module
+ */
+
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import type { Plugin, PluginCapabilities } from '../plugins/types';
 import { GLYPHS, paint } from '../ui/log';

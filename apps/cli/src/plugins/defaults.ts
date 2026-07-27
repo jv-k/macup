@@ -1,3 +1,13 @@
+/**
+ * Shared plugin behaviour, so each backend implements only what is genuinely its
+ * own.
+ *
+ * `defaultCheck` is the availability gate most plugins want: every binary in
+ * `requires` must resolve on PATH (ADR 0011).
+ *
+ * @module
+ */
+
 import { ErrPluginUnavailable } from '../errors';
 import type { Plugin, PluginContext } from './types';
 
@@ -6,6 +16,7 @@ import type { Plugin, PluginContext } from './types';
  * Throws ErrPluginUnavailable on the first missing one with a generic
  * "`bin` was not found on PATH" message. Plugins that need a custom hint
  * (e.g. appstore's "install via brew install mas") write their own.
+ * @throws ErrPluginUnavailable — raised by the returned check on the first required binary that does not resolve on PATH.
  */
 export function defaultCheck(pluginId: string, requires: readonly string[]): Plugin['check'] {
   return async (ctx: PluginContext) => {

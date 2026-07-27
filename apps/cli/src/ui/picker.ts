@@ -1,3 +1,12 @@
+/**
+ * The multi-select the wizard drives.
+ *
+ * Rows carry their value rather than only a label, because returning the label
+ * is what made selections resolve to the wrong package (#50).
+ *
+ * @module
+ */
+
 import type { Readable, Writable } from 'node:stream';
 import {
   S_BAR,

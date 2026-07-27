@@ -1,3 +1,12 @@
+/**
+ * `macup config`: where config lives, whether it parses, and what it holds.
+ *
+ * The report builder is shared with doctor's Config section, so the two cannot
+ * drift on what "valid" means.
+ *
+ * @module
+ */
+
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { parse } from 'yaml';

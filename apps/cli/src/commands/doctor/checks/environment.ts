@@ -1,6 +1,10 @@
-// Doctor section 1: Environment — orientation info for bug reports.
-// macOS version, shell, Node (error if < 20, matching the engines
-// field), and the macup version itself.
+/**
+ * Doctor section 1: Environment — orientation info for bug reports.
+ * macOS version, shell, Node (error if < 20, matching the engines
+ * field), and the macup version itself.
+ *
+ * @module
+ */
 
 import type { CheckDeps, CheckResult, Section } from '../report';
 

@@ -1,3 +1,12 @@
+/**
+ * `macup restore`: pick a backup and copy it over the live applist.
+ *
+ * Scoped to the active applist's backup namespace, so restoring `work.yaml`
+ * cannot offer a snapshot of the default one (ADR 0044).
+ *
+ * @module
+ */
+
 import { confirm, isCancel, outro, select } from '@clack/prompts';
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { type BackupEntry, BackupStore } from '../config/backup';

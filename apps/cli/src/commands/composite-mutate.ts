@@ -1,3 +1,13 @@
+/**
+ * The host-owned fan-out behind `all install` and `all update`.
+ *
+ * Lives here rather than in a backend-less plugin (ADR 0033) so each
+ * constituent's failure is isolated: one unavailable backend is reported and
+ * stepped over instead of aborting the run.
+ *
+ * @module
+ */
+
 import type { ConfigStore } from '../config/store';
 import { ErrPluginUnavailable } from '../errors';
 import { resolveSelection } from '../plugins/selection';

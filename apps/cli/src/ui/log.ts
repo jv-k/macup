@@ -1,3 +1,13 @@
+/**
+ * Every piece of formatted output macup prints: section pills, package rows,
+ * notices, and the column formatter.
+ *
+ * Colour is resolved per call from `NO_COLOR` and TTY state rather than at
+ * import, so piped output is plain without the caller branching.
+ *
+ * @module
+ */
+
 import { S_BAR } from '@clack/prompts';
 import pc from 'picocolors';
 import { useColor as useColorFn } from '../runtime';

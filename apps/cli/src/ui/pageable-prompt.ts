@@ -1,3 +1,11 @@
+/**
+ * clack's autocomplete with paging, for candidate lists taller than the terminal.
+ *
+ * Without it a long `search` result set scrolls its own prompt off the screen.
+ *
+ * @module
+ */
+
 import { type AutocompleteOptions, AutocompletePrompt } from '@clack/core';
 
 interface OptionLike {

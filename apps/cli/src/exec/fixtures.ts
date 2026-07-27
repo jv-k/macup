@@ -1,3 +1,13 @@
+/**
+ * A runner that replays recorded subprocess results instead of running anything.
+ *
+ * This is what makes the plugin suites hermetic (`docs/TESTING_STRATEGY.md`): no
+ * live backend, no mutated machine state in CI. A call with no matching fixture
+ * throws, so a plugin that starts issuing a new command fails loudly.
+ *
+ * @module
+ */
+
 import { readFile } from 'node:fs/promises';
 import type { ExecResult, ExecRunner } from '../plugins/types';
 
@@ -45,6 +55,11 @@ export class FixtureExecRunner implements ExecRunner {
     this.pathSet = new Set(opts.onPath ?? [...new Set(this.fixtures.map((f) => f.cmd))]);
   }
 
+  /**
+   * Replay the recording matching this command and its exact arguments.
+   * @throws Error when no fixture matches, so a newly issued command fails loudly
+   * rather than silently seeing an empty result.
+   */
   async run(cmd: string, args: readonly string[]): Promise<ExecResult> {
     for (let i = 0; i < this.fixtures.length; i++) {
       const f = this.fixtures[i] as FixtureEntry;
@@ -60,6 +75,10 @@ export class FixtureExecRunner implements ExecRunner {
     throw new Error(`Fixture miss: ${cmd} ${args.join(' ')} — add a fixture or adjust the call`);
   }
 
+  /**
+   * Replay a recording and parse its stdout as JSON.
+   * @throws Error when the command exits non-zero, so a caller expecting JSON never parses failure output.
+   */
   async runJson<T = unknown>(cmd: string, args: readonly string[]): Promise<T> {
     const r = await this.run(cmd, args);
     if (r.exitCode !== 0) {

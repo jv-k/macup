@@ -1,8 +1,12 @@
-// Doctor section 2: Config — config dir writable, applist.yaml parses
-// and validates against the zod schema (the Zod error is shown in
-// detail, not swallowed), backup dir with count + size. Reuses
-// buildConfigReport from the --config command so the two surfaces can't
-// drift on what "valid" means.
+/**
+ * Doctor section 2: Config — config dir writable, applist.yaml parses
+ * and validates against the zod schema (the Zod error is shown in
+ * detail, not swallowed), backup dir with count + size. Reuses
+ * buildConfigReport from the --config command so the two surfaces can't
+ * drift on what "valid" means.
+ *
+ * @module
+ */
 
 import { constants, accessSync, existsSync } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';

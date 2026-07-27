@@ -1,15 +1,19 @@
-// `macup check` — health-check for shell prompts, cron, and CI gates.
-//
-// Exit 0 only when everything is verified up to date; 1 when anything is
-// outdated OR a plugin couldn't be checked at all. A benign missing
-// backend (`ErrPluginUnavailable`) is ignored — you can't be outdated on a
-// tool you don't have — but a plugin whose check/list actually FAILED is
-// surfaced and fails the exit, so a CI gate never reports a clean bill of
-// health it couldn't verify. Reuses the outdated aggregation
-// (buildOutdatedReport) so check and outdated agree on "outdated".
-// Output is a single plain line on stdout (no header, spinner, or ANSI) so
-// `$(...)` consumers — the `macup init` snippets — capture it verbatim.
-// `--quiet` suppresses even that line.
+/**
+ * `macup check` — health-check for shell prompts, cron, and CI gates.
+ *
+ * Exit 0 only when everything is verified up to date; 1 when anything is
+ * outdated OR a plugin couldn't be checked at all. A benign missing
+ * backend (`ErrPluginUnavailable`) is ignored — you can't be outdated on a
+ * tool you don't have — but a plugin whose check/list actually FAILED is
+ * surfaced and fails the exit, so a CI gate never reports a clean bill of
+ * health it couldn't verify. Reuses the outdated aggregation
+ * (buildOutdatedReport) so check and outdated agree on "outdated".
+ * Output is a single plain line on stdout (no header, spinner, or ANSI) so
+ * `$(...)` consumers — the `macup init` snippets — capture it verbatim.
+ * `--quiet` suppresses even that line.
+ *
+ * @module
+ */
 
 import { defineCommand } from 'citty';
 import type { CliDeps } from '../cli/types';

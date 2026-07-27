@@ -1,9 +1,13 @@
-// The single registry of macup's top-level (stand-alone) commands — the nouns
-// that sit where a plugin id goes (ADR 0029). Dispatch is wired in cli.ts; this
-// list is what the help screen prints, what the shells complete, and what the
-// docs reference projects. One description per command, defined once here, so
-// help / completions / docs can no longer drift (they used to keep three lists,
-// and the help screen silently omitted `doctor` and `completions`).
+/**
+ * The single registry of macup's top-level (stand-alone) commands — the nouns
+ * that sit where a plugin id goes (ADR 0029). Dispatch is wired in cli.ts; this
+ * list is what the help screen prints, what the shells complete, and what the
+ * docs reference projects. One description per command, defined once here, so
+ * help / completions / docs can no longer drift (they used to keep three lists,
+ * and the help screen silently omitted `doctor` and `completions`).
+ *
+ * @module
+ */
 
 /** One command that sits where a plugin id would go: `macup restore`, not `macup --restore`. */
 export interface TopLevelCommand {

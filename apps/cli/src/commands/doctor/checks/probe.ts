@@ -1,10 +1,14 @@
-// Shared plugin-probe plumbing for the deep checks (plugins.ts and
-// data-integrity.ts). A probe actually calls plugin.list() — "installed"
-// is not "working" — under a hard timeout, and classifies the outcome so
-// the checks can map it to a CheckResult level without re-implementing
-// the error taxonomy: ErrPluginUnavailable is a warning (missing backend,
-// per the plugin contract), a timeout is a warning (slow ≠ broken), and
-// anything else thrown by list() is a genuine error.
+/**
+ * Shared plugin-probe plumbing for the deep checks (plugins.ts and
+ * data-integrity.ts). A probe actually calls plugin.list() — "installed"
+ * is not "working" — under a hard timeout, and classifies the outcome so
+ * the checks can map it to a CheckResult level without re-implementing
+ * the error taxonomy: ErrPluginUnavailable is a warning (missing backend,
+ * per the plugin contract), a timeout is a warning (slow ≠ broken), and
+ * anything else thrown by list() is a genuine error.
+ *
+ * @module
+ */
 
 import { ErrPluginUnavailable } from '../../../errors';
 import type { ListOptions, PackageStatus, Plugin } from '../../../plugins/types';

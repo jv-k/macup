@@ -5,10 +5,19 @@ on:
   push:
     branches: [main, develop]
 
+# One in-flight run per ref. A force-push mid-review (rebases, review fixups)
+# used to leave the superseded macOS matrix running to completion. Pushes to
+# main/develop are left alone so every merged commit keeps a completed run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     name: Lint + typecheck
-    runs-on: macos-latest
+    # biome and tsc are platform-independent, and macOS runners bill at 10x.
+    # The darwin-only surface is exercised by `test` and `compile-smoke`.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -46,7 +55,9 @@ jobs:
 
   build:
     name: Build (tsup)
-    runs-on: macos-latest
+    # tsup emits platform-neutral ESM; the darwin single binary is
+    # compile-smoke's job.
+    runs-on: ubuntu-latest
     needs: [lint, test]
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +75,8 @@ jobs:
 
   docs-build:
     name: Build docs site
-    runs-on: macos-latest
+    # A Next.js build with no darwin dependency.
+    runs-on: ubuntu-latest
     needs: [lint, test]
     steps:
       - uses: actions/checkout@v4

@@ -151,8 +151,9 @@ rather than replacing one.
 
 <Callout type="warn">
   The log contains whole subprocess output, so treat it as sensitive. macup
-  creates it `0600` and masks credential-shaped arguments such as `--token` and
-  passwords in URLs, but it does not attempt to redact the output itself, since
+  keeps it `0600`, tightening an existing log that is looser, and masks
+  credential-shaped arguments such as `--token`, `--auth-token`, and passwords
+  in URLs. It does not attempt to redact the output itself, since
   there is no way to do that without risking either missing a secret or
   mangling the log. Skim it before attaching it to a bug report.
 </Callout>

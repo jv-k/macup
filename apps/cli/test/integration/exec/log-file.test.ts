@@ -4,7 +4,7 @@
 // mode, which is the mitigation for writing whole subprocess output to disk.
 
 import { existsSync, statSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -58,7 +58,11 @@ describe('fileLogSink', () => {
     expect(records.map((r) => r.cmd)).toEqual(['earlier', 'brew']);
   });
 
-  it('survives a second process appending to the same path', async () => {
+  // Two sinks, one process: this covers interleaved writers sharing a path,
+  // which is what $MACUP_LOG invites. It is NOT a cross-process test, and
+  // O_APPEND only makes a single write(2) atomic, so a record large enough to
+  // be split across writes can still interleave. ADR 0045 says so.
+  it('keeps records intact when two sinks share a path', async () => {
     const path = join(dir, 'macup.log');
     const a = new LoggingExecRunner(stub, { append: fileLogSink(path) });
     const b = new LoggingExecRunner(stub, { append: fileLogSink(path) });
@@ -102,5 +106,37 @@ describe('fileLogSink', () => {
     const text = await readFile(path, 'utf8');
     expect(text).not.toContain('super-secret-value');
     expect(text).toContain('***');
+  });
+});
+
+// Found in review: `mode` on appendFileSync applies only when the file is
+// CREATED. A log that already exists — touched by hand, restored from a
+// backup, created by launchd under a different umask — kept its old mode while
+// receiving whole subprocess output. ADR 0045 names the file mode as THE
+// mitigation for not redacting output, so this had to hold for an existing
+// file too, not just a fresh one.
+describe('fileLogSink — an existing log is tightened, not trusted', () => {
+  it('tightens a pre-existing world-readable log before writing to it', async () => {
+    const path = join(dir, 'macup.log');
+    await writeFile(path, '', { encoding: 'utf8', mode: 0o644 });
+    await chmod(path, 0o644);
+    const runner = new LoggingExecRunner(stub, { append: fileLogSink(path) });
+    await runner.run('brew', ['list']);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+  });
+
+  it('leaves an already-private log alone', async () => {
+    const path = join(dir, 'macup.log');
+    await writeFile(path, '', { encoding: 'utf8', mode: 0o600 });
+    await chmod(path, 0o600);
+    const runner = new LoggingExecRunner(stub, { append: fileLogSink(path) });
+    await runner.run('brew', ['list']);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+  });
+
+  it('does not lose the run when the path is not a regular file it can chmod', async () => {
+    // A directory: statable but not a log. Logging gives up, the run does not.
+    const runner = new LoggingExecRunner(stub, { append: fileLogSink(dir), onSinkError: () => {} });
+    await expect(runner.run('brew', ['list'])).resolves.toMatchObject({ exitCode: 0 });
   });
 });

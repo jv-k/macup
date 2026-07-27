@@ -8,14 +8,22 @@
 // without it, so unlike --debug and --verbose it composes with whatever else
 // is wrapping the runner instead of replacing it.
 
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { ExecResult, ExecRunOptions, ExecRunner } from '../plugins/types';
+import * as logui from '../ui/log';
 
 /** One completed subprocess, as written to the log. */
 export interface LogRecord {
   /** ISO-8601, when the command started. */
   ts: string;
+  /**
+   * The macup process that ran the command. $MACUP_LOG invites more than one
+   * run to share a file, and appending forever means a nightly job builds one
+   * undelimited stream — without this a reader cannot tell one run's commands
+   * from another's, or de-interleave two concurrent runs (found in review).
+   */
+  pid: number;
   cmd: string;
   /** Arguments after redaction; see redactArgs. */
   args: string[];
@@ -33,22 +41,35 @@ export interface LoggingOptions {
   readonly onSinkError?: (err: unknown) => void;
 }
 
-// Flags whose value is a credential. Matched case-insensitively against the
-// flag name, in both the `--flag=value` and `--flag value` spellings.
+// A name whose value is a credential, matched on the SUFFIX rather than an
+// exact list: `--token`, `--auth-token`, `--authToken`, `--registry-password`,
+// and `npm_config_token` are all the same idea, and an exact list missed most
+// of them (found in review). Suffix-matching is what keeps `--authors` out
+// while letting `--auth-token` in — the secret word has to end the name.
 //
-// This covers what macup can actually reason about: the argv it assembled.
-// stdout and stderr are written verbatim, because there is no way to tell a
-// secret from ordinary output without either missing some or corrupting the
-// log — and a log you cannot trust to be complete is worse than no log. The
-// mitigation is the file mode: see fileLogSink.
-const SECRET_FLAG_RE = /^--(?:token|password|passwd|secret|auth|api[-_]?key|access[-_]?token)$/i;
-const SECRET_INLINE_RE =
-  /^(--(?:token|password|passwd|secret|auth|api[-_]?key|access[-_]?token))=.*$/i;
-// Credentials in a URL's userinfo: scheme://user:secret@host. The password is
-// masked and the username kept, which is usually the part worth reading.
-const URL_CREDENTIALS_RE = /^([a-z][a-z0-9+.-]*:\/\/[^/:@\s]+:)[^@\s]*@/i;
+// Leading dashes are optional so `KEY=value` positionals are covered too.
+const SECRET_NAME = '[A-Za-z0-9_.-]*?(?:token|password|passwd|secret|credential|auth|api[-_]?key)';
+const SECRET_INLINE_RE = new RegExp(`^(-{0,2}${SECRET_NAME})=.*$`, 'i');
+const SECRET_FLAG_RE = new RegExp(`^--${SECRET_NAME}$`, 'i');
+// Credentials in a URL's userinfo: scheme://user:secret@host. Unanchored and
+// global, because the URL is often the value of a flag (`--registry=https://…`)
+// rather than the whole argument. The password is masked and the username kept,
+// which is usually the part worth reading.
+const URL_CREDENTIALS_RE = /([a-z][a-z0-9+.-]*:\/\/[^/:@\s]+:)[^@\s]*@/gi;
 
-/** Argv with credential-shaped values masked, for writing to disk. */
+/**
+ * Argv with credential-shaped values masked, for writing to disk.
+ *
+ * This covers what macup can actually reason about: the argv it assembled.
+ * stdout and stderr are written verbatim, because there is no way to tell a
+ * secret from ordinary output without either missing some or corrupting the
+ * log — and a log you cannot trust to be complete is worse than no log. The
+ * mitigation for that is the file mode: see fileLogSink.
+ *
+ * Single-letter flags are deliberately left alone. `-t` carries no hint about
+ * what its value is, so masking it would corrupt ordinary arguments far more
+ * often than it would hide a secret.
+ */
 export function redactArgs(args: readonly string[]): string[] {
   const out: string[] = [];
   let maskNext = false;
@@ -60,6 +81,8 @@ export function redactArgs(args: readonly string[]): string[] {
     }
     const inline = SECRET_INLINE_RE.exec(arg);
     if (inline) {
+      // The whole value goes, not just a pattern inside it: a credential flag's
+      // value is a credential regardless of what shape it happens to have.
       out.push(`${inline[1]}=***`);
       continue;
     }
@@ -89,6 +112,7 @@ export class LoggingExecRunner implements ExecRunner {
     const result = await this.inner.run(cmd, args, opts);
     this.write({
       ts: started.toISOString(),
+      pid: process.pid,
       cmd,
       args: redactArgs(args),
       exitCode: result.exitCode,
@@ -139,7 +163,7 @@ export class LoggingExecRunner implements ExecRunner {
 
 function defaultSinkError(err: unknown): void {
   const reason = err instanceof Error ? err.message : String(err);
-  console.warn(`warning: could not write the log file, continuing without it (${reason})`);
+  console.warn(logui.warning(`could not write the log file, continuing without it (${reason})`));
 }
 
 /**
@@ -154,12 +178,34 @@ function defaultSinkError(err: unknown): void {
  * subprocess, against a subprocess that just took milliseconds at minimum.
  */
 export function fileLogSink(path: string): (line: string) => void {
-  let ensuredDir = false;
+  let prepared = false;
   return (line: string) => {
-    if (!ensuredDir) {
+    if (!prepared) {
       mkdirSync(dirname(path), { recursive: true });
-      ensuredDir = true;
+      tightenExistingLog(path);
+      prepared = true;
     }
     appendFileSync(path, line, { encoding: 'utf8', mode: 0o600 });
   };
+}
+
+// `mode` on appendFileSync applies only when the file is CREATED, so a log that
+// already exists keeps whatever permissions it had — touched by hand under a
+// 022 umask, restored from a backup, created by launchd — while receiving whole
+// subprocess output (found in review). ADR 0045 leans on the mode as the
+// mitigation for not redacting output, so it has to hold for an existing file
+// too, not only a fresh one.
+function tightenExistingLog(path: string): void {
+  let mode: number;
+  try {
+    const stats = statSync(path);
+    // Only a regular file has a mode worth managing. Anything else the user
+    // pointed us at (a fifo, /dev/stdout) is theirs to reason about.
+    if (!stats.isFile()) return;
+    mode = stats.mode & 0o777;
+  } catch {
+    // Not there yet: the append below creates it 0600.
+    return;
+  }
+  if ((mode & 0o177) !== 0) chmodSync(path, 0o600);
 }

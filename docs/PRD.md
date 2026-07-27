@@ -425,13 +425,13 @@ v1.0.x polish:
 - **#5** Tracked marker in `list --all` + wizard multiselect (re-scoped; tracked-by-default listing already shipped)
 - **#6** Rollback / undo command
 - **#7** Config schema `version:` field
+- **#16** File logging (`--log`, `MACUP_LOG`): shipped; JSON-lines subprocess records, distinct from `--verbose` (ADR 0045)
 
 ### 8.3 Mid-term (v1.1, scriptability + bundles)
 
 - **Bundles**: the headline v1.1 feature (see section 5.8), tracked as epic #32, split into #27, #28, #29, #30, and #31
 - **#9** `macup check` for shell prompts / cron (feeds #24's prompt integration)
 - **#12** Changelog / diff view before updates
-- **#16** File logging (`--log`, `MACUP_LOG`): distinct from `--verbose`; persists traces to disk for post-hoc inspection
 
 ### 8.4 Long-term (v1.2+, ecosystem)
 

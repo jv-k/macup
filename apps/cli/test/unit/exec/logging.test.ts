@@ -153,3 +153,74 @@ describe('redactArgs', () => {
     expect(redactArgs(['--token=abc', 'ripgrep'])).toEqual(['--token=***', 'ripgrep']);
   });
 });
+
+// Found in review: the first cut keyed on an exact list of flag names and an
+// `^`-anchored URL pattern, so `--auth-token`, `--authToken=`, `npm_config_token=`
+// and any `--flag=<url-with-credentials>` all reached disk in the clear.
+describe('redactArgs — leaks found in review', () => {
+  const SECRET = 'SEKRET';
+  const leaked = (args: string[]) => redactArgs(args).join(' ').includes(SECRET);
+
+  it.each([
+    ['--auth-token', SECRET],
+    ['--auth_token', SECRET],
+    ['--authToken', SECRET],
+    ['--registry-password', SECRET],
+  ])('masks the value after %s', (flag, secret) => {
+    expect(leaked([flag, secret])).toBe(false);
+  });
+
+  it.each([
+    `--auth-token=${SECRET}`,
+    `--authToken=${SECRET}`,
+    `npm_config_token=${SECRET}`,
+    `NPM_TOKEN=${SECRET}`,
+    `--api_key=${SECRET}`,
+  ])('masks the inline value in %s', (arg) => {
+    expect(leaked([arg])).toBe(false);
+  });
+
+  it('masks URL credentials that are not at the start of the argument', () => {
+    expect(leaked([`--registry=https://user:${SECRET}@registry.io/`])).toBe(false);
+  });
+
+  it('keeps the part of the argument that is not the secret, so the log stays readable', () => {
+    // `--registry` is not itself a credential flag, so only the password inside
+    // the URL is masked. Which registry was used stays legible, and that is the
+    // part someone reading a bug report needs.
+    expect(redactArgs([`--registry=https://user:${SECRET}@registry.io/`])).toEqual([
+      '--registry=https://user:***@registry.io/',
+    ]);
+    expect(redactArgs([`https://user:${SECRET}@registry.io/`])).toEqual([
+      'https://user:***@registry.io/',
+    ]);
+  });
+
+  it('blanks the whole value when the flag itself names a credential', () => {
+    // Here the value IS the secret whatever shape it has, so nothing about it
+    // is safe to keep.
+    expect(redactArgs([`--auth-token=https://user:${SECRET}@registry.io/`])).toEqual([
+      '--auth-token=***',
+    ]);
+  });
+
+  it('still leaves ordinary arguments alone, including ones merely containing "auth"', () => {
+    const args = ['upgrade', '--authors', 'ripgrep', '--json', 'https://example.com/x.tar.gz'];
+    expect(redactArgs(args)).toEqual(args);
+  });
+
+  // Deliberately not masked: a single-letter flag carries no hint about what
+  // its value is, so masking `-t` would corrupt ordinary arguments far more
+  // often than it would hide a secret.
+  it('does not attempt short flags', () => {
+    expect(redactArgs(['-t', SECRET])).toEqual(['-t', SECRET]);
+  });
+});
+
+describe('LoggingExecRunner — run identity', () => {
+  it('stamps each record with the process id', async () => {
+    const { runner, records } = harness();
+    await runner.run('brew', ['list']);
+    expect(records()[0]?.pid).toBe(process.pid);
+  });
+});

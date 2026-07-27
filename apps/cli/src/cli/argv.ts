@@ -109,7 +109,7 @@ export function findUnknownTopLevelFlags(
 // usage error rather than a silent fallback: the whole point of these flags is
 // to redirect something away from its default, so guessing is worse than
 // stopping.
-export function extractValueFlag(argv: string[], name: string, hint: string): string | undefined {
+export function extractPathFlag(argv: string[], name: string, hint: string): string | undefined {
   const flag = `--${name}`;
   const inlinePrefix = `${flag}=`;
   let value: string | undefined;
@@ -159,12 +159,12 @@ export function extractValueFlag(argv: string[], name: string, hint: string): st
 
 /** `--applist <path>`: the applist this run reads and writes (#17, ADR 0044). */
 export function extractApplistFlag(argv: string[]): string | undefined {
-  return extractValueFlag(argv, 'applist', '--applist work.yaml');
+  return extractPathFlag(argv, 'applist', '--applist work.yaml');
 }
 
 /** `--log <path>`: the file this run appends its subprocess log to (#16). */
 export function extractLogFlag(argv: string[]): string | undefined {
-  return extractValueFlag(argv, 'log', '--log ~/macup.log');
+  return extractPathFlag(argv, 'log', '--log ~/macup.log');
 }
 
 // Inspect argv for --debug/-D/--verbose/-V, return the parsed flags, and

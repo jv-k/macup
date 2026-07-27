@@ -84,7 +84,7 @@ macup --log ~/macup.log all update
 jq -r 'select(.exitCode != 0) | "\(.cmd) \(.args | join(" ")) -> \(.exitCode)"' ~/macup.log
 ```
 
-Each line is one JSON object (ADR 0045), so multi-line output stays on one line and concurrent runs can share a file. The log is appended to rather than truncated, and created `0600`: it holds whole subprocess output. macup masks credential-shaped arguments such as `--token` and passwords in URLs, but does not redact the output itself, so skim it before attaching it to a bug report.
+Each line is one JSON object (ADR 0045), so multi-line output stays on one line and concurrent runs can share a file. The log is appended to rather than truncated, and kept `0600`: it holds whole subprocess output, so an existing log with looser permissions is tightened before macup writes to it. macup masks credential-shaped arguments such as `--token` and passwords in URLs, but does not redact the output itself, so skim it before attaching it to a bug report.
 
 ## Plugins
 

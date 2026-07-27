@@ -224,3 +224,30 @@ describe('LoggingExecRunner — run identity', () => {
     expect(records()[0]?.pid).toBe(process.pid);
   });
 });
+
+// Found in the PR review: suffix-matching credential names with optional
+// leading dashes also matched a bare `oauth==1.0`, which is a real PyPI package
+// spec and macup ships a pip plugin. Masking it corrupts the log for an
+// ordinary install. A dash-less key only counts as a credential when it has the
+// env / npm-config shape.
+describe('redactArgs — package specs are not credentials', () => {
+  it.each(['oauth==1.0', 'requests-oauthlib==1.3.1', 'python-keycloak==2.0', 'authlib==1.2'])(
+    'leaves the pip spec %s alone',
+    (spec) => {
+      expect(redactArgs([spec])).toEqual([spec]);
+    },
+  );
+
+  it.each(['npm_config_token=abc', 'NPM_TOKEN=abc', 'NODE_AUTH_TOKEN=abc'])(
+    'still masks the env-shaped key %s',
+    (arg) => {
+      expect(redactArgs([arg]).join(' ')).not.toContain('abc');
+    },
+  );
+
+  it('still masks a dashed credential flag whatever its case', () => {
+    expect(redactArgs(['--auth-token=abc'])).toEqual(['--auth-token=***']);
+    expect(redactArgs(['--authToken=abc'])).toEqual(['--authToken=***']);
+    expect(redactArgs(['-token=abc'])).toEqual(['-token=***']);
+  });
+});

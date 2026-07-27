@@ -47,15 +47,33 @@ export interface LoggingOptions {
 // of them (found in review). Suffix-matching is what keeps `--authors` out
 // while letting `--auth-token` in — the secret word has to end the name.
 //
-// Leading dashes are optional so `KEY=value` positionals are covered too.
 const SECRET_NAME = '[A-Za-z0-9_.-]*?(?:token|password|passwd|secret|credential|auth|api[-_]?key)';
-const SECRET_INLINE_RE = new RegExp(`^(-{0,2}${SECRET_NAME})=.*$`, 'i');
+const SECRET_NAME_RE = new RegExp(`^${SECRET_NAME}$`, 'i');
+// A dashed flag: `--auth-token`, `-token`. Any dashed name whose suffix is a
+// credential word counts, in both the `=value` and following-token spellings.
+const DASHED_KEY_RE = /^(-{1,2})([A-Za-z0-9_.-]+)$/;
 const SECRET_FLAG_RE = new RegExp(`^--${SECRET_NAME}$`, 'i');
 // Credentials in a URL's userinfo: scheme://user:secret@host. Unanchored and
 // global, because the URL is often the value of a flag (`--registry=https://…`)
 // rather than the whole argument. The password is masked and the username kept,
 // which is usually the part worth reading.
 const URL_CREDENTIALS_RE = /([a-z][a-z0-9+.-]*:\/\/[^/:@\s]+:)[^@\s]*@/gi;
+
+/**
+ * True when `key` in `key=value` names a credential.
+ *
+ * A dashed key is judged on its suffix alone: nothing else on a command line
+ * looks like `--auth-token`. A dash-less key additionally has to have the env /
+ * npm-config shape — an underscore, or all caps — because `oauth==1.0` is a
+ * real PyPI package spec and macup ships a pip plugin, so suffix-matching alone
+ * would log an ordinary install as `oauth=***` (found in the PR review).
+ */
+function namesACredential(key: string): boolean {
+  const dashed = DASHED_KEY_RE.exec(key);
+  if (dashed) return SECRET_NAME_RE.test(dashed[2] as string);
+  const envShaped = key.includes('_') || key === key.toUpperCase();
+  return envShaped && SECRET_NAME_RE.test(key);
+}
 
 /**
  * Argv with credential-shaped values masked, for writing to disk.
@@ -79,11 +97,11 @@ export function redactArgs(args: readonly string[]): string[] {
       maskNext = false;
       continue;
     }
-    const inline = SECRET_INLINE_RE.exec(arg);
-    if (inline) {
+    const eq = arg.indexOf('=');
+    if (eq > 0 && namesACredential(arg.slice(0, eq))) {
       // The whole value goes, not just a pattern inside it: a credential flag's
       // value is a credential regardless of what shape it happens to have.
-      out.push(`${inline[1]}=***`);
+      out.push(`${arg.slice(0, eq)}=***`);
       continue;
     }
     if (SECRET_FLAG_RE.test(arg)) {

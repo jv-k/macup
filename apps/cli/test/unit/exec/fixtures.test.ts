@@ -44,25 +44,6 @@ describe('FixtureExecRunner', () => {
     expect((await runner.run('brew', ['list', '--cask', '--versions'])).stdout).toBe('b');
   });
 
-  it('runJson parses the fixture stdout', async () => {
-    const runner = new FixtureExecRunner({
-      fixtures: [
-        {
-          cmd: 'brew',
-          args: ['info', '--json=v2', '--formula', 'git'],
-          result: { stdout: '{"formulae":[{"name":"git"}]}', stderr: '', exitCode: 0 },
-        },
-      ],
-    });
-    const parsed = await runner.runJson<{ formulae: Array<{ name: string }> }>('brew', [
-      'info',
-      '--json=v2',
-      '--formula',
-      'git',
-    ]);
-    expect(parsed.formulae[0]?.name).toBe('git');
-  });
-
   it('onPath returns true for configured binaries, false otherwise', () => {
     const runner = new FixtureExecRunner({
       fixtures: [],

@@ -51,26 +51,6 @@ describe('ExecaExecRunner.run', () => {
   });
 });
 
-describe('ExecaExecRunner.runJson', () => {
-  it('parses stdout as JSON for a successful command', async () => {
-    const r = await runner.runJson<{ answer: number }>('node', [
-      '-e',
-      'process.stdout.write(JSON.stringify({ answer: 42 }))',
-    ]);
-    expect(r.answer).toBe(42);
-  });
-
-  it('throws on a failing command', async () => {
-    await expect(runner.runJson('node', ['-e', 'process.exit(1)'])).rejects.toThrow();
-  });
-
-  it('throws on invalid JSON', async () => {
-    await expect(
-      runner.runJson('node', ['-e', 'process.stdout.write("not-json")']),
-    ).rejects.toThrow();
-  });
-});
-
 describe('ExecaExecRunner.onPath', () => {
   it('finds node (we are running under it)', () => {
     expect(runner.onPath('node')).toBe(true);

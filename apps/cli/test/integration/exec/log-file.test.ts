@@ -25,9 +25,6 @@ const stub: ExecRunner = {
   async run(): Promise<ExecResult> {
     return { stdout: 'ok\n', stderr: '', exitCode: 0 };
   },
-  async runJson<T>(): Promise<T> {
-    return {} as T;
-  },
   onPath: () => true,
 };
 

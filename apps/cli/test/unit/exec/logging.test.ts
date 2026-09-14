@@ -17,10 +17,6 @@ class StubRunner implements ExecRunner {
     opts?.onStdout?.('streamed chunk\n');
     return { stdout: 'out', stderr: '', exitCode: 0, ...this.result };
   }
-  async runJson<T>(cmd: string, args: readonly string[], opts?: ExecRunOptions): Promise<T> {
-    const r = await this.run(cmd, args, opts);
-    return JSON.parse(r.stdout) as T;
-  }
   onPath(): boolean {
     return true;
   }
@@ -97,12 +93,6 @@ describe('LoggingExecRunner — transparency', () => {
     await runner.run('brew', ['list'], { signal, onStdout: (c) => chunks.push(c) });
     expect(chunks).toEqual(['streamed chunk\n']);
     expect(inner.calls[0]?.opts?.signal).toBe(signal);
-  });
-
-  it('logs runJson calls too, since they are subprocesses like any other', async () => {
-    const { runner, records } = harness({ stdout: '{"a":1}' });
-    await expect(runner.runJson('brew', ['info', '--json'])).resolves.toEqual({ a: 1 });
-    expect(records()).toHaveLength(1);
   });
 
   it('does not log onPath probes, which are lookups rather than commands', async () => {

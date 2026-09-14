@@ -75,20 +75,6 @@ export class FixtureExecRunner implements ExecRunner {
     throw new Error(`Fixture miss: ${cmd} ${args.join(' ')} — add a fixture or adjust the call`);
   }
 
-  /**
-   * Replay a recording and parse its stdout as JSON.
-   * @throws Error when the command exits non-zero, so a caller expecting JSON never parses failure output, or SyntaxError when stdout is not JSON.
-   */
-  async runJson<T = unknown>(cmd: string, args: readonly string[]): Promise<T> {
-    const r = await this.run(cmd, args);
-    if (r.exitCode !== 0) {
-      throw new Error(
-        `Fixture command "${cmd} ${args.join(' ')}" exit ${r.exitCode}: ${r.stderr.trim()}`,
-      );
-    }
-    return JSON.parse(r.stdout) as T;
-  }
-
   onPath(cmd: string): boolean {
     return this.pathSet.has(cmd);
   }

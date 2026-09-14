@@ -20,7 +20,6 @@ const stubDeps = {
   registry: [],
   exec: {
     run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-    runJson: async () => ({}),
     onPath: () => false,
   },
   log: { info() {}, warn() {}, error() {}, debug() {} },

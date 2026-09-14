@@ -66,24 +66,6 @@ export class ExecaExecRunner implements ExecRunner {
     }
   }
 
-  /**
-   * Run a command and parse its stdout as JSON.
-   * @throws Error when the command exits non-zero, so a caller expecting JSON never parses failure output, or SyntaxError when stdout is not JSON.
-   */
-  async runJson<T = unknown>(
-    cmd: string,
-    args: readonly string[],
-    opts: ExecRunOptions = {},
-  ): Promise<T> {
-    const result = await this.run(cmd, args, opts);
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `Command "${cmd} ${args.join(' ')}" exited ${result.exitCode}: ${result.stderr.trim()}`,
-      );
-    }
-    return JSON.parse(result.stdout) as T;
-  }
-
   onPath(cmd: string): boolean {
     return isOnPath(cmd);
   }

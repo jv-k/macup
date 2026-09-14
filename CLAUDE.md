@@ -43,7 +43,7 @@ Issues live in `jv-k/macup`'s GitHub Issues, via the `gh` CLI. See `docs/agents/
 
 ### Triage labels
 
-The five canonical roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
+The five canonical roles, four of them `status:`-prefixed (`status:needs-triage`), `wontfix` bare. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 

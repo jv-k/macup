@@ -15,8 +15,8 @@ Single-context. One `CONTEXT.md` at the repo root, one ADR set in `docs/adr/`.
 
 ```
 /
-├── CONTEXT.md          ← the glossary (not yet created)
-├── docs/adr/           ← 0001–0029, indexed by docs/adr/README.md
+├── CONTEXT.md          ← the glossary
+├── docs/adr/           ← the decisions, indexed by docs/adr/README.md
 └── apps/
     ├── cli/            ← the macup CLI, published as `macup`
     └── docs/           ← the docs site for the CLI

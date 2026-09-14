@@ -59,7 +59,7 @@ function errorMessage(err: unknown): string {
  *
  * `update` is the one mode with a live check-then-list to make: selecting its
  * refs needs `plugin.list({ onlyOutdated: true })`, so that branch goes
- * through the promoted probe (ADR 0049) and reuses its statuses rather than
+ * through the promoted probe (ADR 0050) and reuses its statuses rather than
  * listing twice. `install` selects from the tracked applist alone — no list()
  * call today — so it keeps the plain check()-then-catch it always had; routing
  * it through the probe would add a live listing call no `install` plan has

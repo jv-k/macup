@@ -2,7 +2,7 @@
  * One availability probe for every "ask a backend what it has" site: runs
  * `check()` then `list()`, under an optional timeout, and classifies the
  * outcome into one vocabulary — ok / unavailable / timeout / failed — so a
- * caller stops hand-rolling its own check-then-list-then-catch (ADR 0049).
+ * caller stops hand-rolling its own check-then-list-then-catch (ADR 0050).
  *
  * Promoted from the doctor's list-only probe (`commands/doctor/checks/probe.ts`),
  * with the availability check folded in as its first step for every consumer

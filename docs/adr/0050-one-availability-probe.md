@@ -1,4 +1,4 @@
-# ADR 0049: One availability probe for every check-then-list site
+# ADR 0050: One availability probe for every check-then-list site
 
 > Status: accepted · Date: 2026-09-14 · Deciders: John Valai
 

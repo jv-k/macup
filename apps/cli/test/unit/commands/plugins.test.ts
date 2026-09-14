@@ -119,7 +119,10 @@ describe('formatPluginsReport', () => {
       mkPlugin({
         id: 'brew',
         displayName: 'Homebrew',
-        subtypes: ['formulas', 'casks'],
+        subtypes: [
+          { id: 'formulas', kind: 'formula', configKey: 'brew.formulas', flag: 'formula' },
+          { id: 'casks', kind: 'cask', configKey: 'brew.casks', flag: 'cask' },
+        ],
       }),
     ];
     const report = buildPluginsReport(plugins, {

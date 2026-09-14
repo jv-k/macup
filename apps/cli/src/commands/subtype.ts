@@ -1,6 +1,9 @@
 /**
- * Subtype argument handling: the explicit `--subtype`, plus brew's `--cask` and
- * `--formula` shortcuts.
+ * Subtype argument handling: the explicit `--subtype`, plus whatever
+ * shortcut flags the plugin's manifest table declares (brew's `--cask` and
+ * `--formula`). Every lookup here reads `plugin.manifest.subtypes` (issue
+ * #138) rather than naming `cask`/`formula`, so a new subtyped plugin's
+ * shortcuts work with no edit to this file.
  *
  * Validation returns its message rather than throwing, so the caller decides the
  * exit path.
@@ -10,16 +13,26 @@
 
 import type { Plugin } from '../plugins/types';
 
-/** The subtype flags a command may carry: the explicit `--subtype`, plus brew's `--cask`/`--formula` shortcuts. */
+/**
+ * The subtype flags a command may carry: the explicit `--subtype`, plus one
+ * boolean per shortcut flag the plugin's manifest declares (keyed by flag
+ * name, e.g. `cask`, `formula`).
+ */
 export interface SubtypeArgs {
   readonly subtype?: string;
-  readonly cask?: boolean;
-  readonly formula?: boolean;
+  readonly [flag: string]: unknown;
+}
+
+// Every subtype entry that declared a shortcut flag, in manifest order.
+function shortcutEntries(plugin: Plugin) {
+  return (plugin.manifest.subtypes ?? []).filter(
+    (e): e is typeof e & { flag: string } => e.flag !== undefined,
+  );
 }
 
 /**
  * Resolve which subtype a subcommand should operate on.
- * Precedence: explicit --subtype=<name> > --cask / --formula shortcut > first declared subtype.
+ * Precedence: explicit --subtype=<name> > a declared shortcut flag > first declared subtype.
  * Returns undefined if the plugin has no subtypes, or if --subtype is not in the
  * plugin's declared list. Callers that want to reject unknown values should call
  * validateSubtypeArg() first.
@@ -30,20 +43,16 @@ export function subtypeFromArgs(plugin: Plugin, args: SubtypeArgs): string | und
 
   // Treat bare `--subtype` (empty string) as unset so it falls through to
   // the shortcut flags or the first-subtype default, instead of hitting
-  // `subtypes.includes('')` → false → undefined.
+  // `subtypes.some(...)` → false → undefined.
   if (args.subtype !== undefined && args.subtype !== '') {
-    return subtypes.includes(args.subtype) ? args.subtype : undefined;
+    return subtypes.some((e) => e.id === args.subtype) ? args.subtype : undefined;
   }
 
-  if (args.cask) {
-    return subtypes.includes('casks') ? 'casks' : undefined;
+  for (const entry of shortcutEntries(plugin)) {
+    if (args[entry.flag]) return entry.id;
   }
 
-  if (args.formula) {
-    return subtypes.includes('formulas') ? 'formulas' : undefined;
-  }
-
-  return subtypes[0];
+  return subtypes[0]?.id;
 }
 
 /** Outcome of validating subtype args, carrying the message rather than throwing so the caller controls the exit path. */
@@ -51,16 +60,18 @@ export type ValidationResult = { ok: true } | { ok: false; error: string };
 
 /**
  * Validate the --subtype arg against the plugin's declared subtypes, and
- * the shortcut flags (--cask, --formula) against the plugin's subtype list.
- * Also rejects mutually-exclusive flag combinations.
+ * the shortcut flags against the plugin's subtype table. Also rejects
+ * mutually-exclusive flag combinations (more than one shortcut flag set at
+ * once).
  */
 export function validateSubtypeArg(plugin: Plugin, args: SubtypeArgs): ValidationResult {
   const subtypes = plugin.manifest.subtypes;
 
-  if (args.cask && args.formula) {
+  const activeShortcuts = shortcutEntries(plugin).filter((e) => args[e.flag]);
+  if (activeShortcuts.length > 1) {
     return {
       ok: false,
-      error: '--cask and --formula are mutually exclusive',
+      error: `${activeShortcuts.map((e) => `--${e.flag}`).join(' and ')} are mutually exclusive`,
     };
   }
 
@@ -73,10 +84,12 @@ export function validateSubtypeArg(plugin: Plugin, args: SubtypeArgs): Validatio
     };
   }
 
-  if (!subtypes.includes(args.subtype)) {
+  if (!subtypes.some((e) => e.id === args.subtype)) {
     return {
       ok: false,
-      error: `unknown subtype "${args.subtype}" for ${plugin.manifest.id}. Valid: ${subtypes.join(', ')}`,
+      error: `unknown subtype "${args.subtype}" for ${plugin.manifest.id}. Valid: ${subtypes
+        .map((e) => e.id)
+        .join(', ')}`,
     };
   }
 
@@ -85,8 +98,8 @@ export function validateSubtypeArg(plugin: Plugin, args: SubtypeArgs): Validatio
 
 /**
  * True iff this plugin declares more than one subtype — i.e., the CLI should
- * expose `--subtype=<name>` and the shortcut flags (--cask, --formula) for it,
- * and the wizard should split it into multiple items.
+ * expose `--subtype=<name>` and its shortcut flags for it, and the wizard
+ * should split it into multiple items.
  */
 export function pluginHasSubtypes(plugin: Plugin): boolean {
   return (plugin.manifest.subtypes?.length ?? 0) > 1;
@@ -105,10 +118,15 @@ export function resolveSubtypeOrExit(
   plugin: Plugin,
   args: Record<string, unknown>,
 ): { ok: true; subtype: string | undefined } | { ok: false } {
+  // Built as a plain mutable bag first (SubtypeArgs' index signature is
+  // readonly) and handed to the two pure helpers below as that type.
+  const shortcuts: Record<string, unknown> = {};
+  for (const entry of shortcutEntries(plugin)) {
+    shortcuts[entry.flag] = Boolean(args[entry.flag]);
+  }
   const sArgs: SubtypeArgs = {
     subtype: typeof args.subtype === 'string' ? args.subtype : undefined,
-    cask: Boolean(args.cask),
-    formula: Boolean(args.formula),
+    ...shortcuts,
   };
   const validation = validateSubtypeArg(plugin, sArgs);
   if (!validation.ok) {

@@ -33,7 +33,12 @@ function mkPlugin(id: string, extra?: Partial<PluginManifest>): Plugin {
   };
 }
 
-const brew = mkPlugin('brew', { subtypes: ['formulas', 'casks'] });
+const brew = mkPlugin('brew', {
+  subtypes: [
+    { id: 'formulas', kind: 'formula', configKey: 'brew.formulas', flag: 'formula' },
+    { id: 'casks', kind: 'cask', configKey: 'brew.casks', flag: 'cask' },
+  ],
+});
 const npm = mkPlugin('npm', {
   configKeys: ['npm'],
   capabilities: {

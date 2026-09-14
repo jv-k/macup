@@ -89,7 +89,9 @@ export function buildHelp(deps: CliDeps): string {
     if (m.capabilities.track) cmds.push('track');
     if (m.capabilities.untrack) cmds.push('untrack');
     const subtypeHint =
-      m.subtypes && m.subtypes.length > 1 ? ` [--subtype=${m.subtypes.join('|')}]` : '';
+      m.subtypes && m.subtypes.length > 1
+        ? ` [--subtype=${m.subtypes.map((s) => s.id).join('|')}]`
+        : '';
     return { label: s.bold(m.id), desc: `${m.displayName}  ${cmds.join(', ')}${subtypeHint}` };
   });
   say(cols(pluginRows));

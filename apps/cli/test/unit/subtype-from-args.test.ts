@@ -5,9 +5,16 @@ import {
   subtypeFromArgs,
   validateSubtypeArg,
 } from '../../src/commands/subtype';
-import type { Plugin, PluginManifest } from '../../src/plugins/types';
+import type { Plugin, PluginManifest, SubtypeEntry } from '../../src/plugins/types';
 
-function mkPlugin(id: string, subtypes?: readonly string[]): Plugin {
+// Mirrors brew's real table shape (id, kind, configKey, flag) but with a
+// throwaway configKey — these tests exercise the arg-resolution logic, not
+// the applist schema, which the conformance suite checks separately.
+function entry(id: string, flag?: string): SubtypeEntry {
+  return { id, kind: id, configKey: 'npm', ...(flag ? { flag } : {}) };
+}
+
+function mkPlugin(id: string, subtypes?: readonly SubtypeEntry[]): Plugin {
   const manifest: PluginManifest = {
     id,
     displayName: id,
@@ -28,7 +35,7 @@ function mkPlugin(id: string, subtypes?: readonly string[]): Plugin {
 }
 
 describe('subtypeFromArgs', () => {
-  const brew = mkPlugin('brew', ['formulas', 'casks']);
+  const brew = mkPlugin('brew', [entry('formulas', 'formula'), entry('casks', 'cask')]);
   const npm = mkPlugin('npm');
 
   it('returns --subtype=formulas verbatim when valid', () => {
@@ -69,9 +76,20 @@ describe('subtypeFromArgs', () => {
     expect(subtypeFromArgs(npm, {})).toBeUndefined();
   });
 
-  it('returns undefined for --cask=true on a plugin with subtypes that lacks "casks"', () => {
-    const exotic = mkPlugin('exotic', ['stable', 'beta']);
-    expect(subtypeFromArgs(exotic, { cask: true })).toBeUndefined();
+  it('ignores an unrelated boolean arg when the plugin declares no matching shortcut flag', () => {
+    // "exotic" declares subtypes but no shortcut flags at all — a stray
+    // `cask` key in args isn't one of its declared flags, so it's ignored
+    // and resolution falls through to the first entry, same as no flags set.
+    const exotic = mkPlugin('exotic', [entry('stable'), entry('beta')]);
+    expect(subtypeFromArgs(exotic, { cask: true })).toBe('stable');
+  });
+
+  it('maps a declared shortcut flag to its subtype id, whatever the flag is named', () => {
+    // Proves the resolution is table-driven, not hard-coded to cask/formula:
+    // a synthetic plugin with its own flag names resolves the same way brew's does.
+    const widget = mkPlugin('widget', [entry('alpha', 'alpha'), entry('beta', 'beta')]);
+    expect(subtypeFromArgs(widget, { beta: true })).toBe('beta');
+    expect(subtypeFromArgs(widget, {})).toBe('alpha');
   });
 
   it('treats --subtype="" like unset (returns the first subtype, not undefined)', () => {
@@ -80,7 +98,7 @@ describe('subtypeFromArgs', () => {
 });
 
 describe('validateSubtypeArg', () => {
-  const brew = mkPlugin('brew', ['formulas', 'casks']);
+  const brew = mkPlugin('brew', [entry('formulas', 'formula'), entry('casks', 'cask')]);
   const npm = mkPlugin('npm');
 
   it('returns ok=true when no --subtype given', () => {
@@ -126,7 +144,7 @@ describe('validateSubtypeArg', () => {
 });
 
 describe('resolveSubtypeOrExit', () => {
-  const brew = mkPlugin('brew', ['formulas', 'casks']);
+  const brew = mkPlugin('brew', [entry('formulas', 'formula'), entry('casks', 'cask')]);
   const npm = mkPlugin('npm');
 
   let errSpy: ReturnType<typeof vi.spyOn>;
@@ -195,11 +213,12 @@ describe('resolveSubtypeOrExit', () => {
 
 describe('pluginHasSubtypes', () => {
   it('returns true for a plugin with 2+ subtypes', () => {
-    expect(pluginHasSubtypes(mkPlugin('brew', ['formulas', 'casks']))).toBe(true);
+    const brew = mkPlugin('brew', [entry('formulas', 'formula'), entry('casks', 'cask')]);
+    expect(pluginHasSubtypes(brew)).toBe(true);
   });
 
   it('returns false for a plugin with exactly one subtype (no choice to make)', () => {
-    expect(pluginHasSubtypes(mkPlugin('solo', ['only']))).toBe(false);
+    expect(pluginHasSubtypes(mkPlugin('solo', [entry('only')]))).toBe(false);
   });
 
   it('returns false for a plugin with zero subtypes', () => {

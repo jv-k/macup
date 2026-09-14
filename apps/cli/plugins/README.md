@@ -22,14 +22,24 @@ A plugin is a TypeScript module that exports a `Plugin` conforming to
 ```ts
 import type { Plugin } from '../src/plugins/types';
 
+// Each entry declares one partition of this plugin's packages: its id (what
+// `--subtype=<id>` and a wizard row name it), its PackageKind, the applist
+// key it tracks under, and its CLI shortcut flag (optional — a subtype with
+// none is reached only via `--subtype=<id>`).
+const SUBTYPES = [
+  { id: 'formulas', kind: 'formula', configKey: 'brew.formulas', flag: 'formula' },
+  { id: 'casks', kind: 'cask', configKey: 'brew.casks', flag: 'cask' },
+] as const;
+
 const brew: Plugin = {
   manifest: {
     id: 'brew',
     displayName: 'Homebrew',
-    subtypes: ['formulas', 'casks'],
+    subtypes: SUBTYPES,
     supportedOS: ['darwin'],
     requires: ['brew'],
-    configKeys: ['brew.formulas', 'brew.casks'],
+    // Derived from the table above, not hand-duplicated.
+    configKeys: SUBTYPES.map((s) => s.configKey),
     capabilities: {
       list: true,
       install: true,
@@ -64,10 +74,10 @@ export default brew;
 |---|---|
 | `id` | Unique, lowercase. Used on CLI (`macup <id> ...`), in config keys, and in error messages. |
 | `displayName` | Human-readable. Shown in help and wizard. |
-| `subtypes` | Optional. Defines `macup <id> <subtype> <command>` shape (e.g. `brew formulas list`). |
+| `subtypes` | Optional. A table of `SubtypeEntry` (`{ id, kind, configKey, flag? }`), one per partition of this plugin's packages (brew's `formulas`/`casks` are the only ones today). `id` is what `--subtype=<id>` and a wizard row name. `kind` is the `PackageKind` those packages carry. `configKey` is the applist key they track under. `flag`, if declared, is the CLI shortcut (`--cask` for brew's `casks`). Read by the host (the command factory, the wizard, the composite, the completions generators, and the docs metadata) via the helpers in `src/plugins/subtype-table.ts`, so a new subtyped plugin needs no edit to any of them. |
 | `supportedOS` | Array of `NodeJS.Platform`. Registry filters plugins whose host platform isn't listed. |
 | `requires` | PATH binaries that must resolve. Registry filters plugins whose binaries are missing. |
-| `configKeys` | Dotted-path YAML keys in `applist.yaml` that this plugin reads/writes (e.g. `['brew.formulas', 'brew.casks']` or `['npm']`). Two-segment keys resolve to a list nested under a plugin block; one-segment keys to a top-level list. Informational only: `track`/`untrack` are config mutations handled by the store, not the plugin. |
+| `configKeys` | Dotted-path YAML keys in `applist.yaml` that this plugin reads/writes (e.g. `['brew.formulas', 'brew.casks']` or `['npm']`). Two-segment keys resolve to a list nested under a plugin block, and one-segment keys to a top-level list. For a subtyped plugin, derive this from `subtypes` (`SUBTYPES.map((s) => s.configKey)`) rather than declaring it separately. A plugin without subtypes declares it directly. Informational only: `track`/`untrack` are config mutations handled by the store, not the plugin. |
 | `capabilities` | Declares which operations the plugin implements. Must match the methods actually defined. |
 | `compareVersions` | Optional. Override the default semver comparator for non-semver versioning schemes (brew casks, mas, etc.). |
 

@@ -213,7 +213,7 @@ function pluginDoc(plugin: Plugin): PluginDoc {
     id: m.id,
     displayName: m.displayName,
     category: m.category,
-    subtypes: [...(m.subtypes ?? [])],
+    subtypes: (m.subtypes ?? []).map((s) => s.id),
     requires: [...m.requires],
     configKeys: [...m.configKeys],
     capabilities: {

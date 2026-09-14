@@ -18,13 +18,23 @@ async function makeCtx(): Promise<PluginContext> {
 describe('brew plugin — manifest', () => {
   it('declares formulas and casks subtypes, darwin supportedOS, brew requires', () => {
     expect(brewPlugin.manifest.id).toBe('brew');
-    expect(brewPlugin.manifest.subtypes).toEqual(['formulas', 'casks']);
+    expect(brewPlugin.manifest.subtypes?.map((s) => s.id)).toEqual(['formulas', 'casks']);
     expect(brewPlugin.manifest.supportedOS).toContain('darwin');
     expect(brewPlugin.manifest.requires).toContain('brew');
     expect(brewPlugin.manifest.configKeys).toEqual(['brew.formulas', 'brew.casks']);
     expect(brewPlugin.manifest.capabilities.install).toBe(true);
     expect(brewPlugin.manifest.capabilities.update).toBe(true);
     expect(brewPlugin.manifest.capabilities.outdated).toBe(true);
+  });
+
+  // #138: the manifest table is now the one place brew's subtype knowledge
+  // lives — no `configKeyFor` method, and `configKeys` is derived from it.
+  it("declares the subtype table itself — each entry's kind, applist key, and shortcut flag", () => {
+    expect(brewPlugin.manifest.subtypes).toEqual([
+      { id: 'formulas', kind: 'formula', configKey: 'brew.formulas', flag: 'formula' },
+      { id: 'casks', kind: 'cask', configKey: 'brew.casks', flag: 'cask' },
+    ]);
+    expect(brewPlugin.manifest).not.toHaveProperty('configKeyFor');
   });
 });
 

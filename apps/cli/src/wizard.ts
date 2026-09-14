@@ -133,8 +133,8 @@ function buildGroups(plugins: readonly Plugin[]): Array<{
     if (subtypes && subtypes.length > 1) {
       for (const s of subtypes) {
         items.push({
-          label: titleCase(s),
-          value: { pluginId: plugin.manifest.id, subtype: s },
+          label: titleCase(s.id),
+          value: { pluginId: plugin.manifest.id, subtype: s.id },
         });
       }
     } else {

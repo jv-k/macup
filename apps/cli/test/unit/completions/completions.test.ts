@@ -27,7 +27,15 @@ function mkPlugin(id: string, extra?: Partial<PluginManifest>): Plugin {
   };
 }
 
-const plugins: Plugin[] = [mkPlugin('brew', { subtypes: ['formulas', 'casks'] }), mkPlugin('npm')];
+const plugins: Plugin[] = [
+  mkPlugin('brew', {
+    subtypes: [
+      { id: 'formulas', kind: 'formula', configKey: 'brew.formulas', flag: 'formula' },
+      { id: 'casks', kind: 'cask', configKey: 'brew.casks', flag: 'cask' },
+    ],
+  }),
+  mkPlugin('npm'),
+];
 
 describe('generateZshCompletions', () => {
   const out = generateZshCompletions(plugins);
@@ -198,6 +206,44 @@ describe('--log completion (#16)', () => {
 
   it('fish offers --log and completes a path after it', () => {
     expect(generateFishCompletions(plugins)).toMatch(/-l log[^\n]*-r -F/);
+  });
+});
+
+// #138: a subtyped plugin's shortcut flags come from its manifest table, not
+// a hard-coded cask/formula list — so a synthetic plugin with its own subtype
+// ids and flags is completable with no edit to any completions generator.
+describe('synthetic subtyped plugin — flags come from the manifest table (#138)', () => {
+  const widget = mkPlugin('widget', {
+    subtypes: [
+      { id: 'alpha', kind: 'alpha', configKey: 'npm', flag: 'alpha' },
+      { id: 'beta', kind: 'beta', configKey: 'pnpm', flag: 'beta' },
+    ],
+    capabilities: {
+      list: true,
+      install: true,
+      update: false,
+      track: false,
+      untrack: false,
+      outdated: false,
+    },
+  });
+
+  it('zsh offers the declared --alpha/--beta shortcuts', () => {
+    const out = generateZshCompletions([widget]);
+    expect(out).toContain('--alpha');
+    expect(out).toContain('--beta');
+  });
+
+  it('bash offers the declared --alpha/--beta shortcuts', () => {
+    const out = generateBashCompletions([widget]);
+    expect(out).toContain('--alpha');
+    expect(out).toContain('--beta');
+  });
+
+  it('fish offers the declared alpha/beta shortcuts', () => {
+    const out = generateFishCompletions([widget]);
+    expect(out).toContain('alpha');
+    expect(out).toContain('beta');
   });
 });
 

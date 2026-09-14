@@ -57,6 +57,11 @@ export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** A one-line reason for a non-`ok` {@link ProbeOutcome}: the message on `unavailable`/`failed`, or a synthesized line on `timeout`. */
+export function probeOutcomeReason(outcome: Exclude<ProbeOutcome, { kind: 'ok' }>): string {
+  return outcome.kind === 'timeout' ? 'probe timed out' : outcome.message;
+}
+
 class ProbeTimeoutError extends Error {
   constructor(ms: number) {
     super(`probe timed out after ${Math.round(ms / 1000)}s`);

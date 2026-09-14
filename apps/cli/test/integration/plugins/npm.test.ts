@@ -140,3 +140,19 @@ describe('npm plugin — search', () => {
     expect(await npmPlugin.search?.(ctx, 'prettier')).toEqual([{ name: 'ok' }]);
   });
 });
+
+describe('npm plugin — healthCheck', () => {
+  it('invokes `npm doctor`', async () => {
+    const ctx: PluginContext = {
+      exec: new FixtureExecRunner({
+        fixtures: [
+          { cmd: 'npm', args: ['doctor'], result: { stdout: '', stderr: '', exitCode: 0 } },
+        ],
+        onPath: ['npm'],
+      }),
+      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      signal: new AbortController().signal,
+    };
+    await expect(npmPlugin.healthCheck?.(ctx)).resolves.toBeUndefined();
+  });
+});

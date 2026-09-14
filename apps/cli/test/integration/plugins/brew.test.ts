@@ -158,3 +158,19 @@ describe('brew plugin — search', () => {
     expect(results).toEqual([{ name: 'node' }, { name: 'nodenv' }]);
   });
 });
+
+describe('brew plugin — healthCheck', () => {
+  it('invokes `brew doctor`', async () => {
+    const ctx: PluginContext = {
+      exec: new FixtureExecRunner({
+        fixtures: [
+          { cmd: 'brew', args: ['doctor'], result: { stdout: '', stderr: '', exitCode: 0 } },
+        ],
+        onPath: ['brew'],
+      }),
+      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      signal: new AbortController().signal,
+    };
+    await expect(brewPlugin.healthCheck?.(ctx)).resolves.toBeUndefined();
+  });
+});

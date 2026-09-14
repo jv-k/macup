@@ -285,4 +285,12 @@ export interface Plugin {
    * capability signal — there is no separate capabilities flag.
    */
   search?(ctx: PluginContext, query: string, opts?: SearchOptions): Promise<SearchResult[]>;
+  /**
+   * Optional: run a post-mutation health check for this backend (e.g. `brew
+   * doctor`). Called by the host after install and update when present.
+   * Presence of this method is the capability signal — there is no separate
+   * capabilities flag (ADR 0039, which set this precedent for `search` and
+   * later `uninstall`).
+   */
+  healthCheck?(ctx: PluginContext): Promise<void>;
 }

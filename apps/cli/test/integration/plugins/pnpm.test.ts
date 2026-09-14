@@ -134,3 +134,19 @@ describe('pnpm plugin — update', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('pnpm plugin — healthCheck', () => {
+  it('invokes `pnpm doctor`', async () => {
+    const ctx: PluginContext = {
+      exec: new FixtureExecRunner({
+        fixtures: [
+          { cmd: 'pnpm', args: ['doctor'], result: { stdout: '', stderr: '', exitCode: 0 } },
+        ],
+        onPath: ['pnpm'],
+      }),
+      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      signal: new AbortController().signal,
+    };
+    await expect(pnpmPlugin.healthCheck?.(ctx)).resolves.toBeUndefined();
+  });
+});

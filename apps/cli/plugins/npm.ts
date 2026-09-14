@@ -107,6 +107,10 @@ const npm: Plugin = {
     }
     return results;
   },
+
+  async healthCheck(ctx: PluginContext): Promise<void> {
+    await ctx.exec.run('npm', ['doctor'], { signal: ctx.signal });
+  },
 };
 
 export default npm;

@@ -95,6 +95,14 @@ describe('plugin conformance — every builtin obeys the contract', () => {
         }
       });
 
+      it('healthCheck, when present, is a function (presence is the capability signal, ADR 0039)', () => {
+        // No capabilities flag for this one — search and uninstall already
+        // established that these internal affordances are signalled by
+        // method presence, not a flag (ADR 0039). This is a shape check,
+        // not a "must implement" rule.
+        expect(['function', 'undefined']).toContain(typeof plugin.healthCheck);
+      });
+
       if (manifest.requires.length > 0) {
         it('check() throws ErrPluginUnavailable when a required binary is missing', async () => {
           // The composite `all` plugin's check delegates to its members,

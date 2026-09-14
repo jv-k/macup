@@ -98,6 +98,10 @@ const pnpm: Plugin = {
   ): Promise<void> {
     await mutateRefs(ctx, refs, opts, (ref) => ['pnpm', ['update', '-g', ref.name]]);
   },
+
+  async healthCheck(ctx: PluginContext): Promise<void> {
+    await ctx.exec.run('pnpm', ['doctor'], { signal: ctx.signal });
+  },
 };
 
 export default pnpm;

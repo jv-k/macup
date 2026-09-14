@@ -192,6 +192,10 @@ const brew: Plugin = {
     }
     return results;
   },
+
+  async healthCheck(ctx: PluginContext): Promise<void> {
+    await ctx.exec.run('brew', ['doctor'], { signal: ctx.signal });
+  },
 };
 
 // Silence "KIND unused" since it's informational documentation for

@@ -103,3 +103,12 @@ treats uncomparable pairs as "allow upgrade."
 config-file operations. Plugins do not implement them; they are
 handled uniformly by `ConfigStore` based on the plugin's
 `configKeys`.
+
+## Health check
+
+A plugin that wants a health check run after its own `install` or `update`
+implements the optional `healthCheck(ctx)` method. The host calls it once,
+after all refs for that command have been applied, whenever the plugin
+defines it (presence is the signal, same as `search`, with no separate
+capabilities flag). brew, npm, and pnpm implement it by running their
+backend's own `doctor` command (`brew doctor`, `npm doctor`, `pnpm doctor`).

@@ -143,21 +143,18 @@ async function commitMutation<T>(
   if (save.backupPath) log.print(log.trace(`Backup: ${save.backupPath}`));
 }
 
+// Presence of `plugin.healthCheck` is the capability signal (ADR 0039) — no
+// per-backend map to look `pluginId` up in. A plugin that doesn't define the
+// method (composite `all`, appstore/mas, system, xcode) is a no-op, exactly
+// as an absent map entry was before.
 async function runHealthCheck(
   deps: SpinnerDeps,
-  pluginId: string,
+  plugin: Plugin,
   ctx: PluginContext,
 ): Promise<void> {
-  const checks: Record<string, [string, string[]]> = {
-    brew: ['brew', ['doctor']],
-    npm: ['npm', ['doctor']],
-    pnpm: ['pnpm', ['doctor']],
-  };
-  const entry = checks[pluginId];
-  if (!entry) return;
-  const [cmd, args] = entry;
-  await withSpinner(deps, `Checking ${pluginId} health…`, async () => {
-    await ctx.exec.run(cmd, args);
+  if (!plugin.healthCheck) return;
+  await withSpinner(deps, `Checking ${plugin.manifest.id} health…`, async () => {
+    await plugin.healthCheck?.(ctx);
   });
 }
 
@@ -444,7 +441,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             throw err;
           }
         }
-        await runHealthCheck(deps, manifest.id, makeCtx(deps));
+        await runHealthCheck(deps, plugin, makeCtx(deps));
       },
     });
   }
@@ -603,7 +600,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
             }
           }
         }
-        await runHealthCheck(deps, manifest.id, makeCtx(deps));
+        await runHealthCheck(deps, plugin, makeCtx(deps));
         log.print(
           log.success(`Updated ${refs.length} ${refs.length === 1 ? 'package' : 'packages'}.`),
         );

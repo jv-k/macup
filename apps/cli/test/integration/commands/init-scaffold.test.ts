@@ -30,6 +30,8 @@ interface FakeOpts {
   statuses?: PackageStatus[];
   unavailable?: string;
   listThrows?: Error;
+  /** Throw from list() only for this subtype, to model one subtype breaking. */
+  listThrowsFor?: string;
 }
 
 function fake(opts: FakeOpts): Plugin {
@@ -55,6 +57,9 @@ function fake(opts: FakeOpts): Plugin {
     },
     async list(_ctx: PluginContext, listOpts: ListOptions): Promise<PackageStatus[]> {
       if (opts.listThrows) throw opts.listThrows;
+      if (opts.listThrowsFor && listOpts.subtype === opts.listThrowsFor) {
+        throw new Error(`${opts.id} ${opts.listThrowsFor} exploded`);
+      }
       const all = opts.statuses ?? [];
       return listOpts.subtype ? all.filter((s) => s.ref.subtype === listOpts.subtype) : all;
     },
@@ -226,6 +231,27 @@ describe('detectInstalled', () => {
     ];
     const result = await detectInstalled(registry, ctx());
     expect(result.scanned).toEqual(['npm']);
+  });
+
+  it('scans per key, so one subtype failing does not cover or uncover the other', async () => {
+    // Found in review: the guard is per key, not per backend. brew's formulas
+    // answering while its casks throw leaves brew.formulas scanned and
+    // brew.casks not, so a prune may touch the first and never the second.
+    const registry = [
+      fake({
+        id: 'brew',
+        configKeys: ['brew.formulas', 'brew.casks'],
+        subtypes: [
+          { id: 'formulas', configKey: 'brew.formulas' },
+          { id: 'casks', configKey: 'brew.casks' },
+        ],
+        statuses: [pkg('ripgrep', true, 'formulas')],
+        listThrowsFor: 'casks',
+      }),
+    ];
+    const result = await detectInstalled(registry, ctx());
+    expect(result.scanned).toEqual(['brew.formulas']);
+    expect(result.failed.map((f) => f.pluginId)).toEqual(['brew']);
   });
 });
 
@@ -564,6 +590,28 @@ describe('runInitScaffold --prune (#127)', () => {
     expect(removed).toEqual([]);
     expect(saves).toEqual([]);
     expect(printed.join('\n')).toMatch(/nothing to add or untrack/i);
+  });
+
+  it('says so when --prune was asked for but no backend could be scanned', async () => {
+    // Found in review: "Nothing to write." alone reads as "nothing to prune
+    // either", when the truth is that no key was covered, so nothing was safe
+    // to prune. The user asked; tell them why nothing happened.
+    const { args, removed, saves, printed } = pruneHarness(
+      { npm: ['typescript'] },
+      {
+        force: true,
+        plan: {
+          groups: [],
+          scanned: [],
+          unavailable: [{ pluginId: 'npm', reason: '`npm` was not found' }],
+          failed: [],
+        },
+      },
+    );
+    await expect(runInitScaffold(args)).resolves.toBe(0);
+    expect(removed).toEqual([]);
+    expect(saves).toEqual([]);
+    expect(printed.join('\n')).toMatch(/nothing to prune/i);
   });
 
   it('under --dry-run names the keys a prune would touch and opens nothing', async () => {

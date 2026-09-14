@@ -211,6 +211,29 @@ function staleUnderScannedKeys(plan: DetectionPlan, store: ScaffoldStore): Stale
     .filter((g) => g.names.length > 0);
 }
 
+/** The answer to one guarded write, with the pipe case kept apart from a plain "no". */
+type Consent = 'yes' | 'no' | 'refused';
+
+/**
+ * Whether a guarded write may go ahead. `--force` is yes in advance. Under a
+ * pipe there is nobody to ask, so the answer is a refusal rather than a guess
+ * (docs/CODING_STANDARDS.md): failing loudly beats hanging on a prompt nobody
+ * can answer, and beats silently rewriting a config inside someone's cron job.
+ * On a TTY it is whatever the prompt says.
+ */
+async function consent(
+  input: ScaffoldInput,
+  ask: () => Promise<boolean>,
+  refusal: string,
+): Promise<Consent> {
+  if (input.force) return 'yes';
+  if (!input.interactive) {
+    input.printErr(refusal);
+    return 'refused';
+  }
+  return (await ask()) ? 'yes' : 'no';
+}
+
 /**
  * Write the detected packages into the applist. Returns the process exit code.
  *
@@ -230,9 +253,12 @@ export async function runInitScaffold(input: ScaffoldInput): Promise<number> {
 
   // Without --prune an empty scan has nothing to do. With it, an empty listing
   // over a covered key is still an answer: everything tracked there is stale.
-  const canPrune = input.prune && plan.scanned.length > 0;
-  if (countDetected(plan) === 0 && !canPrune) {
+  // No covered key at all is the one case a prune cannot act on, and the user
+  // who asked for one is told so rather than left to infer it.
+  const pruning = input.prune && plan.scanned.length > 0;
+  if (countDetected(plan) === 0 && !pruning) {
     print('Nothing to write.');
+    if (input.prune) print('Nothing to prune: no backend could be scanned, so no key was covered.');
     return 0;
   }
 
@@ -241,7 +267,7 @@ export async function runInitScaffold(input: ScaffoldInput): Promise<number> {
     // The store is never opened under --dry-run (ADR 0047), so the stale names
     // cannot be listed here. The keys a prune would touch can, and those are
     // the guard that matters: nothing outside them is ever consulted.
-    if (canPrune) {
+    if (pruning) {
       print(`[dry-run] would untrack anything under ${plan.scanned.join(', ')} that was not found`);
     }
     return 0;
@@ -257,11 +283,11 @@ export async function runInitScaffold(input: ScaffoldInput): Promise<number> {
       return { group, fresh: group.names.filter((n) => !tracked.has(n)) };
     })
     .filter((p) => p.fresh.length > 0);
-  const stale = canPrune ? staleUnderScannedKeys(plan, input.store) : [];
+  const stale = pruning ? staleUnderScannedKeys(plan, input.store) : [];
 
   if (pending.length === 0 && stale.length === 0) {
     print(
-      canPrune
+      pruning
         ? 'The applist already matches what was found — nothing to add or untrack.'
         : 'The applist already tracked everything found — nothing to add.',
     );
@@ -270,21 +296,19 @@ export async function runInitScaffold(input: ScaffoldInput): Promise<number> {
 
   let addedTotal = 0;
   if (pending.length > 0) {
-    let proceed = true;
+    let answer: Consent = 'yes';
     // Only guard an applist that has something in it: a first run has nothing
     // to lose, and prompting anyway would tax the path everyone takes once.
     if (input.trackedAlready > 0 && !input.force) {
       print(`${input.applistPath} already tracks ${input.trackedAlready} package(s).`);
-      // Never prompt under a pipe (docs/CODING_STANDARDS.md). Failing loudly
-      // beats hanging on a prompt nobody can answer, and beats silently
-      // rewriting a config inside someone's cron job.
-      if (!input.interactive) {
-        printErr('Refusing to modify it without confirmation. Re-run with --force to proceed.');
-        return 1;
-      }
-      proceed = await input.confirm();
+      answer = await consent(
+        input,
+        input.confirm,
+        'Refusing to modify it without confirmation. Re-run with --force to proceed.',
+      );
     }
-    if (proceed) {
+    if (answer === 'refused') return 1;
+    if (answer === 'yes') {
       for (const { group, fresh } of pending) {
         addedTotal += input.store.add(group.key, fresh).added.length;
       }
@@ -299,15 +323,13 @@ export async function runInitScaffold(input: ScaffoldInput): Promise<number> {
     const count = stale.reduce((n, g) => n + g.names.length, 0);
     print(`${count} tracked package(s) were not found on this machine:`);
     for (const g of stale) print(`  ${g.key}: ${g.names.join(', ')}`);
-    let proceed = true;
-    if (!input.force) {
-      if (!input.interactive) {
-        printErr('Refusing to untrack them without confirmation. Re-run with --force to proceed.');
-        return 1;
-      }
-      proceed = await input.confirmPrune();
-    }
-    if (proceed) {
+    const answer = await consent(
+      input,
+      input.confirmPrune,
+      'Refusing to untrack them without confirmation. Re-run with --force to proceed.',
+    );
+    if (answer === 'refused') return 1;
+    if (answer === 'yes') {
       for (const { key, names } of stale) {
         removedTotal += input.store.remove(key, names).removed.length;
       }

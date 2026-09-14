@@ -47,12 +47,13 @@ export const INIT_ARGS = {
   },
   force: {
     type: 'boolean',
-    description: 'Let bare `macup init` modify an applist that already tracks packages.',
+    description:
+      'Answer yes in advance to the prompts of bare `macup init`: the merge into a populated applist, and the prune.',
   },
   prune: {
     type: 'boolean',
     description:
-      'Also untrack packages the scan did not find, under the keys it covered. Asks first.',
+      'Also untrack packages the scan did not find, under the keys it covered. Asks first, unless --force.',
   },
 } as const;
 

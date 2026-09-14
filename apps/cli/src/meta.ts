@@ -115,7 +115,7 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
   '--cask': 'Scope the command to Homebrew casks.',
   '--formula': 'Scope the command to Homebrew formulas.',
   '--subtype': 'Scope the command to one subtype by name (e.g. `--subtype=casks`).',
-  '--force': 'Proceed without the confirmation prompt, for unattended use.',
+  '--force': 'Proceed without the confirmation prompts, for unattended use.',
 };
 
 // Top-level flags, with the prose used for the reference. These are the

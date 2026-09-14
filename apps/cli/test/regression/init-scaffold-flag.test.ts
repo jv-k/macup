@@ -236,9 +236,10 @@ describe('bare `macup init` scaffolds the applist (#14)', () => {
 // goes and an npm entry — a backend that was not there to ask — stays.
 describe('`macup init --prune` untracks what the scan did not find (#127)', () => {
   // jq is tracked but the stub brew does not list it; typescript lives under a
-  // key no available backend covered this run.
+  // key no available backend covered this run. The pin is on jq, the name that
+  // gets pruned, so the assertion below can actually fail (found in review).
   const STALE =
-    'version: 1\nbrew:\n  formulas:\n    - jq\n    - ripgrep\nnpm:\n  - typescript\npins:\n  brew:\n    ripgrep: 14.1.0\n';
+    'version: 1\nbrew:\n  formulas:\n    - jq\n    - ripgrep\nnpm:\n  - typescript\npins:\n  brew:\n    jq: 1.7.1\n';
 
   it('drops the stale entry under a scanned key and leaves an unscanned key alone', async () => {
     const { env, applist } = sandbox(STALE);
@@ -249,8 +250,9 @@ describe('`macup init --prune` untracks what the scan did not find (#127)', () =
     expect(text).not.toMatch(/^\s+- jq$/m);
     expect(text).toContain('ripgrep');
     expect(text).toContain('typescript');
-    // The pin is hand-written intent and untrack never touches pins.
-    expect(text).toContain('ripgrep: 14.1.0');
+    // The pin is hand-written intent and untrack never touches pins, even
+    // for the name it just pruned; dropping it is `unpin`'s decision.
+    expect(text).toContain('jq: 1.7.1');
   });
 
   it('refuses under a pipe without --force, and untracks nothing', async () => {

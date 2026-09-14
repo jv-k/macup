@@ -9,7 +9,20 @@
  * @module
  */
 
+import { ErrMutateFailed, type MutateFailure } from '../errors';
 import type { MutateOptions, PackageRef, PackageStatus, PluginContext } from './types';
+
+// Cap on a per-ref failure message inside the aggregate ErrMutateFailed.
+// Backend stderr can run to thousands of characters (a brew build log, say);
+// this keeps the thrown error's message readable while still naming every
+// failed ref, per the "bounded/truncated, never raw unbounded output" contract.
+const MAX_FAILURE_MESSAGE_LENGTH = 200;
+
+function boundedFailureMessage(stderr: string, stdout: string): string {
+  const text = stderr.trim() || stdout.trim();
+  if (text.length <= MAX_FAILURE_MESSAGE_LENGTH) return text;
+  return `${text.slice(0, MAX_FAILURE_MESSAGE_LENGTH)}… (+${text.length - MAX_FAILURE_MESSAGE_LENGTH} chars)`;
+}
 
 /**
  * Tolerant JSON parse for tool output that may be empty or noisy. Returns
@@ -41,10 +54,12 @@ export function filterOutdated(
 /**
  * Run a mutating command once per package ref. The loop that used to live in
  * every plugin's `runAll` lives here: honour `dryRun`, pass the cancellation
- * signal, tag output as a `user-action` so it streams to the gutter,
- * and throw a uniform error on a non-zero exit. A plugin supplies only the
- * argv for a ref via `command`.
- * @throws Error naming the command and its exit code when the backend fails.
+ * signal, tag output as a `user-action` so it streams to the gutter, and
+ * attempt every ref in the batch rather than aborting at the first failure —
+ * one ref's non-zero exit no longer strands the rest of the batch. A plugin
+ * supplies only the argv for a ref via `command`.
+ * @throws {@link ErrMutateFailed} once, after every ref has been attempted,
+ * when one or more failed — never a bare `Error` (#122).
  */
 export async function mutateRefs(
   ctx: PluginContext,
@@ -52,6 +67,7 @@ export async function mutateRefs(
   opts: MutateOptions,
   command: (ref: PackageRef) => readonly [string, readonly string[]],
 ): Promise<void> {
+  const failures: MutateFailure[] = [];
   for (const ref of refs) {
     const [cmd, args] = command(ref);
     if (opts.dryRun) {
@@ -60,9 +76,10 @@ export async function mutateRefs(
     }
     const r = await ctx.exec.run(cmd, args, { signal: ctx.signal, kind: 'user-action' });
     if (r.exitCode !== 0) {
-      throw new Error(
-        `${cmd} ${args.join(' ')} exited ${r.exitCode}: ${r.stderr.trim() || r.stdout.trim()}`,
-      );
+      failures.push({ ref, message: boundedFailureMessage(r.stderr, r.stdout) });
     }
+  }
+  if (failures.length > 0) {
+    throw new ErrMutateFailed(failures);
   }
 }

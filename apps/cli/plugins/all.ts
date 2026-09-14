@@ -7,11 +7,8 @@
 // exclusion (ADR 0037), which a backend-less plugin can't reach. The manifest
 // still declares the install/update capabilities; the host provides them.
 
+import { probe } from '../src/plugins/probe';
 import type { ListOptions, PackageStatus, Plugin, PluginContext } from '../src/plugins/types';
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
 
 export function createAllPlugin(constituents: readonly Plugin[]): Plugin {
   return {
@@ -40,12 +37,12 @@ export function createAllPlugin(constituents: readonly Plugin[]): Plugin {
     async list(ctx: PluginContext, opts: ListOptions): Promise<PackageStatus[]> {
       const statuses: PackageStatus[] = [];
       for (const plugin of constituents) {
-        try {
-          await plugin.check(ctx);
-          const partial = await plugin.list(ctx, opts);
-          statuses.push(...partial);
-        } catch (err) {
-          ctx.log.warn(`[${plugin.manifest.id}] skipped: ${errorMessage(err)}`);
+        const outcome = await probe(plugin, ctx, opts);
+        if (outcome.kind === 'ok') {
+          statuses.push(...outcome.statuses);
+        } else {
+          const message = outcome.kind === 'timeout' ? 'probe timed out' : outcome.message;
+          ctx.log.warn(`[${plugin.manifest.id}] skipped: ${message}`);
         }
       }
       return statuses;

@@ -103,6 +103,9 @@ describe('macup init — argument handling', () => {
     const removed: Array<{ key: string; names: readonly string[] }> = [];
     const deps = {
       ...stubDeps,
+      // The scan probes each plugin through this context; the stub's empty
+      // registry never needed one.
+      pluginContext: { exec: stubDeps.exec, log: stubDeps.log, signal: stubDeps.signal },
       registry: [
         {
           manifest: {

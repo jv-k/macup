@@ -29,6 +29,7 @@ interface FakeOpts {
   track?: boolean;
   statuses?: PackageStatus[];
   unavailable?: string;
+  checkThrows?: Error;
   listThrows?: Error;
   /** Throw from list() only for this subtype, to model one subtype breaking. */
   listThrowsFor?: string;
@@ -54,6 +55,7 @@ function fake(opts: FakeOpts): Plugin {
     },
     async check() {
       if (opts.unavailable) throw new ErrPluginUnavailable(opts.id, opts.unavailable);
+      if (opts.checkThrows) throw opts.checkThrows;
     },
     async list(_ctx: PluginContext, listOpts: ListOptions): Promise<PackageStatus[]> {
       if (opts.listThrows) throw opts.listThrows;

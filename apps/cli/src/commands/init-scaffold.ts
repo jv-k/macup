@@ -18,6 +18,7 @@
 
 import type { ApplistKey } from '../config/schema';
 import { ErrPluginUnavailable } from '../errors';
+import { errorMessage, probe, probeOutcomeReason } from '../plugins/probe';
 import type { Plugin, PluginContext } from '../plugins/types';
 import { resolveConfigKey } from './from-manifest';
 
@@ -77,53 +78,61 @@ export async function detectInstalled(
     // `xcode` are update-only and declare no config keys.
     if (!m.capabilities.track || m.configKeys.length === 0) continue;
 
+    // check() once per plugin, same as before this scan routed through the
+    // promoted probe: an availability verdict (or a genuine check() failure)
+    // is one fact about the plugin, not one per subtype, so it is settled
+    // here rather than inside the subtype loop below — which would otherwise
+    // repeat an identical failure once per subtype for a multi-subtype
+    // plugin like brew.
     try {
       await plugin.check(ctx);
     } catch (err) {
       if (err instanceof ErrPluginUnavailable) {
         unavailable.push({ pluginId: m.id, reason: err.reason });
-        continue;
+      } else {
+        failed.push({ pluginId: m.id, reason: errorMessage(err) });
       }
-      failed.push({ pluginId: m.id, reason: messageOf(err) });
       continue;
     }
 
     // One pass per subtype, so brew's formulas and casks land in their own
-    // keys rather than being merged into whichever came first.
+    // keys rather than being merged into whichever came first. Availability
+    // is already settled above, so each subtype's listing goes through the
+    // promoted probe with skipCheck: true, isolating a per-subtype list()
+    // failure without re-running check() or repeating a verdict already
+    // recorded once for the whole plugin.
     const subtypeIds =
       m.subtypes && m.subtypes.length > 0 ? m.subtypes.map((s) => s.id) : [undefined];
     for (const subtype of subtypeIds) {
       const key = resolveConfigKey(plugin, subtype);
       if (!key) continue;
-      try {
-        const statuses = await plugin.list(ctx, subtype ? { subtype } : {});
-        // Recorded before the empty check: an empty listing still covers the key.
-        scanned.push(key);
-        // Sorted and de-duplicated: the same machine should scaffold the same
-        // file twice, and a backend listing a name twice is not the user's
-        // problem.
-        const names = [
-          ...new Set(statuses.filter((s) => s.installed).map((s) => s.ref.name)),
-        ].sort();
-        if (names.length === 0) continue;
-        groups.push({
-          pluginId: m.id,
-          displayName: m.displayName,
-          ...(subtype ? { subtype } : {}),
-          key,
-          names,
-        });
-      } catch (err) {
-        failed.push({ pluginId: m.id, reason: messageOf(err) });
+
+      const outcome = await probe(plugin, ctx, subtype ? { subtype } : {}, { skipCheck: true });
+      if (outcome.kind !== 'ok') {
+        failed.push({ pluginId: m.id, reason: probeOutcomeReason(outcome) });
+        continue;
       }
+      // Recorded before the empty check: an empty listing still covers the key.
+      scanned.push(key);
+
+      // Sorted and de-duplicated: the same machine should scaffold the same
+      // file twice, and a backend listing a name twice is not the user's
+      // problem.
+      const names = [
+        ...new Set(outcome.statuses.filter((s) => s.installed).map((s) => s.ref.name)),
+      ].sort();
+      if (names.length === 0) continue;
+      groups.push({
+        pluginId: m.id,
+        displayName: m.displayName,
+        ...(subtype ? { subtype } : {}),
+        key,
+        names,
+      });
     }
   }
 
   return { groups, scanned, unavailable, failed };
-}
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 /** Total packages across every group, for one-line summaries. */

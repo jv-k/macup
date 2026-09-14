@@ -9,6 +9,8 @@
  * @module
  */
 
+import type { PackageRef } from './plugins/types';
+
 /**
  * A failure macup diagnosed and worded for the user, as opposed to a crash.
  * The CLI's error boundary catches this and prints the message alone, so a
@@ -96,5 +98,34 @@ export class ErrBackupNotFound extends MacupError {
 
   constructor(readonly path: string) {
     super(`Backup not found: ${path}`);
+  }
+}
+
+/** One ref's mutate attempt inside a `mutateRefs` batch, and its bounded failure text. */
+export interface MutateFailure {
+  /** The package ref whose install/update call exited non-zero. */
+  readonly ref: PackageRef;
+  /** Bounded/truncated text drawn from stderr, falling back to stdout — never the raw unbounded output. */
+  readonly message: string;
+}
+
+/**
+ * `mutateRefs` (the shared per-ref loop in `src/plugins/helpers.ts`, used by
+ * brew/npm/cargo/pip/go/pnpm) attempts every ref in a batch rather than
+ * aborting at the first failure, then throws this once after the batch
+ * finishes, naming every ref that failed and its message. Replaces the bare
+ * `Error` `mutateRefs` used to throw on a non-zero exit, which escaped the
+ * CLI's error boundary as a raw stack trace instead of a one-line message (#122).
+ */
+export class ErrMutateFailed extends MacupError {
+  /** @see {@link MacupError.kind} */
+  override readonly kind = 'mutate-failed';
+
+  constructor(readonly failures: readonly MutateFailure[]) {
+    super(
+      `${failures.length} ${failures.length === 1 ? 'ref' : 'refs'} failed:\n${failures
+        .map((f) => `  ${f.ref.name}: ${f.message}`)
+        .join('\n')}`,
+    );
   }
 }

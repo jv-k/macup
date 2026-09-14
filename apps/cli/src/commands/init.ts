@@ -167,11 +167,7 @@ async function runInitScaffoldAction(
   opts: { dryRun: boolean; force: boolean },
 ): Promise<number> {
   const paths = deps.resolvePaths();
-  const plan = await detectInstalled(deps.registry, {
-    exec: deps.exec,
-    log: deps.log,
-    signal: deps.signal,
-  });
+  const plan = await detectInstalled(deps.registry, deps.pluginContext);
 
   const shared = {
     plan,

@@ -33,11 +33,15 @@ const CLEAN_FIXTURES: FixtureEntry[] = [
 ];
 
 function mkDeps(exec: ExecRunner, registry: Plugin[] = [npmPlugin]): CliDeps {
+  const log = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
+  const signal = new AbortController().signal;
   return {
     exec,
-    log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    log,
     registry,
-    signal: new AbortController().signal,
+    signal,
+    // check.ts now reads the shared triple off pluginContext (#136).
+    pluginContext: { exec, log, signal },
   } as unknown as CliDeps;
 }
 

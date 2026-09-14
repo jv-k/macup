@@ -23,7 +23,7 @@ import type { ArgsDef } from 'citty';
 import type { PathResolution } from '../config/paths';
 import type { ConfigStore } from '../config/store';
 import type { Plugin } from '../plugins/types';
-import type { ExecRunner, Logger } from '../plugins/types';
+import type { ExecRunner, Logger, PluginContext } from '../plugins/types';
 
 /** citty's parsed args, untyped at this boundary because each command knows its own shape. */
 export type ParsedArgs = Record<string, unknown>;
@@ -66,6 +66,12 @@ export interface CliDeps {
   readonly signal: AbortSignal;
   /** Trip the cancellation signal. Used by the SIGINT handler. */
   readonly abort: () => void;
+  /**
+   * The exec/log/signal triple every plugin call needs, built once here so
+   * host modules stop hand-assembling it themselves (#136). Exactly `{ exec,
+   * log, signal }` above — bundled for the one shape plugins actually take.
+   */
+  readonly pluginContext: PluginContext;
 }
 
 /**

@@ -241,11 +241,7 @@ export function buildOutdatedCommand(deps: CliDeps) {
       if (args.json) {
         const report = await buildOutdatedReport({
           plugins: deps.registry,
-          makeCtx: () => ({
-            exec: deps.exec,
-            log: deps.log,
-            signal: deps.signal,
-          }),
+          makeCtx: () => deps.pluginContext,
         });
         console.log(JSON.stringify(report, null, 2));
         return;
@@ -261,11 +257,7 @@ export function buildOutdatedCommand(deps: CliDeps) {
       const report = await withSpinner(deps, 'Checking plugins…', async (update) =>
         buildOutdatedReport({
           plugins: deps.registry,
-          makeCtx: () => ({
-            exec: deps.exec,
-            log: deps.log,
-            signal: deps.signal,
-          }),
+          makeCtx: () => deps.pluginContext,
           onProgress: (e) => {
             update(`Checking plugins… (${e.completed}/${e.total}) ${e.displayName}`);
           },

@@ -22,6 +22,7 @@ import { buildExecRunner } from '../exec/build';
 import { fileLogSink } from '../exec/logging';
 import { ExecaExecRunner } from '../exec/run';
 import { defaultRegistry } from '../plugins/registry';
+import type { PluginContext } from '../plugins/types';
 import { useColor } from '../runtime';
 import * as logui from '../ui/log';
 import { StreamSink } from '../ui/stream-sink';
@@ -95,6 +96,10 @@ export function bootstrap(input: BootstrapInput): CliDeps {
     debug: () => {},
   };
 
+  // Built once, here, so every command/wizard call site hands a plugin this
+  // same object instead of re-assembling the triple by hand (#136).
+  const pluginContext: PluginContext = { exec, log, signal: sigintController.signal };
+
   const resolvePaths = () =>
     resolveConfigPaths({
       env: env as Partial<Record<string, string>>,
@@ -137,5 +142,6 @@ export function bootstrap(input: BootstrapInput): CliDeps {
     platform: process.platform,
     signal: sigintController.signal,
     abort: () => sigintController.abort(),
+    pluginContext,
   };
 }

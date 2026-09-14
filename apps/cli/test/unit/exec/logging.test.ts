@@ -7,20 +7,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { type LogRecord, LoggingExecRunner, redactArgs } from '../../../src/exec/logging';
-import type { ExecResult, ExecRunOptions, ExecRunner } from '../../../src/plugins/types';
-
-class StubRunner implements ExecRunner {
-  readonly calls: Array<{ cmd: string; args: readonly string[]; opts?: ExecRunOptions }> = [];
-  constructor(private readonly result: Partial<ExecResult> = {}) {}
-  async run(cmd: string, args: readonly string[], opts?: ExecRunOptions): Promise<ExecResult> {
-    this.calls.push({ cmd, args, opts });
-    opts?.onStdout?.('streamed chunk\n');
-    return { stdout: 'out', stderr: '', exitCode: 0, ...this.result };
-  }
-  onPath(): boolean {
-    return true;
-  }
-}
+import type { ExecResult } from '../../../src/plugins/types';
+import { StubRunner } from './support';
 
 function harness(result?: Partial<ExecResult>) {
   const lines: string[] = [];

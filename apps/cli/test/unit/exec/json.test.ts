@@ -9,9 +9,9 @@ import { FixtureExecRunner } from '../../../src/exec/fixtures';
 import { runJson } from '../../../src/exec/json';
 import { LoggingExecRunner } from '../../../src/exec/logging';
 import { ExecaExecRunner } from '../../../src/exec/run';
-import { NULL_SINK, StreamingExecRunner, type UiSink } from '../../../src/exec/streaming';
+import { NULL_SINK, StreamingExecRunner } from '../../../src/exec/streaming';
 import { TracingExecRunner } from '../../../src/exec/tracing';
-import type { ExecResult, ExecRunOptions, ExecRunner } from '../../../src/plugins/types';
+import { StreamingFakeInner, StubRunner, makeSinkSpy } from './support';
 
 describe('runJson — ExecaExecRunner', () => {
   const runner = new ExecaExecRunner();
@@ -56,18 +56,6 @@ describe('runJson — FixtureExecRunner', () => {
   });
 });
 
-class StubRunner implements ExecRunner {
-  readonly calls: Array<{ cmd: string; args: readonly string[]; opts?: ExecRunOptions }> = [];
-  constructor(private readonly result: Partial<ExecResult> = {}) {}
-  async run(cmd: string, args: readonly string[], opts?: ExecRunOptions): Promise<ExecResult> {
-    this.calls.push({ cmd, args, opts });
-    return { stdout: 'out', stderr: '', exitCode: 0, ...this.result };
-  }
-  onPath(): boolean {
-    return true;
-  }
-}
-
 describe('runJson — LoggingExecRunner', () => {
   it('logs runJson calls too, since they are subprocesses like any other', async () => {
     const lines: string[] = [];
@@ -77,44 +65,6 @@ describe('runJson — LoggingExecRunner', () => {
     expect(lines).toHaveLength(1);
   });
 });
-
-interface SinkSpy extends UiSink {
-  readonly query: Array<{ chunk: string; source: string }>;
-}
-
-function makeSinkSpy(): SinkSpy {
-  const query: Array<{ chunk: string; source: string }> = [];
-  return {
-    query,
-    onUserAction: () => {},
-    onQuery: (chunk, source) => query.push({ chunk, source }),
-    onCheck: () => {},
-  };
-}
-
-class StreamingFakeInner implements ExecRunner {
-  constructor(
-    private readonly stdoutChunks: readonly string[],
-    private readonly stderrChunks: readonly string[],
-    private readonly exitCode = 0,
-  ) {}
-  async run(
-    _cmd: string,
-    _args: readonly string[],
-    opts: ExecRunOptions = {},
-  ): Promise<ExecResult> {
-    for (const chunk of this.stdoutChunks) opts.onStdout?.(chunk);
-    for (const chunk of this.stderrChunks) opts.onStderr?.(chunk);
-    return {
-      stdout: this.stdoutChunks.join(''),
-      stderr: this.stderrChunks.join(''),
-      exitCode: this.exitCode,
-    };
-  }
-  onPath(): boolean {
-    return true;
-  }
-}
 
 describe('runJson — StreamingExecRunner', () => {
   it('routes the underlying call through the kind sink and parses', async () => {

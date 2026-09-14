@@ -13,6 +13,7 @@ Drop `runJson` from `ExecRunner`. It moves to a free function, `runJson(runner, 
 ## Alternatives
 
 - **Leave it, per ADR 0032.** Was the right call at the time: a genuine PATH-lookup inversion needed fixing first, and this narrowing was a separate, smaller concern. Revisiting it now is exactly the "next touched" moment ADR 0032 named.
+- **Move brew onto `run` plus the existing `safeParseJson` (ADR 0032's named alternative).** `safeParseJson` (`plugins/helpers.ts`) tolerates empty or non-JSON stdout by returning `undefined`, which is right for npm/pnpm's `outdated`, since both exit non-zero and still emit usable JSON. brew's `outdated --json=v2` has no such quirk: a non-zero exit there is a real failure, and swallowing it would hide a broken `brew` from the caller. Keeping the throw-on-non-zero contract as its own function preserves that distinction instead of forcing brew through a helper built for a different failure mode.
 - **Keep both a method and a function, deprecate the method.** Adds a transition period with no caller left needing it. Brew's two call sites move in the same change that adds the function.
 
 ## Consequences

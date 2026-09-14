@@ -13,7 +13,8 @@
  */
 
 import type { ApplistKey } from '../config/schema';
-import { probe } from '../plugins/probe';
+import { ErrPluginUnavailable } from '../errors';
+import { errorMessage, probe, probeOutcomeReason } from '../plugins/probe';
 import type { Plugin, PluginContext } from '../plugins/types';
 import { resolveConfigKey } from './from-manifest';
 
@@ -66,26 +67,38 @@ export async function detectInstalled(
     // `xcode` are update-only and declare no config keys.
     if (!m.capabilities.track || m.configKeys.length === 0) continue;
 
+    // check() once per plugin, same as before this scan routed through the
+    // promoted probe: an availability verdict (or a genuine check() failure)
+    // is one fact about the plugin, not one per subtype, so it is settled
+    // here rather than inside the subtype loop below — which would otherwise
+    // repeat an identical failure once per subtype for a multi-subtype
+    // plugin like brew.
+    try {
+      await plugin.check(ctx);
+    } catch (err) {
+      if (err instanceof ErrPluginUnavailable) {
+        unavailable.push({ pluginId: m.id, reason: err.reason });
+      } else {
+        failed.push({ pluginId: m.id, reason: errorMessage(err) });
+      }
+      continue;
+    }
+
     // One pass per subtype, so brew's formulas and casks land in their own
-    // keys rather than being merged into whichever came first. check() is
-    // cheap and re-run per subtype (the promoted probe bundles it with
-    // list()), but an unavailable backend is recorded once for the plugin,
-    // not once per subtype — matching the single check() this loop used to
-    // make before any subtype was visited.
+    // keys rather than being merged into whichever came first. Availability
+    // is already settled above, so each subtype's listing goes through the
+    // promoted probe with skipCheck: true, isolating a per-subtype list()
+    // failure without re-running check() or repeating a verdict already
+    // recorded once for the whole plugin.
     const subtypeIds =
       m.subtypes && m.subtypes.length > 0 ? m.subtypes.map((s) => s.id) : [undefined];
     for (const subtype of subtypeIds) {
       const key = resolveConfigKey(plugin, subtype);
       if (!key) continue;
 
-      const outcome = await probe(plugin, ctx, subtype ? { subtype } : {});
-      if (outcome.kind === 'unavailable') {
-        unavailable.push({ pluginId: m.id, reason: outcome.error.reason });
-        break;
-      }
+      const outcome = await probe(plugin, ctx, subtype ? { subtype } : {}, { skipCheck: true });
       if (outcome.kind !== 'ok') {
-        const reason = outcome.kind === 'timeout' ? 'probe timed out' : outcome.message;
-        failed.push({ pluginId: m.id, reason });
+        failed.push({ pluginId: m.id, reason: probeOutcomeReason(outcome) });
         continue;
       }
 

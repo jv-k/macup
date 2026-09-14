@@ -48,16 +48,21 @@ export async function runDoctorChecks(deps: CheckDeps): Promise<DoctorReport> {
   return buildReport(deps.macupVersion, sections);
 }
 
-/** `macup doctor`: the self-diagnostic. Exit code reflects the worst finding, and `--json` emits the same report machine-readably. */
-export async function runDoctor(args: ParsedArgs, deps: CliDeps): Promise<void> {
-  const checkDeps: CheckDeps = {
+/**
+ * Assemble the deep-probe deps from the CLI bag, pulled out of {@link runDoctor}
+ * so the wiring is assertable on its own without spinning up the real
+ * BUILTIN_PLUGINS probe: exec/signal come from the shared plugin context
+ * (#136), but `log` is always this silent stub, never `deps.pluginContext.log`,
+ * because probe chatter (e.g. a plugin's list() warning) must become
+ * CheckResults rather than loose console lines, or `--json` output is
+ * corrupted.
+ */
+export function buildCheckDeps(deps: CliDeps): CheckDeps {
+  return {
     env: deps.env,
     home: deps.home,
-    exec: deps.exec,
-    // Probe chatter (e.g. a plugin's list() warning) becomes CheckResults;
-    // loose console lines would corrupt --json output.
+    ...deps.pluginContext,
     log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-    signal: deps.signal,
     // Every built-in gets deep-probed, not just the registry-filtered
     // set — a missing binary should show up as a warning, not vanish.
     // The composite `all` is excluded: probing it re-runs each backend.
@@ -70,8 +75,11 @@ export async function runDoctor(args: ParsedArgs, deps: CliDeps): Promise<void> 
     macupVersion: getVersion(),
     probeTimeoutMs: DOCTOR_PROBE_TIMEOUT_MS,
   };
+}
 
-  const report = await runDoctorChecks(checkDeps);
+/** `macup doctor`: the self-diagnostic. Exit code reflects the worst finding, and `--json` emits the same report machine-readably. */
+export async function runDoctor(args: ParsedArgs, deps: CliDeps): Promise<void> {
+  const report = await runDoctorChecks(buildCheckDeps(deps));
   console.log(args.json === true ? renderJson(report) : renderText(report));
   process.exitCode = exitCodeFor(report);
 }

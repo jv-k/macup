@@ -114,11 +114,7 @@ async function promptTrackedSetPicker(
     logui.printErr(`error: plugin "${target.pluginId}" has no tracked applist key`);
     return null;
   }
-  const ctx: PluginContext = {
-    exec: deps.exec,
-    log: deps.log,
-    signal: deps.signal,
-  };
+  const ctx: PluginContext = deps.pluginContext;
   const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
   // Same spinner seam (and the same message voice) as `macup <plugin> list`,
   // so a wait looks identical inside and outside the wizard.
@@ -214,7 +210,7 @@ async function promptSearchAndPick(
   });
   if (isCancel(query) || typeof query !== 'string') return null;
 
-  const ctx: PluginContext = { exec: deps.exec, log: deps.log, signal: deps.signal };
+  const ctx: PluginContext = deps.pluginContext;
   let results: Awaited<ReturnType<NonNullable<typeof plugin.search>>>;
   try {
     results = await withSpinner(deps, `Searching ${label} for “${query.trim()}”…`, async () => {
@@ -465,11 +461,7 @@ async function wizardLoop(
           fetchOutdated: async (t) => {
             const plugin = deps.registry.find((p) => p.manifest.id === t.pluginId);
             if (!plugin) return [];
-            const ctx: PluginContext = {
-              exec: deps.exec,
-              log: deps.log,
-              signal: deps.signal,
-            };
+            const ctx: PluginContext = deps.pluginContext;
             try {
               // Same message + spinner seam as `macup <plugin> update`'s
               // pre-check, so the wizard's wait is indistinguishable from

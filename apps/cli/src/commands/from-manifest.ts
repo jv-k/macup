@@ -33,14 +33,18 @@ export interface CommandDeps extends SpinnerDeps {
    * composite plugin.
    */
   readonly constituents?: readonly Plugin[];
+  /**
+   * The shared plugin context built once at bootstrap (`CliDeps.pluginContext`,
+   * #136). Optional so a test can hand this factory a hand-rolled
+   * `CommandDeps` with no outer bootstrap in the loop — {@link makeCtx} falls
+   * back to assembling the triple from the fields above when it's absent.
+   */
+  readonly pluginContext?: PluginContext;
 }
 
-function makeCtx(deps: CommandDeps): PluginContext {
-  return {
-    exec: deps.exec,
-    log: deps.log,
-    signal: deps.signal,
-  };
+/** Exported for the unit test proving the shared-vs-fallback behaviour (#136). */
+export function makeCtx(deps: CommandDeps): PluginContext {
+  return deps.pluginContext ?? { exec: deps.exec, log: deps.log, signal: deps.signal };
 }
 
 // One line for a constituent that did not act. 'planned'/'nothing' say nothing.

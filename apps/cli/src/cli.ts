@@ -198,6 +198,7 @@ for (const plugin of deps.registry) {
     getStore: deps.getStore,
     suppressBar: deps.suppressBar,
     signal: deps.signal,
+    pluginContext: deps.pluginContext,
     constituents: plugin.manifest.id === 'all' ? constituents : undefined,
   });
 }

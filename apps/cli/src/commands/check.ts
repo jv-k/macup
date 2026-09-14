@@ -68,11 +68,7 @@ export function buildCheckCommand(deps: CliDeps) {
     async run({ args }) {
       const report = await buildOutdatedReport({
         plugins: deps.registry,
-        makeCtx: () => ({
-          exec: deps.exec,
-          log: deps.log,
-          signal: deps.signal,
-        }),
+        makeCtx: () => deps.pluginContext,
       });
       if (report.totalOutdated > 0 || report.totalUncheckable > 0 || hasCheckFailure(report))
         process.exitCode = 1;

@@ -42,6 +42,12 @@ export async function probeList(
   // SIGINT and the probe timeout cancel the underlying subprocess. If the
   // signal already fired before we got here, the listener would never run
   // — so propagate the existing abort immediately.
+  //
+  // This is the one deliberate exception to handing a plugin the shared
+  // CliDeps.pluginContext untouched (#136): every other host module reads
+  // deps.pluginContext as-is, but this probe needs a *combined* signal —
+  // process-wide abort AND this probe's own timeout — that only exists per
+  // call, so it keeps building its own context rather than the shared one.
   const controller = new AbortController();
   const onAbort = () => controller.abort();
   if (deps.signal.aborted) controller.abort();

@@ -131,7 +131,10 @@ describe('plugin conformance — every builtin obeys the contract', () => {
 
         it('shortcut flags are unique within the plugin and never collide with a verb flag', () => {
           // Verb flags a subtype command already carries (from-manifest.ts):
-          // --dry-run, --verbose, --only-outdated, --all, --json, --subtype.
+          // --dry-run, --only-outdated, --all, --json, --subtype. `verbose`
+          // stays reserved for a different reason: the global stripper eats
+          // `--verbose` before citty parses, so a shortcut so named could
+          // never fire (#146).
           const reservedVerbFlags = [
             'dry-run',
             'verbose',

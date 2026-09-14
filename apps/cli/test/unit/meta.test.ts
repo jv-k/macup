@@ -122,3 +122,26 @@ describe('docsMetadata — --log (#16)', () => {
     expect(meta.envVars.map((e) => e.name)).toContain('MACUP_LOG');
   });
 });
+
+// #146: the flag matrix lists exactly what the command tree accepts.
+describe('docsMetadata — per-verb flags match the command tree (#146)', () => {
+  const brew = docsMetadata().plugins.find((p) => p.id === 'brew');
+  const flagsOf = (verb: string) =>
+    brew?.commands.find((c) => c.name === verb)?.flags.map((f) => f.flag) ?? [];
+
+  it('documents no --verbose on install or update', () => {
+    expect(flagsOf('install')).not.toContain('--verbose');
+    expect(flagsOf('update')).not.toContain('--verbose');
+  });
+
+  for (const verb of ['pin', 'unpin', 'skip', 'unskip']) {
+    it(`documents the subtype flags on brew ${verb} (ADR 0035)`, () => {
+      expect(flagsOf(verb)).toEqual(expect.arrayContaining(['--cask', '--formula', '--subtype']));
+    });
+  }
+
+  it('documents no subtype flags on npm pin, which has one subtype', () => {
+    const npm = docsMetadata().plugins.find((p) => p.id === 'npm');
+    expect(npm?.commands.find((c) => c.name === 'pin')?.flags).toEqual([]);
+  });
+});

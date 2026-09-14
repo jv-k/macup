@@ -10,6 +10,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { parse } from 'yaml';
+import { TOP_LEVEL_COMMANDS } from '../cli/commands';
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import type { PathResolution } from '../config/paths';
 import { ApplistSchema, SCHEMA_VERSION, formatApplistIssueLines } from '../config/schema';
@@ -142,17 +143,16 @@ export async function runConfig(_args: ParsedArgs, deps: CliDeps): Promise<void>
   console.log(formatConfigReport(report));
 }
 
+// The one description, held by the nouns registry (src/cli/commands.ts) so the
+// help screen, the shells, and citty's per-command help agree on it (#146).
+const DESCRIPTION = TOP_LEVEL_COMMANDS.find((c) => c.name === 'config')?.description ?? '';
+
 /** `macup config`. */
 export class ConfigAction implements ActionCommand {
   readonly name = 'config';
-  readonly description =
-    'Show config location, schema status, pin/skip counts, backup dir, and migration hints.';
+  readonly description = DESCRIPTION;
   readonly args = {
-    config: {
-      type: 'boolean' as const,
-      description:
-        'Show config location, schema status, pin/skip counts, backup dir, and migration hints.',
-    },
+    config: { type: 'boolean' as const, description: DESCRIPTION },
   };
 
   run = runConfig;

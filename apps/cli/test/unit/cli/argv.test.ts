@@ -161,3 +161,26 @@ describe('bare-word aliases survive a preceding global flag', () => {
     expect(a).toEqual(argv('--version'));
   });
 });
+
+// #146: `install`/`update` no longer declare a per-command `verbose` flag, so
+// `--verbose` after the verb is the global stripper's to consume, wherever it
+// sits. Nothing accepted before the removal stops being accepted.
+describe('--verbose is stripped wherever it appears (#146)', () => {
+  it('consumes a trailing --verbose after the verb and its packages', () => {
+    const a = argv('brew', 'update', 'ripgrep', '--verbose');
+    expect(extractVerbosityFlags(a)).toEqual({ debug: false, verbose: true });
+    expect(a).toEqual(argv('brew', 'update', 'ripgrep'));
+  });
+
+  it('consumes the -V short form between the verb and a package', () => {
+    const a = argv('brew', 'install', '-V', 'ripgrep');
+    expect(extractVerbosityFlags(a)).toEqual({ debug: false, verbose: true });
+    expect(a).toEqual(argv('brew', 'install', 'ripgrep'));
+  });
+
+  it('leaves -v alone: that spelling is the version flag, not verbosity', () => {
+    const a = argv('brew', 'install', '-v');
+    expect(extractVerbosityFlags(a)).toEqual({ debug: false, verbose: false });
+    expect(a).toEqual(argv('brew', 'install', '-v'));
+  });
+});

@@ -111,7 +111,6 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
   '--all': 'Widen the scope to every package, not just tracked ones.',
   '--json': 'Emit machine-readable JSON instead of formatted output.',
   '--dry-run': 'Print the commands that would run without executing them.',
-  '--verbose': 'Tee subprocess output to scrollback for a grep-able copy.',
   '--cask': 'Scope the command to Homebrew casks.',
   '--formula': 'Scope the command to Homebrew formulas.',
   '--subtype': 'Scope the command to one subtype by name (e.g. `--subtype=casks`).',

@@ -9,10 +9,11 @@
  * @module
  */
 
+import { probe } from '../../../plugins/probe';
 import { pathTo } from '../../../plugins/registry';
 import type { Plugin } from '../../../plugins/types';
 import type { CheckDeps, CheckResult, Section } from '../report';
-import { missingBinaries, probeList } from './probe';
+import { missingBinaries } from './probe';
 
 // Best-effort `<bin> --version` for the report line ("Homebrew 4.2.7").
 // Purely decorative: some backends (softwareupdate) have no version
@@ -57,7 +58,18 @@ async function probePlugin(plugin: Plugin, deps: CheckDeps): Promise<CheckResult
     else if (binPath) detail = `${m.displayName} (${binPath})`;
   }
 
-  const outcome = await probeList(plugin, deps, { onlyOutdated: true });
+  // skipCheck: missingBinaries already established availability above, for a
+  // report line naming every missing binary rather than check()'s
+  // first-miss-only message; re-running check() would only repeat that work.
+  const outcome = await probe(
+    plugin,
+    deps,
+    { onlyOutdated: true },
+    {
+      timeoutMs: deps.probeTimeoutMs,
+      skipCheck: true,
+    },
+  );
   switch (outcome.kind) {
     case 'ok': {
       const n = outcome.statuses.length;

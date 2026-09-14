@@ -13,9 +13,9 @@ import { readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { backupFileRe, backupPrefixFor } from '../../../config/backup';
 import { selectorLabel } from '../../../config/paths';
+import { errorMessage } from '../../../plugins/probe';
 import { buildConfigReport } from '../../config';
 import type { CheckDeps, CheckResult, Section } from '../report';
-import { errorMessage } from './probe';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

@@ -13,6 +13,7 @@ import { confirm, isCancel } from '@clack/prompts';
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ApplistKey } from '../config/schema';
 import type { ConfigStore, SaveResult } from '../config/store';
+import { probeOrThrow } from '../plugins/probe';
 import { resolveSelection } from '../plugins/selection';
 import {
   configKeyForSubtype,
@@ -307,13 +308,11 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         let statuses = await withSpinner(
           showJson ? { ...deps, suppressBar: true } : deps,
           `Fetching ${manifest.displayName} packages…`,
-          async () => {
-            await plugin.check(listCtx);
-            return plugin.list(listCtx, {
+          () =>
+            probeOrThrow(plugin, listCtx, {
               subtype,
               onlyOutdated: Boolean(args['only-outdated']),
-            });
-          },
+            }),
         );
 
         // Default: show only tracked packages (from applist.yaml).
@@ -521,10 +520,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const statuses = await withSpinner(
           deps,
           `Checking ${manifest.displayName} for outdated packages…`,
-          async () => {
-            await plugin.check(makeCtx(deps));
-            return plugin.list(makeCtx(deps), { subtype, onlyOutdated: true });
-          },
+          () => probeOrThrow(plugin, makeCtx(deps), { subtype, onlyOutdated: true }),
         );
 
         // Apply pin/skip filtering. ConfigStore.load() returns an empty

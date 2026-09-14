@@ -77,3 +77,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0047](0047-init-scaffolds-by-merging.md) | `macup init` scaffolds by merging, and refuses to guess under a pipe | accepted |
 | [0048](0048-runjson-leaves-execrunner.md) | `runJson` leaves the `ExecRunner` interface | accepted |
 | [0049](0049-manifest-subtype-table.md) | The manifest declares a subtype table, not a bare id list | accepted |
+| [0049](0049-one-availability-probe.md) | One availability probe for every check-then-list site | accepted |

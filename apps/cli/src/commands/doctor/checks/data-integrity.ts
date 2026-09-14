@@ -14,9 +14,10 @@ import { readFile } from 'node:fs/promises';
 import semver from 'semver';
 import { parse } from 'yaml';
 import { type Applist, type ApplistKey, ApplistSchema } from '../../../config/schema';
+import { probe } from '../../../plugins/probe';
 import type { Plugin } from '../../../plugins/types';
 import type { CheckDeps, CheckResult, Section } from '../report';
-import { missingBinaries, probeList } from './probe';
+import { missingBinaries } from './probe';
 
 function trackedFor(applist: Applist, key: ApplistKey): readonly string[] {
   // Walk the dotted applist key generically (e.g. 'brew.formulas' resolves
@@ -93,7 +94,17 @@ async function verifyPlugin(
     ];
   }
 
-  const outcome = await probeList(plugin, deps, {});
+  // skipCheck: the guard above already established availability via
+  // missingBinaries, matching the pre-promotion probe's contract.
+  const outcome = await probe(
+    plugin,
+    deps,
+    {},
+    {
+      timeoutMs: deps.probeTimeoutMs,
+      skipCheck: true,
+    },
+  );
   if (outcome.kind !== 'ok') {
     const reason =
       outcome.kind === 'timeout'

@@ -19,6 +19,7 @@ import { isCancel, note, select, text } from '@clack/prompts';
 import { type CommandDef, runCommand } from 'citty';
 import type { CliDeps } from './cli/types';
 import { withSpinner } from './commands/spinner';
+import { probe } from './plugins/probe';
 import { configKeyForSubtype } from './plugins/subtype-table';
 import type { Plugin, PluginContext } from './plugins/types';
 import * as logui from './ui/log';
@@ -117,16 +118,14 @@ async function promptTrackedSetPicker(
   const label = target.subtype ? `${target.pluginId}:${target.subtype}` : target.pluginId;
   // Same spinner seam (and the same message voice) as `macup <plugin> list`,
   // so a wait looks identical inside and outside the wizard.
-  let statuses: Awaited<ReturnType<typeof plugin.list>>;
-  try {
-    statuses = await withSpinner(deps, `Fetching ${label} packages…`, async () => {
-      await plugin.check(ctx);
-      return plugin.list(ctx, { subtype: target.subtype });
-    });
-  } catch (err) {
-    logui.printErr(`error: ${err instanceof Error ? err.message : String(err)}`);
+  const outcome = await withSpinner(deps, `Fetching ${label} packages…`, () =>
+    probe(plugin, ctx, { subtype: target.subtype }),
+  );
+  if (outcome.kind !== 'ok') {
+    logui.printErr(`error: ${outcome.kind === 'timeout' ? 'probe timed out' : outcome.message}`);
     return null;
   }
+  const statuses = outcome.statuses;
 
   const store = await deps.getStore();
   const trackedNames = store.list(configKey);
@@ -457,33 +456,32 @@ async function wizardLoop(
             const plugin = deps.registry.find((p) => p.manifest.id === t.pluginId);
             if (!plugin) return [];
             const ctx: PluginContext = deps.pluginContext;
-            try {
-              // Same message + spinner seam as `macup <plugin> update`'s
-              // pre-check, so the wizard's wait is indistinguishable from
-              // the direct command's.
-              const statuses = await withSpinner(
-                deps,
-                `Checking ${plugin.manifest.displayName} for outdated packages…`,
-                async () => {
-                  await plugin.check(ctx);
-                  return plugin.list(ctx, { subtype: t.subtype, onlyOutdated: true });
-                },
+            // Same message + spinner seam as `macup <plugin> update`'s
+            // pre-check, so the wizard's wait is indistinguishable from
+            // the direct command's.
+            const outcome = await withSpinner(
+              deps,
+              `Checking ${plugin.manifest.displayName} for outdated packages…`,
+              () => probe(plugin, ctx, { subtype: t.subtype, onlyOutdated: true }),
+            );
+            if (outcome.kind !== 'ok') {
+              logui.printErr(
+                `error: ${outcome.kind === 'timeout' ? 'probe timed out' : outcome.message}`,
               );
-              if (statuses.length === 0) {
-                // Print BEFORE returning so the user sees the message
-                // before pickAction's loop re-renders the action prompt.
-                logui.print(logui.info('Already up-to-date.'));
-                return [];
-              }
-              return statuses.map((st) => ({
-                name: st.ref.name,
-                currentVersion: st.installedVersion,
-                latestVersion: st.latestVersion,
-              }));
-            } catch (err) {
-              logui.printErr(`error: ${err instanceof Error ? err.message : String(err)}`);
               return [];
             }
+            const statuses = outcome.statuses;
+            if (statuses.length === 0) {
+              // Print BEFORE returning so the user sees the message
+              // before pickAction's loop re-renders the action prompt.
+              logui.print(logui.info('Already up-to-date.'));
+              return [];
+            }
+            return statuses.map((st) => ({
+              name: st.ref.name,
+              currentVersion: st.installedVersion,
+              latestVersion: st.latestVersion,
+            }));
           },
           pickOutdated: async (_t, rows) => {
             const total = rows.length;

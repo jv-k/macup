@@ -10,9 +10,16 @@
 
 import type { ConfigStore } from '../config/store';
 import { ErrPluginUnavailable } from '../errors';
+import { probe } from '../plugins/probe';
 import { resolveSelection } from '../plugins/selection';
 import { kindForConfigKey } from '../plugins/subtype-table';
-import type { MutateOptions, PackageRef, Plugin, PluginContext } from '../plugins/types';
+import type {
+  MutateOptions,
+  PackageRef,
+  PackageStatus,
+  Plugin,
+  PluginContext,
+} from '../plugins/types';
 
 /** Which mutating verb the composite is fanning out. */
 export type CompositeMode = 'install' | 'update';
@@ -49,6 +56,14 @@ function errorMessage(err: unknown): string {
  * (ErrPluginUnavailable), distinct from a real `error` — mirroring the read
  * path (buildOutdatedReport). Planning first lets the caller show a count and
  * skip the confirmation prompt when there is nothing to do.
+ *
+ * `update` is the one mode with a live check-then-list to make: selecting its
+ * refs needs `plugin.list({ onlyOutdated: true })`, so that branch goes
+ * through the promoted probe (ADR 0049) and reuses its statuses rather than
+ * listing twice. `install` selects from the tracked applist alone — no list()
+ * call today — so it keeps the plain check()-then-catch it always had; routing
+ * it through the probe would add a live listing call no `install` plan has
+ * ever made.
  */
 export async function planComposite(
   mode: CompositeMode,
@@ -69,9 +84,25 @@ export async function planComposite(
       continue;
     }
     const ctx = makeCtx();
+    if (mode === 'update') {
+      const outcome = await probe(plugin, ctx, { onlyOutdated: true });
+      if (outcome.kind === 'ok') {
+        plans.push({
+          plugin,
+          status: 'planned',
+          refs: selectUpdateRefs(outcome.statuses, plugin, store),
+        });
+      } else if (outcome.kind === 'unavailable') {
+        plans.push({ plugin, status: 'unavailable', refs: [], message: outcome.message });
+      } else {
+        const message = outcome.kind === 'timeout' ? 'probe timed out' : outcome.message;
+        plans.push({ plugin, status: 'error', refs: [], message });
+      }
+      continue;
+    }
     try {
       await plugin.check(ctx);
-      plans.push({ plugin, status: 'planned', refs: await selectRefs(mode, plugin, store, ctx) });
+      plans.push({ plugin, status: 'planned', refs: selectInstallRefs(plugin, store) });
     } catch (err) {
       plans.push(
         err instanceof ErrPluginUnavailable
@@ -124,28 +155,28 @@ export async function fanOutComposite(
   return applyComposite(mode, plans, makeCtx, opts);
 }
 
-async function selectRefs(
-  mode: CompositeMode,
+// `all update` is the "update everything outdated" command, so it is not
+// scoped to the tracked applist — but skip and pin still bind (ADR 0033).
+// Unenforceable pins upgrade anyway (ADR 0023/0034), so they join the set.
+// Takes the probe's already-fetched statuses rather than listing again.
+function selectUpdateRefs(
+  statuses: readonly PackageStatus[],
   plugin: Plugin,
   store: ConfigStore,
-  ctx: PluginContext,
-): Promise<PackageRef[]> {
-  if (mode === 'update') {
-    // `all update` is the "update everything outdated" command, so it is not
-    // scoped to the tracked applist — but skip and pin still bind (ADR 0033).
-    // Unenforceable pins upgrade anyway (ADR 0023/0034), so they join the set.
-    const outdated = await plugin.list(ctx, { onlyOutdated: true });
-    const { upgradable, pinUnenforceable } = resolveSelection(
-      outdated,
-      store.selectionFor(plugin.manifest.id),
-      plugin.manifest.compareVersions,
-    );
-    return [...upgradable, ...pinUnenforceable].map((s) => s.ref);
-  }
-  // install: each constituent's tracked applist set (matches the individual
-  // install command; the backend skips already-installed packages). Not
-  // list-based — plugin.list() enumerates only what is installed, so filtering
-  // it for not-installed is empty and `all install` would silently no-op.
+): PackageRef[] {
+  const { upgradable, pinUnenforceable } = resolveSelection(
+    statuses,
+    store.selectionFor(plugin.manifest.id),
+    plugin.manifest.compareVersions,
+  );
+  return [...upgradable, ...pinUnenforceable].map((s) => s.ref);
+}
+
+// install: each constituent's tracked applist set (matches the individual
+// install command; the backend skips already-installed packages). Not
+// list-based — plugin.list() enumerates only what is installed, so filtering
+// it for not-installed is empty and `all install` would silently no-op.
+function selectInstallRefs(plugin: Plugin, store: ConfigStore): PackageRef[] {
   const refs: PackageRef[] = [];
   for (const key of plugin.manifest.configKeys) {
     const kind = kindForConfigKey(plugin.manifest, key);

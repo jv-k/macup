@@ -9,7 +9,7 @@
 
 import { defineCommand } from 'citty';
 import type { CliDeps } from '../cli/types';
-import { ErrPluginUnavailable } from '../errors';
+import { probe } from '../plugins/probe';
 import type { PackageStatus, Plugin, PluginContext } from '../plugins/types';
 import * as log from '../ui/log';
 import { withSpinner } from './spinner';
@@ -92,23 +92,28 @@ export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<Out
     constituents.map(async (plugin): Promise<OutdatedPluginSummary> => {
       const ctx = deps.makeCtx();
       try {
-        await plugin.check(ctx);
-        const statuses = await plugin.list(ctx, {});
-        return {
-          pluginId: plugin.manifest.id,
-          displayName: plugin.manifest.displayName,
-          available: true,
-          checkFailed: false,
-          outdated: statuses.filter((s) => s.installed && s.updateStatus === 'outdated'),
-          uncheckable: statuses.filter((s) => s.installed && s.updateStatus === 'unknown'),
-        };
-      } catch (err) {
+        const outcome = await probe(plugin, ctx, {});
+        if (outcome.kind === 'ok') {
+          const statuses = outcome.statuses;
+          return {
+            pluginId: plugin.manifest.id,
+            displayName: plugin.manifest.displayName,
+            available: true,
+            checkFailed: false,
+            outdated: statuses.filter((s) => s.installed && s.updateStatus === 'outdated'),
+            uncheckable: statuses.filter((s) => s.installed && s.updateStatus === 'unknown'),
+          };
+        }
+        // 'unavailable' mirrors a benign ErrPluginUnavailable from check() or
+        // list() (we couldn't ask); 'failed'/'timeout' are a genuine failure
+        // to determine state. checkFailed distinguishes the two so `check`
+        // never reports a clean bill of health it couldn't actually verify.
         return {
           pluginId: plugin.manifest.id,
           displayName: plugin.manifest.displayName,
           available: false,
-          reason: err instanceof Error ? err.message : String(err),
-          checkFailed: !(err instanceof ErrPluginUnavailable),
+          reason: outcome.kind === 'timeout' ? 'probe timed out' : outcome.message,
+          checkFailed: outcome.kind !== 'unavailable',
           outdated: [],
           uncheckable: [],
         };

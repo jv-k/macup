@@ -118,12 +118,16 @@ export function resolveSubtypeOrExit(
   plugin: Plugin,
   args: Record<string, unknown>,
 ): { ok: true; subtype: string | undefined } | { ok: false } {
+  // Built as a plain mutable bag first (SubtypeArgs' index signature is
+  // readonly) and handed to the two pure helpers below as that type.
+  const shortcuts: Record<string, unknown> = {};
+  for (const entry of shortcutEntries(plugin)) {
+    shortcuts[entry.flag] = Boolean(args[entry.flag]);
+  }
   const sArgs: SubtypeArgs = {
     subtype: typeof args.subtype === 'string' ? args.subtype : undefined,
+    ...shortcuts,
   };
-  for (const entry of shortcutEntries(plugin)) {
-    (sArgs as Record<string, unknown>)[entry.flag] = Boolean(args[entry.flag]);
-  }
   const validation = validateSubtypeArg(plugin, sArgs);
   if (!validation.ok) {
     console.error(`error: ${validation.error}`);

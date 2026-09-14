@@ -77,5 +77,5 @@ export function kindForConfigKey(manifest: PluginManifest, key: ApplistKey): Pac
  * hard-code `--cask`/`--formula`.
  */
 export function flagForSubtype(manifest: PluginManifest, subtype: string): string | undefined {
-  return manifest.subtypes?.find((e) => e.id === subtype)?.flag;
+  return entryFor(manifest, subtype)?.flag;
 }

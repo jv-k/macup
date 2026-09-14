@@ -19,6 +19,7 @@ import { isCancel, note, select, text } from '@clack/prompts';
 import { type CommandDef, runCommand } from 'citty';
 import type { CliDeps } from './cli/types';
 import { withSpinner } from './commands/spinner';
+import { configKeyForSubtype } from './plugins/subtype-table';
 import type { Plugin, PluginContext } from './plugins/types';
 import * as logui from './ui/log';
 import { pageableAutocompleteMultiselect } from './ui/picker';
@@ -107,9 +108,7 @@ async function promptTrackedSetPicker(
     logui.printErr(`error: plugin "${target.pluginId}" is not registered`);
     return null;
   }
-  const configKey = plugin.manifest.configKeyFor
-    ? plugin.manifest.configKeyFor(target.subtype)
-    : plugin.manifest.configKeys[0];
+  const configKey = configKeyForSubtype(plugin.manifest, target.subtype);
   if (!configKey) {
     logui.printErr(`error: plugin "${target.pluginId}" has no tracked applist key`);
     return null;
@@ -229,9 +228,7 @@ async function promptSearchAndPick(
   }
 
   const store = await deps.getStore();
-  const configKey = plugin.manifest.configKeyFor
-    ? plugin.manifest.configKeyFor(target.subtype)
-    : plugin.manifest.configKeys[0];
+  const configKey = configKeyForSubtype(plugin.manifest, target.subtype);
   const tracked = new Set(configKey ? store.list(configKey) : []);
 
   const total = results.length;
@@ -269,9 +266,7 @@ async function applySyncTracked(
     logui.printErr(`error: plugin "${target.pluginId}" is not registered`);
     return;
   }
-  const key = plugin.manifest.configKeyFor
-    ? plugin.manifest.configKeyFor(target.subtype)
-    : plugin.manifest.configKeys[0];
+  const key = configKeyForSubtype(plugin.manifest, target.subtype);
   if (!key) {
     logui.printErr(`error: plugin "${target.pluginId}" has no tracked applist key`);
     return;
@@ -514,9 +509,7 @@ async function wizardLoop(
           currentTracked: async (t) => {
             const plugin = deps.registry.find((p) => p.manifest.id === t.pluginId);
             if (!plugin) return [];
-            const key = plugin.manifest.configKeyFor
-              ? plugin.manifest.configKeyFor(t.subtype)
-              : plugin.manifest.configKeys[0];
+            const key = configKeyForSubtype(plugin.manifest, t.subtype);
             if (!key) return [];
             const store = await deps.getStore();
             return store.list(key);

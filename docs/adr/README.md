@@ -76,3 +76,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0046](0046-bundle-extends-merge-semantics.md) | Bundle `extends` flattens by union, and only pins and labels can conflict | accepted |
 | [0047](0047-init-scaffolds-by-merging.md) | `macup init` scaffolds by merging, and refuses to guess under a pipe | accepted |
 | [0048](0048-runjson-leaves-execrunner.md) | `runJson` leaves the `ExecRunner` interface | accepted |
+| [0049](0049-manifest-subtype-table.md) | The manifest declares a subtype table, not a bare id list | accepted |

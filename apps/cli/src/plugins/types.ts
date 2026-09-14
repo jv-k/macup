@@ -95,6 +95,31 @@ export interface PluginCapabilities {
 }
 
 /**
+ * One partition of a plugin's packages, declared once in the manifest: its
+ * id (the string `--subtype=<id>` and `PackageRef.subtype` carry), the
+ * PackageKind its packages carry, the applist key its tracked names live
+ * under, and the CLI shortcut flag it renders as (`--cask` for brew's
+ * `casks`), when it has one. Everything downstream — the command factory's
+ * subtype flags, the composite's kind lookup, the completions generator, and
+ * the docs metadata — reads this table instead of re-deriving brew's
+ * `formulas`/`casks` mapping by hand (issue #138).
+ */
+export interface SubtypeEntry {
+  /** The id named by `--subtype=<id>`, a wizard row's `Target.subtype`, and `PackageRef.subtype`. */
+  readonly id: string;
+  /** @see {@link PackageKind} */
+  readonly kind: PackageKind;
+  /** The applist key track/untrack mutate for this subtype. */
+  readonly configKey: ApplistKey;
+  /**
+   * The CLI shortcut flag (rendered as `--<flag>`), when this subtype has
+   * one. brew's `casks` renders `--cask`; a subtype with no shortcut is
+   * reached only via the explicit `--subtype=<id>`.
+   */
+  readonly flag?: string;
+}
+
+/**
  * A plugin's self-declaration. Everything the host needs to build the CLI
  * surface without hard-coding per-plugin behaviour: dispatch, help,
  * completions, the wizard, and the docs reference all read this.
@@ -104,8 +129,11 @@ export interface PluginManifest {
   readonly id: string;
   /** Human label for menus and reports. */
   readonly displayName: string;
-  /** Partitions of this plugin's packages; brew's formulas and casks are the only ones. */
-  readonly subtypes?: readonly string[];
+  /**
+   * Partitions of this plugin's packages, brew's `formulas` and `casks` are
+   * the only ones today. @see {@link SubtypeEntry}
+   */
+  readonly subtypes?: readonly SubtypeEntry[];
   /**
    * Optional ecosystem label used to group plugins in the wizard
    * (e.g. "Node.js" for npm + pnpm). Plugins without a category get
@@ -116,18 +144,17 @@ export interface PluginManifest {
   readonly supportedOS: readonly NodeJS.Platform[];
   /** Binaries that must be on PATH; the registry filters on this, and `check()` enforces it. */
   readonly requires: readonly string[];
-  /** Applist keys this plugin's tracked packages live under. */
+  /**
+   * Applist keys this plugin's tracked packages live under. For a plugin
+   * with `subtypes`, this is the table's `configKey`s in order (derive it
+   * from `subtypes`, don't hand-duplicate it); a plugin without subtypes
+   * declares it directly.
+   */
   readonly configKeys: readonly ApplistKey[];
   /** @see {@link PluginCapabilities} */
   readonly capabilities: PluginCapabilities;
   /** Optional: plugin-specific version comparator. Default uses semver. */
   compareVersions?(a: string, b: string): -1 | 0 | 1;
-  /**
-   * Optional: resolve a subtype (e.g. 'formulas' for brew) to the applist
-   * key that track/untrack should mutate. If omitted, the first entry in
-   * `configKeys` is used.
-   */
-  configKeyFor?(subtype?: string): ApplistKey;
 }
 
 /**

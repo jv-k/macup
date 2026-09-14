@@ -11,6 +11,7 @@
 import type { ConfigStore } from '../config/store';
 import { ErrPluginUnavailable } from '../errors';
 import { resolveSelection } from '../plugins/selection';
+import { kindForConfigKey } from '../plugins/subtype-table';
 import type { MutateOptions, PackageRef, Plugin, PluginContext } from '../plugins/types';
 
 /** Which mutating verb the composite is fanning out. */
@@ -123,13 +124,6 @@ export async function fanOutComposite(
   return applyComposite(mode, plans, makeCtx, opts);
 }
 
-// Map a configKey to the PackageRef.kind its backend expects (brew.formulas →
-// formula, brew.casks → cask, else the key's last segment).
-function kindForConfigKey(key: string): string {
-  const seg = key.includes('.') ? key.slice(key.indexOf('.') + 1) : key;
-  return seg === 'formulas' ? 'formula' : seg === 'casks' ? 'cask' : seg;
-}
-
 async function selectRefs(
   mode: CompositeMode,
   plugin: Plugin,
@@ -154,7 +148,7 @@ async function selectRefs(
   // it for not-installed is empty and `all install` would silently no-op.
   const refs: PackageRef[] = [];
   for (const key of plugin.manifest.configKeys) {
-    const kind = kindForConfigKey(key);
+    const kind = kindForConfigKey(plugin.manifest, key);
     for (const name of store.list(key)) refs.push({ kind, name });
   }
   return refs;

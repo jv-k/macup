@@ -76,7 +76,7 @@ export function buildPluginsReport(
       requires: m.requires,
       missing,
       capabilities: m.capabilities,
-      subtypes: m.subtypes,
+      subtypes: m.subtypes?.map((s) => s.id),
       category: m.category,
     };
   });

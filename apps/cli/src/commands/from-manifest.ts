@@ -11,9 +11,23 @@
 
 import { confirm, isCancel } from '@clack/prompts';
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
+import type { ApplistKey } from '../config/schema';
 import type { ConfigStore, SaveResult } from '../config/store';
 import { resolveSelection } from '../plugins/selection';
-import type { ExecRunner, Logger, PackageRef, Plugin, PluginContext } from '../plugins/types';
+import {
+  configKeyForSubtype,
+  flagForSubtype,
+  kindForSubtype,
+  packageRefForSubtype,
+} from '../plugins/subtype-table';
+import type {
+  ExecRunner,
+  Logger,
+  PackageRef,
+  Plugin,
+  PluginContext,
+  PluginManifest,
+} from '../plugins/types';
 import * as log from '../ui/log';
 import { type CompositeMode, applyComposite, planComposite } from './composite-mutate';
 import { renderList } from './render-list';
@@ -172,25 +186,24 @@ function requireNames(rawArgs: string[], pluginId: string, command: string): str
 /**
  * Exported so the init scaffolder (#14) resolves a subtype to its applist key
  * the same way the track verb does, rather than keeping a third copy of the
- * configKeyFor-or-first-key fallback.
+ * subtype-table lookup. Thin wrapper over the host helper (`plugins/subtype-table.ts`)
+ * that also enforces the invariant every track-capable manifest must meet.
  * @throws Error when the plugin declares no `configKeys`, which a track-capable manifest must.
  */
-export function resolveConfigKey(plugin: Plugin, subtype: string | undefined) {
-  if (plugin.manifest.configKeyFor) {
-    return plugin.manifest.configKeyFor(subtype);
-  }
-  const first = plugin.manifest.configKeys[0];
-  if (!first) throw new Error(`Plugin ${plugin.manifest.id} has no configKeys`);
-  return first;
+export function resolveConfigKey(plugin: Plugin, subtype: string | undefined): ApplistKey {
+  const key = configKeyForSubtype(plugin.manifest, subtype);
+  if (!key) throw new Error(`Plugin ${plugin.manifest.id} has no configKeys`);
+  return key;
 }
 
-// Render the CLI flag a user would type to scope a command to `subtype`.
-// Empty for plugins without subtypes; trailing space lets callers compose
-// directly into a command string without conditional whitespace.
-function subtypeCliFlag(subtype: string | undefined): string {
-  if (subtype === 'casks') return '--cask ';
-  if (subtype === 'formulas') return '--formula ';
-  return '';
+// Render the CLI flag a user would type to scope a command to `subtype`, read
+// from the manifest's subtype table. Empty when the subtype is unset or
+// declares no shortcut; trailing space lets callers compose directly into a
+// command string without conditional whitespace.
+function subtypeCliFlag(manifest: PluginManifest, subtype: string | undefined): string {
+  if (subtype === undefined) return '';
+  const flag = flagForSubtype(manifest, subtype);
+  return flag ? `--${flag} ` : '';
 }
 
 /**
@@ -208,16 +221,25 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     ? {
         subtype: {
           type: 'string',
-          description: `Subtype: ${manifest.subtypes?.join(' | ')}.`,
+          description: `Subtype: ${manifest.subtypes?.map((e) => e.id).join(' | ')}.`,
         },
-        cask: {
-          type: 'boolean',
-          description: `Operate on ${manifest.subtypes?.[1] ?? 'subtype'} instead of ${manifest.subtypes?.[0] ?? ''}.`,
-        },
-        formula: {
-          type: 'boolean',
-          description: `Operate on ${manifest.subtypes?.[0] ?? 'subtype'} (the default — explicit form for symmetry with --cask).`,
-        },
+        // One boolean flag per subtype that declares a shortcut (`flag` on
+        // its manifest entry), so a new subtyped plugin's shortcuts appear
+        // here with no edit — only its own manifest table changes.
+        ...Object.fromEntries(
+          (manifest.subtypes ?? [])
+            .filter((e): e is typeof e & { flag: string } => e.flag !== undefined)
+            .map((e, i) => [
+              e.flag,
+              {
+                type: 'boolean' as const,
+                description:
+                  i === 0
+                    ? `Operate on ${e.id} (the default — explicit form for symmetry with the other shortcuts).`
+                    : `Operate on ${e.id} instead of the default.`,
+              },
+            ]),
+        ),
       }
     : {};
 
@@ -307,10 +329,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           // config key. When unspecified, gather every tracked name
           // across all of the plugin's config keys — otherwise plugins
           // with multiple subtypes (e.g. brew formulas + casks) lose
-          // half their tracked set to a single configKeyFor lookup.
+          // half their tracked set to a single-key lookup.
           const keysToCheck =
-            subtype !== undefined && manifest.configKeyFor
-              ? [manifest.configKeyFor(subtype)]
+            subtype !== undefined
+              ? [configKeyForSubtype(manifest, subtype)].filter(
+                  (k): k is ApplistKey => k !== undefined,
+                )
               : manifest.configKeys;
           for (const key of keysToCheck) {
             for (const name of store.list(key)) {
@@ -391,12 +415,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (!resolved.ok) return;
         const subtype = resolved.subtype;
         await plugin.check(makeCtx(deps));
-        const kind =
-          subtype === 'casks' ? 'cask' : subtype === 'formulas' ? 'formula' : manifest.id;
         const packages = rawArgs.filter((a) => !a.startsWith('-'));
         let refs: PackageRef[];
         if (packages.length > 0) {
-          refs = packages.map((name) => ({ kind, name }));
+          refs = packages.map((name) => packageRefForSubtype(manifest, name, subtype));
         } else if (manifest.configKeys.length === 0) {
           // No tracked applist (e.g. system, xcode): install acts on explicit
           // package args only, so an argless invocation has nothing to do.
@@ -404,13 +426,15 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         } else {
           const store = await deps.getStore();
           const key = resolveConfigKey(plugin, subtype);
-          refs = [...store.list(key)].map((name) => ({ kind, name }));
+          refs = [...store.list(key)].map((name) => packageRefForSubtype(manifest, name, subtype));
         }
         if (refs.length === 0) {
           if (manifest.configKeys.length > 0) {
             const emptyKey = resolveConfigKey(plugin, subtype);
             log.print(log.info(`No packages tracked in ${emptyKey}.`));
-            log.print(log.trace(`macup ${manifest.id} track ${subtypeCliFlag(subtype)}<name>`));
+            log.print(
+              log.trace(`macup ${manifest.id} track ${subtypeCliFlag(manifest, subtype)}<name>`),
+            );
           }
           return;
         }
@@ -492,8 +516,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
         const subtype = resolved.subtype;
-        const kind =
-          subtype === 'casks' ? 'cask' : subtype === 'formulas' ? 'formula' : manifest.id;
+        const kind = kindForSubtype(manifest, subtype);
 
         const statuses = await withSpinner(
           deps,
@@ -547,8 +570,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           // stay system-wide; the composite `all` took the fan-out path above.
           const tracked = new Set<string>();
           const keysToCheck =
-            subtype !== undefined && manifest.configKeyFor
-              ? [manifest.configKeyFor(subtype)]
+            subtype !== undefined
+              ? [configKeyForSubtype(manifest, subtype)].filter(
+                  (k): k is ApplistKey => k !== undefined,
+                )
               : manifest.configKeys;
           for (const key of keysToCheck) {
             for (const name of store.list(key)) tracked.add(name);
@@ -647,7 +672,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
               if (manifest.capabilities.install) {
                 log.print(
                   log.trace(
-                    `macup ${manifest.id} install ${subtypeCliFlag(subtype)}${result.skipped.join(' ')}`,
+                    `macup ${manifest.id} install ${subtypeCliFlag(manifest, subtype)}${result.skipped.join(' ')}`,
                   ),
                 );
               }
@@ -696,7 +721,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
               log.print(log.info(`Not tracked in ${key}: ${result.missing.join(', ')}`));
               if (manifest.capabilities.list) {
                 log.print(
-                  log.trace(`macup ${manifest.id} list ${subtypeCliFlag(subtype)}`.trimEnd()),
+                  log.trace(
+                    `macup ${manifest.id} list ${subtypeCliFlag(manifest, subtype)}`.trimEnd(),
+                  ),
                 );
               }
             }

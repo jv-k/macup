@@ -20,7 +20,7 @@ function mkPlugin(id: string): Plugin {
       supportedOS: ['darwin'],
       requires: [],
       configKeys: ['brew.casks'],
-      subtypes: ['casks'],
+      subtypes: [{ id: 'casks', kind: 'cask', configKey: 'brew.casks', flag: 'cask' }],
       capabilities: {
         list: true,
         install: true,

@@ -79,8 +79,9 @@ export async function detectInstalled(
 
     // One pass per subtype, so brew's formulas and casks land in their own
     // keys rather than being merged into whichever came first.
-    const subtypes = m.subtypes && m.subtypes.length > 0 ? m.subtypes : [undefined];
-    for (const subtype of subtypes) {
+    const subtypeIds =
+      m.subtypes && m.subtypes.length > 0 ? m.subtypes.map((s) => s.id) : [undefined];
+    for (const subtype of subtypeIds) {
       const key = resolveConfigKey(plugin, subtype);
       if (!key) continue;
       try {

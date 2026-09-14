@@ -17,15 +17,19 @@ import type { ListOptions, PackageStatus, Plugin, PluginContext } from '../../..
 
 const silentLog = { info() {}, warn() {}, error() {}, debug() {} };
 
+interface FakeSubtype {
+  id: string;
+  configKey: ApplistKey;
+}
+
 interface FakeOpts {
   id: string;
   configKeys: readonly ApplistKey[];
-  subtypes?: readonly string[];
+  subtypes?: readonly FakeSubtype[];
   track?: boolean;
   statuses?: PackageStatus[];
   unavailable?: string;
   listThrows?: Error;
-  configKeyFor?: (subtype?: string) => ApplistKey;
 }
 
 function fake(opts: FakeOpts): Plugin {
@@ -36,7 +40,7 @@ function fake(opts: FakeOpts): Plugin {
       supportedOS: ['darwin'] as const,
       requires: [],
       configKeys: opts.configKeys,
-      subtypes: opts.subtypes,
+      subtypes: opts.subtypes?.map((s) => ({ id: s.id, kind: s.id, configKey: s.configKey })),
       capabilities: {
         list: true,
         install: true,
@@ -45,7 +49,6 @@ function fake(opts: FakeOpts): Plugin {
         untrack: opts.track ?? true,
         outdated: true,
       },
-      ...(opts.configKeyFor ? { configKeyFor: opts.configKeyFor } : {}),
     },
     async check() {
       if (opts.unavailable) throw new ErrPluginUnavailable(opts.id, opts.unavailable);
@@ -102,8 +105,10 @@ describe('detectInstalled', () => {
       fake({
         id: 'brew',
         configKeys: ['brew.formulas', 'brew.casks'],
-        subtypes: ['formulas', 'casks'],
-        configKeyFor: (s) => (s === 'casks' ? 'brew.casks' : 'brew.formulas'),
+        subtypes: [
+          { id: 'formulas', configKey: 'brew.formulas' },
+          { id: 'casks', configKey: 'brew.casks' },
+        ],
         statuses: [pkg('ripgrep', true, 'formulas'), pkg('firefox', true, 'casks')],
       }),
     ];

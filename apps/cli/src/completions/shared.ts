@@ -77,7 +77,9 @@ export function flagsForCommand(plugin: Plugin, command: string): string[] {
   if (command === 'install') flags.push('--dry-run', '--verbose');
   if (command === 'update') flags.push('--dry-run', '--all', '--verbose');
   if ((plugin.manifest.subtypes?.length ?? 0) > 1 && SUBTYPE_COMMANDS.has(command)) {
-    flags.push('--cask', '--formula');
+    for (const entry of plugin.manifest.subtypes ?? []) {
+      if (entry.flag) flags.push(`--${entry.flag}`);
+    }
   }
   return flags;
 }

@@ -119,14 +119,24 @@ function brewArgs(action: string, ref: PackageRef): readonly [string, readonly s
   return ['brew', ref.kind === 'cask' ? [action, '--cask', ref.name] : [action, ref.name]];
 }
 
+// The subtype table (issue #138): each entry's id, PackageKind, applist key,
+// and CLI shortcut flag, declared once here. `configKeys` below is derived
+// from it rather than hand-duplicated, and the host reads this table for
+// everything else — the command factory's flags, the composite's kind
+// lookup, completions, and docs.
+const SUBTYPES = [
+  { id: 'formulas', kind: 'formula', configKey: 'brew.formulas', flag: 'formula' },
+  { id: 'casks', kind: 'cask', configKey: 'brew.casks', flag: 'cask' },
+] as const;
+
 const brew: Plugin = {
   manifest: {
     id: 'brew',
     displayName: 'Homebrew',
-    subtypes: ['formulas', 'casks'],
+    subtypes: SUBTYPES,
     supportedOS: ['darwin'],
     requires: ['brew'],
-    configKeys: ['brew.formulas', 'brew.casks'],
+    configKeys: SUBTYPES.map((s) => s.configKey),
     capabilities: {
       list: true,
       install: true,
@@ -134,10 +144,6 @@ const brew: Plugin = {
       track: true,
       untrack: true,
       outdated: true,
-    },
-    configKeyFor(subtype) {
-      if (subtype === 'casks') return 'brew.casks';
-      return 'brew.formulas';
     },
   },
 

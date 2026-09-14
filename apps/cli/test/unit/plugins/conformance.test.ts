@@ -8,6 +8,7 @@
 // contract → this catches it before the integration tests run.
 
 import { describe, expect, it } from 'vitest';
+import { ApplistKeySchema } from '../../../src/config/schema';
 import { ErrPluginUnavailable } from '../../../src/errors';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
 import { BUILTIN_PLUGINS } from '../../../src/plugins/registry';
@@ -115,14 +116,34 @@ describe('plugin conformance — every builtin obeys the contract', () => {
 
       const subtypes = manifest.subtypes;
       if (subtypes && subtypes.length > 0) {
-        it('configKeyFor returns a key listed in configKeys for every declared subtype', () => {
-          // Plugins with subtypes (e.g. brew formulas/casks) must implement
-          // configKeyFor so track/untrack know which list to mutate.
-          const configKeyFor = manifest.configKeyFor;
-          expect(typeof configKeyFor).toBe('function');
-          if (!configKeyFor) return;
-          for (const subtype of subtypes) {
-            expect(manifest.configKeys).toContain(configKeyFor(subtype));
+        it('every subtype entry has a non-empty kind and a configKey listed in configKeys', () => {
+          for (const entry of subtypes) {
+            expect(entry.kind.length).toBeGreaterThan(0);
+            expect(manifest.configKeys).toContain(entry.configKey);
+          }
+        });
+
+        it("every subtype entry's applist key exists in the applist schema", () => {
+          for (const entry of subtypes) {
+            expect(ApplistKeySchema.options).toContain(entry.configKey);
+          }
+        });
+
+        it('shortcut flags are unique within the plugin and never collide with a verb flag', () => {
+          // Verb flags a subtype command already carries (from-manifest.ts):
+          // --dry-run, --verbose, --only-outdated, --all, --json, --subtype.
+          const reservedVerbFlags = [
+            'dry-run',
+            'verbose',
+            'only-outdated',
+            'all',
+            'json',
+            'subtype',
+          ];
+          const flags = subtypes.map((e) => e.flag).filter((f): f is string => f !== undefined);
+          expect(new Set(flags).size).toBe(flags.length);
+          for (const flag of flags) {
+            expect(reservedVerbFlags).not.toContain(flag);
           }
         });
       }

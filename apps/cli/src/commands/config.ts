@@ -144,15 +144,21 @@ export async function runConfig(_args: ParsedArgs, deps: CliDeps): Promise<void>
 }
 
 // The one description, held by the nouns registry (src/cli/commands.ts) so the
-// help screen, the shells, and citty's per-command help agree on it (#146).
-const DESCRIPTION = TOP_LEVEL_COMMANDS.find((c) => c.name === 'config')?.description ?? '';
+// help screen, the shells, and citty's per-command help agree on it (#146). A
+// missing row is a wiring error, so it fails at import rather than rendering
+// an empty line. The trigger arg carries none: cli.ts drops it from the schema.
+function registryDescription(): string {
+  const entry = TOP_LEVEL_COMMANDS.find((c) => c.name === 'config');
+  if (!entry) throw new Error('`config` is missing from TOP_LEVEL_COMMANDS');
+  return entry.description;
+}
 
 /** `macup config`. */
 export class ConfigAction implements ActionCommand {
   readonly name = 'config';
-  readonly description = DESCRIPTION;
+  readonly description = registryDescription();
   readonly args = {
-    config: { type: 'boolean' as const, description: DESCRIPTION },
+    config: { type: 'boolean' as const },
   };
 
   run = runConfig;

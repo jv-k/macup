@@ -141,7 +141,9 @@ describe('regression: the real modifiers survive', () => {
       // The verb used to declare a `verbose` arg aliased to `v` that this
       // intercept made unreachable. With the alias gone, the spelling keeps
       // the one meaning it ever had.
-      const { status, stdout } = run(['brew', verb, '-v']);
+      const { status, stdout } = run(['brew', verb, '-v'], {
+        MACUP_CONFIG: join(mkdtempSync(join(tmpdir(), 'macup-v-')), 'applist.yaml'),
+      });
 
       expect(status).toBe(0);
       expect(stdout).toContain(getVersion());

@@ -67,11 +67,13 @@ describe('help examples are commands the CLI accepts (#146)', () => {
       }
     });
 
-    it(`\`${label}\` passes a bare word only where the verb takes a positional`, () => {
-      const cmd = treeFor(plugin)[verb as string] as CommandDef;
-      const positionals = rest.filter((w) => !w.startsWith('-'));
-      if (positionals.length > 0) expect(hasPositional(argsOf(cmd)), label).toBe(true);
-    });
+    const positionals = rest.filter((w) => !w.startsWith('-'));
+    if (positionals.length > 0) {
+      it(`\`${label}\` passes a bare word only where the verb takes a positional`, () => {
+        const cmd = treeFor(plugin)[verb as string] as CommandDef;
+        expect(hasPositional(argsOf(cmd)), label).toBe(true);
+      });
+    }
 
     it(`\`${label}\` never spells a subtype as a bare word`, () => {
       // `track cask firefox` tracked a formula named cask. A subtype is a
@@ -79,7 +81,7 @@ describe('help examples are commands the CLI accepts (#146)', () => {
       const subtypeWords = (plugin.manifest.subtypes ?? []).flatMap((s) =>
         s.flag ? [s.id, s.flag] : [s.id],
       );
-      for (const word of rest.filter((w) => !w.startsWith('-'))) {
+      for (const word of positionals) {
         expect(subtypeWords, word).not.toContain(word);
       }
     });

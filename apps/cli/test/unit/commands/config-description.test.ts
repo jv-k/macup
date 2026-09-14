@@ -15,7 +15,9 @@ describe('config has one description (#146)', () => {
   });
 
   it('the trigger arg carries no second copy', () => {
+    // cli.ts drops the trigger from the citty schema, so a description on it
+    // would be a copy nothing renders.
     const trigger = new ConfigAction().args.config as { description?: string };
-    expect(trigger.description ?? registry).toBe(registry);
+    expect(trigger.description).toBeUndefined();
   });
 });

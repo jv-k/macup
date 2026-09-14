@@ -155,27 +155,6 @@ export class LoggingExecRunner implements ExecRunner {
     return result;
   }
 
-  // Routed through this.run so JSON-extracting calls are logged too — they are
-  // subprocesses like any other, and a bug report that silently omitted them
-  // would be missing exactly the calls that shape what macup decided to do.
-  /**
-   * Run a command and parse its stdout as JSON.
-   * @throws Error when the command exits non-zero, so a caller expecting JSON never parses failure output, or SyntaxError when stdout is not JSON.
-   */
-  async runJson<T = unknown>(
-    cmd: string,
-    args: readonly string[],
-    opts?: ExecRunOptions,
-  ): Promise<T> {
-    const result = await this.run(cmd, args, opts);
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `Command "${cmd} ${args.join(' ')}" exited ${result.exitCode}: ${result.stderr.trim()}`,
-      );
-    }
-    return JSON.parse(result.stdout) as T;
-  }
-
   // A synchronous PATH lookup, called many times per plugin check. Logging it
   // would bury the commands under noise, the same reason the tracer skips it.
   onPath(cmd: string): boolean {

@@ -1,3 +1,4 @@
+import { runJson } from '../src/exec/json';
 import { defaultCheck } from '../src/plugins/defaults';
 import { filterOutdated, mutateRefs } from '../src/plugins/helpers';
 import type {
@@ -46,7 +47,8 @@ async function fetchFormulas(ctx: PluginContext, onlyOutdated: boolean): Promise
   const installed = parseVersionsList(
     (await ctx.exec.run('brew', ['list', '--versions'], { signal: ctx.signal })).stdout,
   );
-  const outdatedRaw = await ctx.exec.runJson<OutdatedResponse>(
+  const outdatedRaw = await runJson<OutdatedResponse>(
+    ctx.exec,
     'brew',
     ['outdated', '--json=v2', '--formula'],
     { signal: ctx.signal },
@@ -85,7 +87,8 @@ async function fetchCasks(ctx: PluginContext, onlyOutdated: boolean): Promise<Pa
       : parseVersionsList(
           (await ctx.exec.run('brew', ['list', '--cask'], { signal: ctx.signal })).stdout,
         );
-  const outdatedRaw = await ctx.exec.runJson<OutdatedResponse>(
+  const outdatedRaw = await runJson<OutdatedResponse>(
+    ctx.exec,
     'brew',
     ['outdated', '--json=v2', '--cask'],
     { signal: ctx.signal },

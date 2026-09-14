@@ -36,7 +36,6 @@ function makeCtx(): PluginContext {
   return {
     exec: {
       run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-      runJson: async <T = unknown>() => ({}) as T,
       onPath: () => true,
     },
     log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },

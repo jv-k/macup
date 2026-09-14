@@ -188,12 +188,15 @@ export interface ExecRunOptions {
  * in feature code may import `execa` directly (`CLAUDE.md`), and why the
  * hermetic tests can substitute a fixture runner for the whole subprocess
  * layer.
+ *
+ * Narrowed to these two methods by ADR 0048: a JSON-parsing `runJson` used to
+ * live here too, deferred by ADR 0032 until this surface was next touched. The
+ * free function `runJson` in `exec/json.ts` replaces it, so a runner
+ * implementation or decorator only ever has `run` and `onPath` to satisfy.
  */
 export interface ExecRunner {
   /** Run a command to completion. A non-zero exit is a returned result, not a throw. */
   run(cmd: string, args: readonly string[], opts?: ExecRunOptions): Promise<ExecResult>;
-  /** {@link run} plus a JSON parse; throws on a non-zero exit. */
-  runJson<T = unknown>(cmd: string, args: readonly string[], opts?: ExecRunOptions): Promise<T>;
   /** Whether `cmd` resolves on PATH. Synchronous, and called often enough that it is never traced. */
   onPath(cmd: string): boolean;
 }

@@ -21,11 +21,6 @@ function makeInner() {
         args: ['big'],
         result: { stdout: `${'x'.repeat(500)}\n`, stderr: '', exitCode: 0 },
       },
-      {
-        cmd: 'mas',
-        args: ['list'],
-        result: { stdout: '{"a":1}\n', stderr: '', exitCode: 0 },
-      },
     ],
   });
 }
@@ -64,15 +59,6 @@ describe("TracingExecRunner — fallback (inner runner doesn't honor stream call
     expect(dataLine.length).toBeLessThanOrEqual(50);
     expect(dataLine).toMatch(/… \(\+\d+ chars\)$/);
   });
-
-  it('runJson() is traced exactly once and parses stdout', async () => {
-    const out: string[] = [];
-    const t = new TracingExecRunner(makeInner(), { print: (l) => out.push(l), color: false });
-    const parsed = await t.runJson<{ a: number }>('mas', ['list']);
-    expect(parsed).toEqual({ a: 1 });
-    const headers = out.filter((l) => l.startsWith('$ '));
-    expect(headers).toHaveLength(1);
-  });
 });
 
 // Fake runner that fires onStdout/onStderr to exercise the live-streaming
@@ -97,10 +83,6 @@ class StreamingFakeRunner implements ExecRunner {
       stderr: this.stderrChunks.join(''),
       exitCode: this.exitCode,
     };
-  }
-
-  async runJson<T = unknown>(_cmd: string, _args: readonly string[]): Promise<T> {
-    return JSON.parse(this.stdoutChunks.join('')) as T;
   }
 
   onPath(): boolean {

@@ -54,7 +54,6 @@ function mkPlugin(opts: {
 const stubCtx: PluginContext = {
   exec: {
     run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-    runJson: async <T>() => ({}) as T,
     onPath: () => true,
   },
   log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },

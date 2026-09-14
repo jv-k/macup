@@ -1,54 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
-import { NULL_SINK, StreamingExecRunner, type UiSink } from '../../../src/exec/streaming';
-import type { ExecResult, ExecRunOptions, ExecRunner } from '../../../src/plugins/types';
-
-interface SinkSpy extends UiSink {
-  readonly userAction: Array<{ chunk: string; source: string }>;
-  readonly query: Array<{ chunk: string; source: string }>;
-  readonly check: Array<{ chunk: string; source: string }>;
-}
-
-function makeSinkSpy(): SinkSpy {
-  const userAction: Array<{ chunk: string; source: string }> = [];
-  const query: Array<{ chunk: string; source: string }> = [];
-  const check: Array<{ chunk: string; source: string }> = [];
-  return {
-    userAction,
-    query,
-    check,
-    onUserAction: (chunk, source) => userAction.push({ chunk, source }),
-    onQuery: (chunk, source) => query.push({ chunk, source }),
-    onCheck: (chunk, source) => check.push({ chunk, source }),
-  };
-}
-
-class StreamingFakeInner implements ExecRunner {
-  constructor(
-    private readonly stdoutChunks: readonly string[],
-    private readonly stderrChunks: readonly string[],
-    private readonly exitCode = 0,
-  ) {}
-  async run(
-    _cmd: string,
-    _args: readonly string[],
-    opts: ExecRunOptions = {},
-  ): Promise<ExecResult> {
-    for (const chunk of this.stdoutChunks) opts.onStdout?.(chunk);
-    for (const chunk of this.stderrChunks) opts.onStderr?.(chunk);
-    return {
-      stdout: this.stdoutChunks.join(''),
-      stderr: this.stderrChunks.join(''),
-      exitCode: this.exitCode,
-    };
-  }
-  async runJson<T = unknown>(_cmd: string, _args: readonly string[]): Promise<T> {
-    return JSON.parse(this.stdoutChunks.join('')) as T;
-  }
-  onPath(): boolean {
-    return true;
-  }
-}
+import { NULL_SINK, StreamingExecRunner } from '../../../src/exec/streaming';
+import { StreamingFakeInner, makeSinkSpy } from './support';
 
 describe('StreamingExecRunner — kind-based routing', () => {
   it('routes user-action chunks to sink.onUserAction with stream source', async () => {
@@ -112,22 +65,6 @@ describe('StreamingExecRunner — composability', () => {
     const r = new StreamingExecRunner(inner, makeSinkSpy());
     const result = await r.run('echo', ['hello'], { kind: 'user-action' });
     expect(result).toEqual({ stdout: 'hello\n', stderr: '', exitCode: 0 });
-  });
-
-  it('runJson() routes the underlying call through the kind sink and parses', async () => {
-    const sink = makeSinkSpy();
-    const inner = new StreamingFakeInner(['{"a":1}\n'], []);
-    const r = new StreamingExecRunner(inner, sink);
-    const parsed = await r.runJson<{ a: number }>('mas', ['list']);
-    expect(parsed).toEqual({ a: 1 });
-    // No kind passed → query.
-    expect(sink.query.length).toBe(1);
-  });
-
-  it('runJson() throws on non-zero exit', async () => {
-    const inner = new StreamingFakeInner([], ['fail\n'], 7);
-    const r = new StreamingExecRunner(inner, makeSinkSpy());
-    await expect(r.runJson('boom', [])).rejects.toThrow(/exited 7/);
   });
 
   it('composes over FixtureExecRunner without firing the sink (no stream callbacks)', async () => {

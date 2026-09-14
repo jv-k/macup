@@ -39,15 +39,6 @@ export class StreamingFixtureRunner implements ExecRunner {
     return f.result;
   }
 
-  async runJson<T = unknown>(
-    cmd: string,
-    args: readonly string[],
-    opts?: ExecRunOptions,
-  ): Promise<T> {
-    const r = await this.run(cmd, args, opts);
-    return JSON.parse(r.stdout) as T;
-  }
-
   onPath(cmd: string): boolean {
     return this.pathSet.has(cmd);
   }

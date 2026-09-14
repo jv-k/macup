@@ -7,7 +7,6 @@ import { TracingExecRunner } from '../../../src/exec/tracing';
 // Minimal stub that satisfies the ExecRunner interface without launching subprocesses.
 const baseRunner = {
   run: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
-  runJson: vi.fn().mockResolvedValue({}),
   onPath: vi.fn().mockReturnValue(true),
 };
 

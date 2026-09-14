@@ -9,6 +9,10 @@
  * each available one and files the answers under the applist key that plugin's
  * track verb would have written to. Nothing here invents per-backend knowledge.
  *
+ * Writing merges, so it can only grow the applist (ADR 0047). `--prune` (#127)
+ * is the opt-in other half: untrack what the scan did not find, under the keys
+ * it covered and no others.
+ *
  * @module
  */
 
@@ -35,6 +39,12 @@ export interface SkippedBackend {
 /** What a scan found, with unavailable and failed backends kept apart from the results. */
 export interface DetectionPlan {
   readonly groups: DetectedGroup[];
+  /**
+   * Every key whose listing succeeded this run, including ones that came back
+   * empty. A prune may touch these and only these (#127): an unavailable or
+   * failed backend never appears here, so it can never cost the user its keys.
+   */
+  readonly scanned: ApplistKey[];
   /** Backend missing from this machine — the ordinary case, not a failure. */
   readonly unavailable: SkippedBackend[];
   /** Backend present but whose listing errored. Worth reporting louder. */
@@ -56,6 +66,7 @@ export async function detectInstalled(
   ctx: PluginContext,
 ): Promise<DetectionPlan> {
   const groups: DetectedGroup[] = [];
+  const scanned: ApplistKey[] = [];
   const unavailable: SkippedBackend[] = [];
   const failed: SkippedBackend[] = [];
 
@@ -86,6 +97,8 @@ export async function detectInstalled(
       if (!key) continue;
       try {
         const statuses = await plugin.list(ctx, subtype ? { subtype } : {});
+        // Recorded before the empty check: an empty listing still covers the key.
+        scanned.push(key);
         // Sorted and de-duplicated: the same machine should scaffold the same
         // file twice, and a backend listing a name twice is not the user's
         // problem.
@@ -106,7 +119,7 @@ export async function detectInstalled(
     }
   }
 
-  return { groups, unavailable, failed };
+  return { groups, scanned, unavailable, failed };
 }
 
 function messageOf(err: unknown): string {
@@ -150,6 +163,7 @@ const summarise = formatDetectionPlan;
 export interface ScaffoldStore {
   list(key: ApplistKey): readonly string[];
   add(key: ApplistKey, names: readonly string[]): { added: string[]; skipped: string[] };
+  remove(key: ApplistKey, names: readonly string[]): { removed: string[]; missing: string[] };
   save(operation: string): Promise<{ changed: boolean; backupPath?: string }>;
 }
 
@@ -168,6 +182,33 @@ export interface ScaffoldInput {
   /** stdin is a TTY, so a prompt can actually be answered. */
   readonly interactive: boolean;
   readonly force: boolean;
+  /** `--prune`: also untrack what the scan did not find, under the keys it covered (#127). */
+  readonly prune: boolean;
+  /** The prune's own confirmation, asked after the stale entries have been printed. */
+  readonly confirmPrune: () => Promise<boolean>;
+}
+
+/** Names tracked under one scanned key that the scan did not report. */
+interface StaleGroup {
+  readonly key: ApplistKey;
+  readonly names: string[];
+}
+
+/**
+ * What `--prune` would untrack: for each key the scan covered, the tracked
+ * names it did not find. Keys the scan did not cover are not consulted at all,
+ * which is the whole guard — an unavailable backend has no scanned keys, so it
+ * cannot cause a mass untrack (#127).
+ */
+function staleUnderScannedKeys(plan: DetectionPlan, store: ScaffoldStore): StaleGroup[] {
+  const found = new Map<ApplistKey, Set<string>>();
+  for (const g of plan.groups) found.set(g.key, new Set(g.names));
+  return plan.scanned
+    .map((key) => {
+      const present = found.get(key) ?? new Set<string>();
+      return { key, names: store.list(key).filter((n) => !present.has(n)) };
+    })
+    .filter((g) => g.names.length > 0);
 }
 
 /**
@@ -187,61 +228,105 @@ export async function runInitScaffold(input: ScaffoldInput): Promise<number> {
   // will see it.
   for (const s of plan.failed) printErr(`failed ${s.pluginId}: ${s.reason}`);
 
-  if (countDetected(plan) === 0) {
+  // Without --prune an empty scan has nothing to do. With it, an empty listing
+  // over a covered key is still an answer: everything tracked there is stale.
+  const canPrune = input.prune && plan.scanned.length > 0;
+  if (countDetected(plan) === 0 && !canPrune) {
     print('Nothing to write.');
     return 0;
   }
 
   if (input.dryRun) {
-    print(`[dry-run] would write these to ${input.applistPath}`);
+    if (countDetected(plan) > 0) print(`[dry-run] would write these to ${input.applistPath}`);
+    // The store is never opened under --dry-run (ADR 0047), so the stale names
+    // cannot be listed here. The keys a prune would touch can, and those are
+    // the guard that matters: nothing outside them is ever consulted.
+    if (canPrune) {
+      print(`[dry-run] would untrack anything under ${plan.scanned.join(', ')} that was not found`);
+    }
     return 0;
   }
 
-  // What would actually change, computed before touching anything. The prompt
-  // and the non-TTY refusal exist to guard a modification, so with nothing new
-  // to add there is nothing to guard — failing there would contradict "running
-  // it again adds only what is new" (ADR 0047).
+  // What would actually change, computed before touching anything. The prompts
+  // and the non-TTY refusal exist to guard a modification, so with nothing to
+  // add or untrack there is nothing to guard — failing there would contradict
+  // "running it again adds only what is new" (ADR 0047).
   const pending = plan.groups
     .map((group) => {
       const tracked = new Set(input.store.list(group.key));
       return { group, fresh: group.names.filter((n) => !tracked.has(n)) };
     })
     .filter((p) => p.fresh.length > 0);
+  const stale = canPrune ? staleUnderScannedKeys(plan, input.store) : [];
 
-  if (pending.length === 0) {
-    print('The applist already tracked everything found — nothing to add.');
+  if (pending.length === 0 && stale.length === 0) {
+    print(
+      canPrune
+        ? 'The applist already matches what was found — nothing to add or untrack.'
+        : 'The applist already tracked everything found — nothing to add.',
+    );
     return 0;
   }
 
-  // Only guard an applist that has something in it: a first run has nothing to
-  // lose, and prompting anyway would tax the path everyone takes once.
-  if (input.trackedAlready > 0 && !input.force) {
-    print(`${input.applistPath} already tracks ${input.trackedAlready} package(s).`);
-    // Never prompt under a pipe (docs/CODING_STANDARDS.md). Failing loudly beats
-    // hanging on a prompt nobody can answer, and beats silently rewriting a
-    // config inside someone's cron job.
-    if (!input.interactive) {
-      printErr('Refusing to modify it without confirmation. Re-run with --force to proceed.');
-      return 1;
+  let addedTotal = 0;
+  if (pending.length > 0) {
+    let proceed = true;
+    // Only guard an applist that has something in it: a first run has nothing
+    // to lose, and prompting anyway would tax the path everyone takes once.
+    if (input.trackedAlready > 0 && !input.force) {
+      print(`${input.applistPath} already tracks ${input.trackedAlready} package(s).`);
+      // Never prompt under a pipe (docs/CODING_STANDARDS.md). Failing loudly
+      // beats hanging on a prompt nobody can answer, and beats silently
+      // rewriting a config inside someone's cron job.
+      if (!input.interactive) {
+        printErr('Refusing to modify it without confirmation. Re-run with --force to proceed.');
+        return 1;
+      }
+      proceed = await input.confirm();
     }
-    if (!(await input.confirm())) {
-      print('Cancelled — the applist was not modified.');
-      return 0;
+    if (proceed) {
+      for (const { group, fresh } of pending) {
+        addedTotal += input.store.add(group.key, fresh).added.length;
+      }
     }
   }
 
-  let addedTotal = 0;
-  for (const { group, fresh } of pending) {
-    addedTotal += input.store.add(group.key, fresh).added.length;
+  let removedTotal = 0;
+  if (stale.length > 0) {
+    // Always shown and always guarded, whatever the applist held before: a
+    // tracked-but-not-installed entry may be intent rather than drift
+    // (CONTEXT.md, Tracked vs Installed), and this is the moment to notice.
+    const count = stale.reduce((n, g) => n + g.names.length, 0);
+    print(`${count} tracked package(s) were not found on this machine:`);
+    for (const g of stale) print(`  ${g.key}: ${g.names.join(', ')}`);
+    let proceed = true;
+    if (!input.force) {
+      if (!input.interactive) {
+        printErr('Refusing to untrack them without confirmation. Re-run with --force to proceed.');
+        return 1;
+      }
+      proceed = await input.confirmPrune();
+    }
+    if (proceed) {
+      for (const { key, names } of stale) {
+        removedTotal += input.store.remove(key, names).removed.length;
+      }
+    }
+  }
+
+  if (addedTotal === 0 && removedTotal === 0) {
+    print('Cancelled — the applist was not modified.');
+    return 0;
   }
 
   const result = await input.store.save('init');
   if (!result.changed) {
-    print('The applist already tracked everything found — nothing to add.');
+    print('The applist is unchanged.');
     return 0;
   }
 
-  print(`Tracked ${addedTotal} package(s) in ${input.applistPath}`);
+  if (addedTotal > 0) print(`Tracked ${addedTotal} package(s) in ${input.applistPath}`);
+  if (removedTotal > 0) print(`Untracked ${removedTotal} package(s) from ${input.applistPath}`);
   if (result.backupPath) print(`Backup: ${result.backupPath}`);
   return 0;
 }

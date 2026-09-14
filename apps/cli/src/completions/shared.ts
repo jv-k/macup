@@ -63,7 +63,7 @@ export const SUBTYPE_COMMANDS = new Set(['list', 'install', 'update', 'track', '
  * noun with flags of its own so far (#14).
  */
 export const TOP_LEVEL_COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = {
-  init: ['--dry-run', '--force'],
+  init: ['--dry-run', '--force', '--prune'],
 };
 
 /**

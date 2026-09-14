@@ -27,7 +27,7 @@ The issue says "prompts before overwriting an existing config". Merging serves t
 ## Alternatives
 
 - **Replace the applist wholesale**, the literal reading of "overwriting". Rejected: it destroys pins, skip lists, and comments, which is the one thing the user cannot get back from a rescan.
-- **Replace only the package-list keys, keep pins and skip.** Closer, but it still silently drops a tracked package the backend no longer reports (uninstalled temporarily, or a name that changed), and explaining which parts survive is harder than "it adds what it found".
+- **Replace only the package-list keys, keep pins and skip.** Closer, but it still silently drops a tracked package the backend no longer reports (uninstalled temporarily, or a name that changed), and explaining which parts survive is harder than "it adds what it found". Rejected as the default; the amendment below offers it as an opt-in.
 - **Prompt even on an empty applist.** Consistent, and tedious on the path almost everyone takes once.
 - **Proceed silently under a pipe.** Fewer moving parts, and the failure mode is a rewritten config nobody asked for. Rejected on that alone.
 - **`--yes` instead of `--force`.** Same meaning; `--force` matches how the rest of the CLI spells "I know, do it anyway".
@@ -43,4 +43,22 @@ It inherits one awkward interaction with ADR 0044. `macup --applist work.yaml in
 
 Scaffolding tracks everything installed, which for Homebrew includes dependencies pulled in by other formulae: a real run on the author's machine tracked 364 packages, 263 of them brew formulas. The applist is longer than what the user would have written, and pruning is manual. Filtering to top-level installs needs per-backend knowledge (`brew leaves`), which is a plugin-contract question rather than a scaffolder one. Tracked as #128.
 
-Merging also means `init` can only grow the applist. Uninstall something and re-run, and its entry stays. That is the deliberate cost of never destroying hand-written content, but it does mean `init` converges upward rather than to current system state, which is not what "pre-populated with what's currently installed" implies on a second run. An opt-in prune is the missing half, tracked as #127 rather than argued away here.
+Merging also means `init` can only grow the applist. Uninstall something and re-run, and its entry stays. That is the deliberate cost of never destroying hand-written content, but it does mean `init` converges upward rather than to current system state, which is not what "pre-populated with what's currently installed" implies on a second run. An opt-in prune is the missing half: see the amendment below (#127).
+
+## Amendment: `--prune` is the opt-in other half (2026-09-15, #127)
+
+The argument against replacing the package-list keys was that a backend which momentarily fails to report a package would silently cost the user that entry. That is an argument about the default. It does not carry over to a flag the user has asked for, provided the flag cannot do the one thing the argument fears.
+
+**`macup init --prune` untracks, under the keys the scan covered, the names the scan did not find.** The scan now records those keys (`DetectionPlan.scanned`): every key whose listing succeeded this run, including one that came back empty. A backend that was unavailable or whose listing errored has no scanned keys, so its entries are never consulted, and a machine without `mas` cannot lose its App Store list. An empty listing over a covered key is a real answer, though, and everything tracked there is treated as stale.
+
+**It has a confirmation of its own.** A tracked-but-not-installed entry can be intent rather than drift (CONTEXT.md, Tracked vs Installed), so the prune prints what it would untrack, by key, and asks. It asks regardless of what the applist held before, because unlike the merge there is always something to lose. Under a pipe it refuses and names `--force`, the same spelling the merge uses; `--prune --force` is what a script says. Declining the prune leaves the merge's answer standing, so the two questions are independent.
+
+**It is an untrack, nothing more.** Pins and skip entries for a pruned name stay, exactly as `macup <plugin> untrack` leaves them. Removing a pin is a separate decision the user can take with `unpin`.
+
+**Under `--dry-run` it names the keys it would touch, not the entries.** Listing the entries means opening the store, and this ADR already settled that the dry-run path does not. The keys are the guard, so they are what a dry run shows.
+
+Alternatives considered for the amendment:
+
+- **Report instead of act**: `init` lists tracked-but-not-installed entries and suggests `untrack` commands. Safe, and leaves 364 entries' worth of typing to the user, which is the problem `init` exists to remove.
+- **Fold into `check` or `doctor`** as a drift diagnostic. Arguably where "the applist disagrees with the machine" belongs, and worth doing as well. But a diagnostic still leaves the fix manual, and the issue's own framing (#127, and the paragraph above) is that `init` should be able to converge to the machine, not only upward.
+- **Fold the prune into the merge prompt** as one question. Fewer prompts, and a "yes" that both adds and removes is easy to give for the adds and regret for the removes.

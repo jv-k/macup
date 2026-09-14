@@ -426,6 +426,7 @@ v1.0.x polish:
 - **#6** Rollback / undo command
 - **#7** Config schema `version:` field
 - **#14** `macup init`: shipped; scaffolds an applist from what is installed, merging rather than replacing (ADR 0047)
+- **#127** `macup init --prune`: shipped; the opt-in other half, untracking what the scan did not find under the keys it covered (ADR 0047 amendment)
 - **#16** File logging (`--log`, `MACUP_LOG`): shipped; JSON-lines subprocess records, distinct from `--verbose` (ADR 0045)
 
 ### 8.3 Mid-term (v1.1, scriptability + bundles)

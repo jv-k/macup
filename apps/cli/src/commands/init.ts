@@ -49,6 +49,11 @@ export const INIT_ARGS = {
     type: 'boolean',
     description: 'Let bare `macup init` modify an applist that already tracks packages.',
   },
+  prune: {
+    type: 'boolean',
+    description:
+      'Also untrack packages the scan did not find, under the keys it covered. Asks first.',
+  },
 } as const;
 
 // `rc=$?` (not `status=$?`): $status is read-only in zsh and the
@@ -140,6 +145,7 @@ export function buildInitCommand(deps: CliDeps) {
         process.exitCode = await runInitScaffoldAction(deps, {
           dryRun: args['dry-run'] === true,
           force: args.force === true,
+          prune: args.prune === true,
         });
         return;
       }
@@ -164,7 +170,7 @@ export function buildInitCommand(deps: CliDeps) {
  */
 async function runInitScaffoldAction(
   deps: CliDeps,
-  opts: { dryRun: boolean; force: boolean },
+  opts: { dryRun: boolean; force: boolean; prune: boolean },
 ): Promise<number> {
   const paths = deps.resolvePaths();
   const plan = await detectInstalled(deps.registry, deps.pluginContext);
@@ -177,6 +183,7 @@ async function runInitScaffoldAction(
     dryRun: opts.dryRun,
     interactive: process.stdin.isTTY === true,
     force: opts.force,
+    prune: opts.prune,
   };
 
   // Under --dry-run the store is never opened, because opening it is itself a
@@ -190,6 +197,7 @@ async function runInitScaffoldAction(
       store: emptyStore,
       trackedAlready: 0,
       confirm: async () => false,
+      confirmPrune: async () => false,
     });
   }
 
@@ -207,6 +215,13 @@ async function runInitScaffoldAction(
       });
       return !isCancel(ans) && ans === true;
     },
+    confirmPrune: async () => {
+      const ans = await confirm({
+        message: 'Untrack them?',
+        initialValue: false,
+      });
+      return !isCancel(ans) && ans === true;
+    },
   });
 }
 
@@ -216,6 +231,9 @@ async function runInitScaffoldAction(
 const emptyStore = {
   list: () => [],
   add: () => {
+    throw new Error('init: --dry-run must not stage applist changes');
+  },
+  remove: () => {
     throw new Error('init: --dry-run must not stage applist changes');
   },
   save: async () => {

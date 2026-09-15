@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import npmPlugin from '../../../plugins/npm';
-import { FixtureExecRunner, loadFixtures } from '../../../src/exec/fixtures';
+import { type FixtureEntry, FixtureExecRunner, loadFixtures } from '../../../src/exec/fixtures';
 import type { PluginContext } from '../../../src/plugins/types';
 
 const FIXTURE_PATH = join(__dirname, '../../fixtures/recordings/npm.json');
@@ -142,17 +142,30 @@ describe('npm plugin — search', () => {
 });
 
 describe('npm plugin — healthCheck', () => {
-  it('invokes `npm doctor`', async () => {
-    const ctx: PluginContext = {
-      exec: new FixtureExecRunner({
-        fixtures: [
-          { cmd: 'npm', args: ['doctor'], result: { stdout: '', stderr: '', exitCode: 0 } },
-        ],
-        onPath: ['npm'],
-      }),
-      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+  function healthCtx(fixtures: FixtureEntry[], lines: string[]): PluginContext {
+    return {
+      exec: new FixtureExecRunner({ fixtures, onPath: ['npm'] }),
+      log: { info: (m) => lines.push(m), warn: () => {}, error: () => {}, debug: () => {} },
       signal: new AbortController().signal,
     };
-    await expect(npmPlugin.healthCheck?.(ctx)).resolves.toBeUndefined();
+  }
+
+  it('invokes `npm doctor`', async () => {
+    const lines: string[] = [];
+    const ctx = healthCtx(
+      [{ cmd: 'npm', args: ['doctor'], result: { stdout: '', stderr: '', exitCode: 0 } }],
+      lines,
+    );
+    await expect(npmPlugin.healthCheck?.(ctx, {})).resolves.toBeUndefined();
+    expect(lines).toEqual([]);
+  });
+
+  // No `doctor` fixture: a FixtureExecRunner miss throws, so resolving is
+  // the proof that nothing ran (#152).
+  it('under dryRun prints `[dry-run] npm doctor` and runs nothing', async () => {
+    const lines: string[] = [];
+    const ctx = healthCtx([], lines);
+    await expect(npmPlugin.healthCheck?.(ctx, { dryRun: true })).resolves.toBeUndefined();
+    expect(lines).toEqual(['[dry-run] npm doctor']);
   });
 });

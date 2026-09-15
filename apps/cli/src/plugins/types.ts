@@ -334,10 +334,11 @@ export interface Plugin {
   leaves?(ctx: PluginContext, opts?: LeavesOptions): Promise<PackageRef[]>;
   /**
    * Optional: run a post-mutation health check for this backend (e.g. `brew
-   * doctor`). Called by the host after install and update when present.
-   * Presence of this method is the capability signal — there is no separate
-   * capabilities flag, the same rule ADR 0039 applies to `search` and
-   * `uninstall`.
+   * doctor`). Called by the host after install and update when present, with
+   * the same `opts` the mutation ran under: a dry run prints the command and
+   * runs nothing, the rule every mutating verb keeps (#152). Presence of this
+   * method is the capability signal — there is no separate capabilities flag,
+   * the same rule ADR 0039 applies to `search` and `uninstall`.
    */
-  healthCheck?(ctx: PluginContext): Promise<void>;
+  healthCheck?(ctx: PluginContext, opts: MutateOptions): Promise<void>;
 }

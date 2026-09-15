@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { ErrMutateFailed, MacupError } from '../../../src/errors';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
-import { mutateRefs } from '../../../src/plugins/helpers';
+import { mutateRefs, runUnlessDryRun } from '../../../src/plugins/helpers';
 import type { PackageRef, PluginContext } from '../../../src/plugins/types';
 
 function ref(name: string): PackageRef {
@@ -193,5 +193,37 @@ describe('mutateRefs — dry-run', () => {
     await expect(
       mutateRefs(ctxWith(runner), [ref('a'), ref('b')], { dryRun: true }, command),
     ).resolves.toBeUndefined();
+  });
+});
+
+// runUnlessDryRun (#152): the single-command gate the health checks use.
+describe('runUnlessDryRun', () => {
+  it('runs the command with the cancellation signal when not a dry run', async () => {
+    const runner = new FixtureExecRunner({
+      fixtures: [
+        { cmd: 'brew', args: ['doctor'], result: { stdout: '', stderr: '', exitCode: 0 } },
+      ],
+    });
+    const lines: string[] = [];
+    const ctx: PluginContext = {
+      ...ctxWith(runner),
+      log: { info: (m) => lines.push(m), warn: () => {}, error: () => {}, debug: () => {} },
+    };
+    await expect(runUnlessDryRun(ctx, {}, 'brew', ['doctor'])).resolves.toBeUndefined();
+    expect(lines).toEqual([]);
+  });
+
+  it('prints the command and runs nothing under dryRun', async () => {
+    // No fixture at all: a miss would throw, so resolving is the proof.
+    const runner = new FixtureExecRunner({ fixtures: [], onPath: ['brew'] });
+    const lines: string[] = [];
+    const ctx: PluginContext = {
+      ...ctxWith(runner),
+      log: { info: (m) => lines.push(m), warn: () => {}, error: () => {}, debug: () => {} },
+    };
+    await expect(
+      runUnlessDryRun(ctx, { dryRun: true }, 'brew', ['doctor']),
+    ).resolves.toBeUndefined();
+    expect(lines).toEqual(['[dry-run] brew doctor']);
   });
 });

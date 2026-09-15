@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import brewPlugin from '../../../plugins/brew';
-import { FixtureExecRunner, loadFixtures } from '../../../src/exec/fixtures';
+import { type FixtureEntry, FixtureExecRunner, loadFixtures } from '../../../src/exec/fixtures';
 import type { PluginContext } from '../../../src/plugins/types';
 
 const FIXTURE_PATH = join(__dirname, '../../fixtures/recordings/brew.json');
@@ -226,17 +226,30 @@ describe('brew plugin — leaves', () => {
 });
 
 describe('brew plugin — healthCheck', () => {
-  it('invokes `brew doctor`', async () => {
-    const ctx: PluginContext = {
-      exec: new FixtureExecRunner({
-        fixtures: [
-          { cmd: 'brew', args: ['doctor'], result: { stdout: '', stderr: '', exitCode: 0 } },
-        ],
-        onPath: ['brew'],
-      }),
-      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+  function healthCtx(fixtures: FixtureEntry[], lines: string[]): PluginContext {
+    return {
+      exec: new FixtureExecRunner({ fixtures, onPath: ['brew'] }),
+      log: { info: (m) => lines.push(m), warn: () => {}, error: () => {}, debug: () => {} },
       signal: new AbortController().signal,
     };
-    await expect(brewPlugin.healthCheck?.(ctx)).resolves.toBeUndefined();
+  }
+
+  it('invokes `brew doctor`', async () => {
+    const lines: string[] = [];
+    const ctx = healthCtx(
+      [{ cmd: 'brew', args: ['doctor'], result: { stdout: '', stderr: '', exitCode: 0 } }],
+      lines,
+    );
+    await expect(brewPlugin.healthCheck?.(ctx, {})).resolves.toBeUndefined();
+    expect(lines).toEqual([]);
+  });
+
+  // No `doctor` fixture: a FixtureExecRunner miss throws, so resolving is
+  // the proof that nothing ran (#152).
+  it('under dryRun prints `[dry-run] brew doctor` and runs nothing', async () => {
+    const lines: string[] = [];
+    const ctx = healthCtx([], lines);
+    await expect(brewPlugin.healthCheck?.(ctx, { dryRun: true })).resolves.toBeUndefined();
+    expect(lines).toEqual(['[dry-run] brew doctor']);
   });
 });

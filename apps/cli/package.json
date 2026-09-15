@@ -49,6 +49,7 @@
     "dev:watch": "tsup --watch --onSuccess 'echo built'",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "MACUP_E2E_BINARY=\"${MACUP_E2E_BINARY:-dist/macup-darwin-$(node -p process.arch)}\" vitest run test/e2e",
     "typecheck": "tsc --noEmit",
     "build:binary": "bun scripts/build-binary.ts",
     "screenshots": "./dev/screenshots.sh",

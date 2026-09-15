@@ -65,7 +65,7 @@ import { withSpinner } from './spinner';
  */
 export const COMPOSITE_MANIFEST: PluginManifest = {
   id: 'all',
-  displayName: 'All package managers',
+  displayName: 'All backends',
   supportedOS: ['darwin'],
   requires: [],
   configKeys: [],
@@ -251,7 +251,7 @@ async function runCompositeMutation(
   if (total > 0) {
     if (process.stdout.isTTY) {
       const ans = await confirm({
-        message: `This ${mode}s ${total} package(s) across all managers. Continue?`,
+        message: `This ${mode}s ${total} package(s) across all backends. Continue?`,
         initialValue: true,
       });
       if (isCancel(ans) || !ans) {

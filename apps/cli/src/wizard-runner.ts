@@ -429,7 +429,7 @@ async function wizardLoop(
           }
         }
         const choice = await select<Target | null>({
-          message: 'Which package manager?\n',
+          message: 'Which backend?\n',
           options,
         });
         if (isCancel(choice) || choice === null) return null;

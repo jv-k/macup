@@ -1,0 +1,9 @@
+# macup's own .verbumprc — dogfooding config + hooks, same pattern as
+# jv-k/VerBump's own repo.
+#
+# Gate `bump-release` on the full local check suite before any file is
+# mutated. release.yml re-verifies at the tagged ref on CI, but only after
+# the tag + GitHub Release already exist — a failing pre-bump hook here
+# catches a broken lint/typecheck/test locally instead. Skip for a single
+# run with --no-hooks.
+PRE_BUMP_CMD="pnpm -w lint && pnpm -w typecheck && pnpm -w test"

@@ -36,6 +36,7 @@ import {
   type ConstituentOutcome,
   type ConstituentPlan,
   applyComposite,
+  mutateFor,
   planComposite,
 } from './composite-mutate';
 import {
@@ -79,10 +80,9 @@ export function makeCtx(deps: CommandDeps): PluginContext {
   return deps.pluginContext ?? { exec: deps.exec, log: deps.log, signal: deps.signal };
 }
 
-// One line per constituent, for the paths that print no report: a dry run,
-// and `all install` until #165 gives it one. A ref failure the per-ref loop
-// recorded is named here, since no report follows to name it. 'planned' and
-// 'nothing' say nothing.
+// One line per constituent, for the one path that prints no report: a dry
+// run. A ref failure the per-ref loop recorded is named here, since no report
+// follows to name it. 'planned' and 'nothing' say nothing.
 function reportConstituentLine(print: (line: string) => void, o: ConstituentOutcome): void {
   if (o.status === 'acted') {
     const failed = o.failures ?? [];
@@ -101,18 +101,22 @@ function reportConstituentLine(print: (line: string) => void, o: ConstituentOutc
   }
 }
 
-// What one constituent of `all update` contributes to the combined report,
-// or nothing for one that is not a run at all: excluded by skip.all, or with
-// no update verb to run. A backend that ran gets its after snapshot here,
-// through the same probe that planned it (ADR 0052 rule 2), so the verdict
-// is its own listing rather than its exit code. A probe that fails afterwards
-// is a whole-backend failure with the refs known, not a run the report could
-// classify: it must not read as `updated` on an empty listing. `nothing` is a
-// backend that ran and had no work, so its planning listing stands in for
-// both snapshots, and it is not probed a second time for a report that has
-// nothing to reconcile.
+// What one constituent of `all install` or `all update` contributes to the
+// combined report, or nothing for one that is not a run at all: excluded by
+// skip.all, or with no verb to run. A backend that ran gets its after
+// snapshot here, through the same probe that planned it (ADR 0052 rule 2),
+// so the verdict is its own listing rather than its exit code: the outdated
+// listing for update, the full listing for install, the same shape its
+// before snapshot has, so a ref present at both ends reads as
+// `already-present` rather than dropping out of one of them. A probe that
+// fails afterwards is a whole-backend failure with the refs known, not a run
+// the report could classify: it must not read as `updated` or `installed` on
+// an empty listing. `nothing` is a backend that ran and had no work, so its
+// planning listing stands in for both snapshots, and it is not probed a
+// second time for a report that has nothing to reconcile.
 async function compositeRunFor(
   deps: CommandDeps,
+  mode: MutationMode,
   plan: ConstituentPlan,
   o: ConstituentOutcome,
 ): Promise<PluginRun | undefined> {
@@ -121,11 +125,11 @@ async function compositeRunFor(
     case 'excluded':
       return undefined;
     case 'unavailable':
-      return { kind: 'unavailable', pluginId, refs: [], reason: o.message ?? 'unavailable' };
+      return { kind: 'unavailable', pluginId, refs: plan.refs, reason: o.message ?? 'unavailable' };
     case 'error':
-      return { kind: 'failed', pluginId, refs: [], reason: o.message ?? 'error' };
+      return { kind: 'failed', pluginId, refs: plan.refs, reason: o.message ?? 'error' };
     case 'nothing':
-      if (!plan.plugin.update) return undefined;
+      if (!mutateFor(mode, plan.plugin)) return undefined;
       return { kind: 'ran', pluginId, refs: [], before: plan.before, after: plan.before };
     case 'acted':
       break;
@@ -133,7 +137,7 @@ async function compositeRunFor(
   const after = await withSpinner(
     deps,
     `Verifying ${plan.plugin.manifest.displayName} packages…`,
-    () => probe(plan.plugin, makeCtx(deps), { onlyOutdated: true }),
+    () => probe(plan.plugin, makeCtx(deps), mode === 'update' ? { onlyOutdated: true } : {}),
   );
   const failures = o.failures ? { failures: o.failures } : {};
   if (after.kind !== 'ok') {
@@ -153,18 +157,18 @@ async function compositeRunFor(
 /** The flags the composite reads off `all install` / `all update`. */
 interface CompositeFlags {
   readonly dryRun: boolean;
-  /** `update` only: `all install` has no report to render as JSON until #165, so it does not pass the flag. */
-  readonly json?: boolean;
+  /** Render the end-of-run report as one JSON document on stdout. */
+  readonly json: boolean;
 }
 
 // The composite `all` install/update: the host fans out over the constituents
 // (ADR 0033), honoring per-plugin skip/pin and skip.all backend exclusion (ADR
 // 0037), attempts every ref of every backend, and isolates each failure (ADR
 // 0052). Planning first (no mutation) lets us prompt with a count and skip the
-// prompt on a no-op. `update` ends in one combined report, always printed,
+// prompt on a no-op. Both verbs end in one combined report, always printed,
 // whose exit code a whole-backend error forces non-zero and an unavailable
-// backend never does (#164); an excluded backend is not a run at all, so it
-// keeps its own info line rather than a report status.
+// backend never does (#164, #165). An excluded backend is not a run at all,
+// so it keeps its own info line rather than a report status.
 async function runCompositeMutation(
   deps: CommandDeps,
   displayName: string,
@@ -172,15 +176,19 @@ async function runCompositeMutation(
   flags: CompositeFlags,
 ): Promise<void> {
   const { dryRun } = flags;
-  const showJson = mode === 'update' && flags.json === true;
+  const showJson = flags.json;
   // --json owns stdout, the same seam the single-plugin path uses: spinners
   // suppressed, every human line to stderr, so stdout holds one document.
   const runDeps: CommandDeps = showJson ? { ...deps, suppressBar: true } : deps;
   const printHuman = showJson ? log.printErr : log.print;
   const verb = mode === 'update' ? 'Updating' : 'Installing';
   const store = await deps.getStore();
-  const plans = await planComposite(mode, deps.constituents ?? [], store, () => makeCtx(deps));
-  const total = plans.reduce((n, p) => n + p.refs.length, 0);
+  const plans = await planComposite(mode, deps.constituents ?? [], store, () => makeCtx(deps), {
+    dryRun,
+  });
+  // Only what will run counts toward the prompt: a backend that never runs
+  // may still name its refs, for the report.
+  const total = plans.reduce((n, p) => n + (p.status === 'planned' ? p.refs.length : 0), 0);
 
   if (total > 0) {
     if (process.stdout.isTTY) {
@@ -200,9 +208,8 @@ async function runCompositeMutation(
   const outcomes = await applyComposite(mode, plans, () => makeCtx(deps), { dryRun });
 
   // A dry run mutates nothing, so there is no after snapshot to reconcile and
-  // no report to build; the pre-report lines and the zero exit stand. Install
-  // keeps those lines too, until #165 gives it a report of its own.
-  if (dryRun || mode !== 'update') {
+  // no report to build. The pre-report lines and the zero exit stand.
+  if (dryRun) {
     for (const o of outcomes) reportConstituentLine(printHuman, o);
     if (total === 0) printHuman(log.info(`Nothing to ${mode}.`));
     return;
@@ -213,10 +220,10 @@ async function runCompositeMutation(
   for (const o of outcomes) {
     if (o.status === 'excluded') reportConstituentLine(printHuman, o);
     const plan = planFor.get(o.pluginId);
-    const run = plan && (await compositeRunFor(runDeps, plan, o));
+    const run = plan && (await compositeRunFor(runDeps, mode, plan, o));
     if (run) runs.push(run);
   }
-  const report = buildMutationReport('update', runs);
+  const report = buildMutationReport(mode, runs);
   if (showJson) {
     console.log(renderJson(report));
   } else {
@@ -510,6 +517,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (manifest.id === 'all') {
           await runCompositeMutation(deps, manifest.displayName, 'install', {
             dryRun: Boolean(args['dry-run']),
+            json: Boolean(args.json),
           });
           return;
         }

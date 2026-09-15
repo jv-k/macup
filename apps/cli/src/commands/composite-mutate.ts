@@ -10,7 +10,7 @@
 
 import type { ConfigStore } from '../config/store';
 import { ErrPluginUnavailable, type MutateFailure } from '../errors';
-import { errorMessage, probe } from '../plugins/probe';
+import { type ProbeOutcome, errorMessage, probe, probeOutcomeReason } from '../plugins/probe';
 import { resolveSelection } from '../plugins/selection';
 import { kindForConfigKey } from '../plugins/subtype-table';
 import type {
@@ -26,10 +26,32 @@ import { type MutationMode, failuresFor } from './mutation-report';
 export interface ConstituentPlan {
   readonly plugin: Plugin;
   readonly status: 'planned' | 'excluded' | 'unavailable' | 'error';
+  /**
+   * The refs the constituent acts on when `planned`. On `unavailable` or
+   * `error`, the refs it would have acted on where selecting them needs no
+   * backend (`install`, from the tracked applist), so the report can name
+   * each under a backend that never ran. Empty where the listing was to
+   * select them (`update`).
+   */
   readonly refs: readonly PackageRef[];
-  /** The planning probe's listing, kept so the end-of-run report has a `before` snapshot to pair with its `after` (ADR 0052 rule 2). Empty where planning took no listing (`install`, or a constituent that never ran). */
+  /**
+   * The planning probe's listing, kept so the end-of-run report has a
+   * `before` snapshot to pair with its `after` (ADR 0052 rule 2). Empty where
+   * planning took no listing: a constituent that never ran, or an `install`
+   * with no report to feed (see {@link PlanOptions.dryRun}).
+   */
   readonly before: readonly PackageStatus[];
   readonly message?: string;
+}
+
+/** What {@link planComposite} needs to know about the run beyond its mode. */
+export interface PlanOptions {
+  /**
+   * A dry run mutates nothing and prints no report, so `install` planning
+   * takes no `before` listing: the report is that listing's only reader.
+   * `update` lists regardless, since selecting its refs needs the listing.
+   */
+  readonly dryRun?: boolean;
 }
 
 /** How one backend fared inside an `all` run. Recorded per backend so a single failure is isolated rather than aborting the fan-out (ADR 0033). */
@@ -56,19 +78,21 @@ export interface ConstituentOutcome {
  * path (buildOutdatedReport). Planning first lets the caller show a count and
  * skip the confirmation prompt when there is nothing to do.
  *
- * `update` is the one mode with a live check-then-list to make: selecting its
- * refs needs `plugin.list({ onlyOutdated: true })`, so that branch goes
- * through the promoted probe (ADR 0050) and reuses its statuses rather than
- * listing twice. `install` selects from the tracked applist alone — no list()
- * call today — so it keeps the plain check()-then-catch it always had; routing
- * it through the probe would add a live listing call no `install` plan has
- * ever made.
+ * Both modes go through the promoted probe (ADR 0050), check() then list(),
+ * for one listing that serves two ends. `update` selects its refs from it,
+ * so it lists `onlyOutdated`. `install` selects from the tracked applist and
+ * lists for the report alone: its `before` snapshot (ADR 0052 rule 2), a
+ * full listing so a present ref that is up to date is not misread as
+ * freshly installed. Where no report will read that snapshot (a dry run,
+ * or nothing tracked), availability alone decides the install plan, and no
+ * listing is taken.
  */
 export async function planComposite(
   mode: MutationMode,
   constituents: readonly Plugin[],
   store: ConfigStore,
   makeCtx: () => PluginContext,
+  opts: PlanOptions = {},
 ): Promise<ConstituentPlan[]> {
   const excluded = store.selectionFor('all').skipped;
   const plans: ConstituentPlan[] = [];
@@ -77,52 +101,66 @@ export async function planComposite(
       plans.push({ plugin, status: 'excluded', refs: [], before: [] });
       continue;
     }
-    const mutate = mode === 'update' ? plugin.update : plugin.install;
-    if (!mutate) {
+    if (!mutateFor(mode, plugin)) {
       plans.push({ plugin, status: 'planned', refs: [], before: [] });
       continue;
     }
     const ctx = makeCtx();
     if (mode === 'update') {
       const outcome = await probe(plugin, ctx, { onlyOutdated: true });
-      if (outcome.kind === 'ok') {
-        plans.push({
-          plugin,
-          status: 'planned',
-          refs: selectUpdateRefs(outcome.statuses, plugin, store),
-          before: outcome.statuses,
-        });
-      } else if (outcome.kind === 'unavailable') {
-        plans.push({
-          plugin,
-          status: 'unavailable',
-          refs: [],
-          before: [],
-          message: outcome.message,
-        });
-      } else {
-        const message = outcome.kind === 'timeout' ? 'probe timed out' : outcome.message;
-        plans.push({ plugin, status: 'error', refs: [], before: [], message });
-      }
+      plans.push(planFromProbe(plugin, outcome, (s) => selectUpdateRefs(s, plugin, store)));
       continue;
     }
-    try {
-      await plugin.check(ctx);
-      plans.push({
-        plugin,
-        status: 'planned',
-        refs: selectInstallRefs(plugin, store),
-        before: [],
-      });
-    } catch (err) {
-      plans.push(
-        err instanceof ErrPluginUnavailable
-          ? { plugin, status: 'unavailable', refs: [], before: [], message: err.message }
-          : { plugin, status: 'error', refs: [], before: [], message: errorMessage(err) },
-      );
+    const refs = selectInstallRefs(plugin, store);
+    if (opts.dryRun || refs.length === 0) {
+      plans.push(await planFromCheck(plugin, ctx, refs));
+      continue;
     }
+    plans.push(planFromProbe(plugin, await probe(plugin, ctx, {}), refs));
   }
   return plans;
+}
+
+/** The signature `install()` and `update()` share. */
+type MutateFn = NonNullable<Plugin['install']>;
+
+/** The verb a mode runs on a plugin, or undefined where the plugin lacks it. */
+export function mutateFor(mode: MutationMode, plugin: Plugin): MutateFn | undefined {
+  return mode === 'update' ? plugin.update : plugin.install;
+}
+
+// `refs` is either already selected without the backend (install, from the
+// tracked applist), and then the plan names them whatever the probe found,
+// or a selector over the listing (update), and then a backend that never ran
+// names nothing.
+function planFromProbe(
+  plugin: Plugin,
+  outcome: ProbeOutcome,
+  refs: readonly PackageRef[] | ((statuses: readonly PackageStatus[]) => PackageRef[]),
+): ConstituentPlan {
+  if (outcome.kind === 'ok') {
+    const planned = typeof refs === 'function' ? refs(outcome.statuses) : refs;
+    return { plugin, status: 'planned', refs: planned, before: outcome.statuses };
+  }
+  const status = outcome.kind === 'unavailable' ? 'unavailable' : 'error';
+  const known = typeof refs === 'function' ? [] : refs;
+  return { plugin, status, refs: known, before: [], message: probeOutcomeReason(outcome) };
+}
+
+// Availability alone, the same split as the probe's, for an install plan
+// with no listing to take.
+async function planFromCheck(
+  plugin: Plugin,
+  ctx: PluginContext,
+  refs: readonly PackageRef[],
+): Promise<ConstituentPlan> {
+  try {
+    await plugin.check(ctx);
+    return { plugin, status: 'planned', refs, before: [] };
+  } catch (err) {
+    const status = err instanceof ErrPluginUnavailable ? 'unavailable' : 'error';
+    return { plugin, status, refs, before: [], message: errorMessage(err) };
+  }
 }
 
 /**
@@ -150,7 +188,7 @@ export async function applyComposite(
       outcomes.push({ pluginId, status: plan.status, refs: [], message: plan.message });
       continue;
     }
-    const mutate = mode === 'update' ? plan.plugin.update : plan.plugin.install;
+    const mutate = mutateFor(mode, plan.plugin);
     if (!mutate || plan.refs.length === 0) {
       outcomes.push({ pluginId, status: 'nothing', refs: [] });
       continue;
@@ -183,7 +221,7 @@ export async function fanOutComposite(
   makeCtx: () => PluginContext,
   opts: MutateOptions,
 ): Promise<ConstituentOutcome[]> {
-  const plans = await planComposite(mode, constituents, store, makeCtx);
+  const plans = await planComposite(mode, constituents, store, makeCtx, { dryRun: opts.dryRun });
   return applyComposite(mode, plans, makeCtx, opts);
 }
 

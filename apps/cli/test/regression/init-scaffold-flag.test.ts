@@ -35,12 +35,16 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '../..');
 const CLI = join(ROOT, 'dist/cli.mjs');
 
-// Answers every brew invocation the plugin makes: two formula calls and two
-// cask calls. Anything else exits 0 with empty output, so an added call shows
-// up as a missing package rather than a hang.
+// Answers every brew invocation the scan makes. `leaves` is what init files
+// for formulas (#128, ADR 0051), so the stub's `list` carries a dependency
+// (pcre2, pulled in by ripgrep) that `leaves` leaves out: the assertions
+// below prove the closure is filtered, not merely tolerated. Anything else
+// exits 0 with empty output, so an added call shows up as a missing package
+// rather than a hang.
 const BREW_STUB = `#!/bin/sh
 case "$*" in
-  "list --versions")            printf 'ripgrep 14.1.0\\nfd 10.1.0\\n' ;;
+  "list --versions")            printf 'ripgrep 14.1.0\\nfd 10.1.0\\npcre2 10.44\\n' ;;
+  "leaves")                     printf 'ripgrep\\nfd\\n' ;;
   "outdated --json=v2 --formula") printf '{"formulae":[],"casks":[]}' ;;
   "list --cask --versions")     printf 'firefox 130.0\\n' ;;
   "outdated --json=v2 --cask")  printf '{"formulae":[],"casks":[]}' ;;
@@ -136,6 +140,8 @@ describe('bare `macup init` scaffolds the applist (#14)', () => {
     expect(text).toContain('formulas');
     expect(text).toContain('fd');
     expect(text).toContain('ripgrep');
+    // A dependency the stub lists as installed but not as a leaf (#128).
+    expect(text).not.toContain('pcre2');
     expect(text).toContain('casks');
     expect(text).toContain('firefox');
   });

@@ -2,6 +2,7 @@ import { runJson } from '../src/exec/json';
 import { defaultCheck } from '../src/plugins/defaults';
 import { filterOutdated, mutateRefs } from '../src/plugins/helpers';
 import type {
+  LeavesOptions,
   ListOptions,
   MutateOptions,
   PackageRef,
@@ -72,21 +73,27 @@ async function fetchFormulas(ctx: PluginContext, onlyOutdated: boolean): Promise
   return filterOutdated(result, onlyOutdated);
 }
 
-async function fetchCasks(ctx: PluginContext, onlyOutdated: boolean): Promise<PackageStatus[]> {
-  // `brew list --cask --versions` aborts entirely on the first bad cask
-  // (e.g. a stale entry whose Caskfile points at a missing artifact), so a
-  // single broken cask hides every other one. If the versioned form fails,
-  // fall back to the names-only `brew list --cask` and report installs
-  // without versions — outdated state still comes from the JSON below.
+// `brew list --cask --versions` aborts entirely on the first bad cask
+// (e.g. a stale entry whose Caskfile points at a missing artifact), so a
+// single broken cask hides every other one. If the versioned form fails,
+// fall back to the names-only `brew list --cask` and report installs
+// without versions — outdated state, where a caller wants it, comes from
+// the separate JSON query in `fetchCasks`.
+async function installedCasks(
+  ctx: PluginContext,
+): Promise<Array<{ name: string; version?: string }>> {
   const versioned = await ctx.exec.run('brew', ['list', '--cask', '--versions'], {
     signal: ctx.signal,
   });
-  const installed =
-    versioned.exitCode === 0
-      ? parseVersionsList(versioned.stdout)
-      : parseVersionsList(
-          (await ctx.exec.run('brew', ['list', '--cask'], { signal: ctx.signal })).stdout,
-        );
+  return versioned.exitCode === 0
+    ? parseVersionsList(versioned.stdout)
+    : parseVersionsList(
+        (await ctx.exec.run('brew', ['list', '--cask'], { signal: ctx.signal })).stdout,
+      );
+}
+
+async function fetchCasks(ctx: PluginContext, onlyOutdated: boolean): Promise<PackageStatus[]> {
+  const installed = await installedCasks(ctx);
   const outdatedRaw = await runJson<OutdatedResponse>(
     ctx.exec,
     'brew',
@@ -112,6 +119,18 @@ async function fetchCasks(ctx: PluginContext, onlyOutdated: boolean): Promise<Pa
     return status;
   });
   return filterOutdated(result, onlyOutdated);
+}
+
+// `brew leaves`: installed formulas that no other installed formula or cask
+// depends on. One bare name per line. Formula-only: see `leaves()` below for
+// how casks answer.
+async function fetchFormulaLeaves(ctx: PluginContext): Promise<PackageRef[]> {
+  const { stdout } = await ctx.exec.run('brew', ['leaves'], { signal: ctx.signal });
+  return stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((name) => ({ kind: 'formula', name, subtype: 'formulas' }));
 }
 
 // brew needs --cask for cask refs; formulas take the bare name.
@@ -197,6 +216,21 @@ const brew: Plugin = {
       results.push({ name });
     }
     return results;
+  },
+
+  async leaves(ctx: PluginContext, opts?: LeavesOptions): Promise<PackageRef[]> {
+    const subtype = opts?.subtype as 'formulas' | 'casks' | undefined;
+    // Homebrew has no leaf notion for casks (`brew leaves` is formula-only),
+    // so the cask leaf set is every installed cask, versions and currency not
+    // needed.
+    const caskLeaves = async (): Promise<PackageRef[]> =>
+      (await installedCasks(ctx)).map((e) => ({ kind: 'cask', name: e.name, subtype: 'casks' }));
+
+    if (subtype === 'formulas') return fetchFormulaLeaves(ctx);
+    if (subtype === 'casks') return caskLeaves();
+
+    const [formulas, casks] = await Promise.all([fetchFormulaLeaves(ctx), caskLeaves()]);
+    return [...formulas, ...casks];
   },
 
   async healthCheck(ctx: PluginContext): Promise<void> {

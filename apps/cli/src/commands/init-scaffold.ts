@@ -5,9 +5,13 @@
  * which owns the dispatch between the two.
  *
  * Detection is a read-only pass over the registry. Every plugin the host knows
- * about already reports what it has installed through `list()`, so this asks
- * each available one and files the answers under the applist key that plugin's
- * track verb would have written to. Nothing here invents per-backend knowledge.
+ * about already reports what it has installed through `list()`, and one that
+ * can tell a chosen install from a dependency reports the chosen ones through
+ * `leaves()` (#128, ADR 0051). This asks each available one, preferring
+ * `leaves()` where it exists, and files the answers under the applist key that
+ * plugin's track verb would have written to. Nothing here invents per-backend
+ * knowledge: which backends have a dependency closure, and how to ask, stays
+ * inside the plugin.
  *
  * Writing merges, so it can only grow the applist (ADR 0047). `--prune` (#127)
  * is the opt-in other half: untrack what the scan did not find, under the keys
@@ -19,7 +23,7 @@
 import type { ApplistKey } from '../config/schema';
 import { ErrPluginUnavailable } from '../errors';
 import { errorMessage, probe, probeOutcomeReason } from '../plugins/probe';
-import type { Plugin, PluginContext } from '../plugins/types';
+import type { ListOptions, Plugin, PluginContext } from '../plugins/types';
 import { resolveConfigKey } from './from-manifest';
 
 /** One applist key's worth of detected packages. */
@@ -55,6 +59,30 @@ export interface DetectionPlan {
 // The composite fans out over the other plugins (ADR 0033), so asking it would
 // double-count everything it covers. It also has no applist key of its own.
 const COMPOSITE_ID = 'all';
+
+/**
+ * The names one scope of a plugin would have the scaffold track: its leaves
+ * when it can tell a chosen install from a dependency (#128), otherwise
+ * everything it reports installed. `check()` has already passed for the
+ * plugin, so a throw here is a listing fault of this scope alone, and it is
+ * classified the way the probe classifies one so the caller sees one shape.
+ */
+async function askNames(
+  plugin: Plugin,
+  ctx: PluginContext,
+  scope: ListOptions,
+): Promise<{ names: string[] } | { reason: string }> {
+  if (plugin.leaves) {
+    try {
+      return { names: (await plugin.leaves(ctx, scope)).map((r) => r.name) };
+    } catch (err) {
+      return { reason: errorMessage(err) };
+    }
+  }
+  const outcome = await probe(plugin, ctx, scope, { skipCheck: true });
+  if (outcome.kind !== 'ok') return { reason: probeOutcomeReason(outcome) };
+  return { names: outcome.statuses.filter((s) => s.installed).map((s) => s.ref.name) };
+}
 
 /**
  * Read-only scan: what is installed, grouped by the applist key that would
@@ -97,19 +125,18 @@ export async function detectInstalled(
 
     // One pass per subtype, so brew's formulas and casks land in their own
     // keys rather than being merged into whichever came first. Availability
-    // is already settled above, so each subtype's listing goes through the
-    // promoted probe with skipCheck: true, isolating a per-subtype list()
-    // failure without re-running check() or repeating a verdict already
-    // recorded once for the whole plugin.
+    // is already settled above, so each subtype is asked with skipCheck in
+    // effect, isolating a per-subtype failure without re-running check() or
+    // repeating a verdict already recorded once for the whole plugin.
     const subtypeIds =
       m.subtypes && m.subtypes.length > 0 ? m.subtypes.map((s) => s.id) : [undefined];
     for (const subtype of subtypeIds) {
       const key = resolveConfigKey(plugin, subtype);
       if (!key) continue;
 
-      const outcome = await probe(plugin, ctx, subtype ? { subtype } : {}, { skipCheck: true });
-      if (outcome.kind !== 'ok') {
-        failed.push({ pluginId: m.id, reason: probeOutcomeReason(outcome) });
+      const asked = await askNames(plugin, ctx, subtype ? { subtype } : {});
+      if ('reason' in asked) {
+        failed.push({ pluginId: m.id, reason: asked.reason });
         continue;
       }
       // Recorded before the empty check: an empty listing still covers the key.
@@ -118,9 +145,7 @@ export async function detectInstalled(
       // Sorted and de-duplicated: the same machine should scaffold the same
       // file twice, and a backend listing a name twice is not the user's
       // problem.
-      const names = [
-        ...new Set(outcome.statuses.filter((s) => s.installed).map((s) => s.ref.name)),
-      ].sort();
+      const names = [...new Set(asked.names)].sort();
       if (names.length === 0) continue;
       groups.push({
         pluginId: m.id,

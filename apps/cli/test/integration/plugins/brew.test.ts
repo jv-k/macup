@@ -169,6 +169,35 @@ describe('brew plugin — search', () => {
   });
 });
 
+// #128: bare `macup init` should track what a person chose, not the closure
+// Homebrew resolved for it. `brew leaves` is the formula set with no dependant.
+// It is formula-only, so every installed cask is filed as a leaf.
+describe('brew plugin — leaves', () => {
+  it('returns the formulas `brew leaves` names, as formula refs', async () => {
+    const ctx = await makeCtx();
+    const refs = await brewPlugin.leaves?.(ctx, { subtype: 'formulas' });
+    expect(refs).toEqual([
+      { kind: 'formula', name: 'git', subtype: 'formulas' },
+      { kind: 'formula', name: 'ripgrep', subtype: 'formulas' },
+    ]);
+  });
+
+  it('treats every installed cask as a leaf, since `brew leaves` is formula-only', async () => {
+    const ctx = await makeCtx();
+    const refs = await brewPlugin.leaves?.(ctx, { subtype: 'casks' });
+    expect(refs).toEqual([
+      { kind: 'cask', name: 'firefox', subtype: 'casks' },
+      { kind: 'cask', name: 'visual-studio-code', subtype: 'casks' },
+    ]);
+  });
+
+  it('returns formula leaves and every cask when subtype is unset', async () => {
+    const ctx = await makeCtx();
+    const refs = await brewPlugin.leaves?.(ctx);
+    expect(refs?.map((r) => r.name)).toEqual(['git', 'ripgrep', 'firefox', 'visual-studio-code']);
+  });
+});
+
 describe('brew plugin — healthCheck', () => {
   it('invokes `brew doctor`', async () => {
     const ctx: PluginContext = {

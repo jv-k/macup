@@ -37,6 +37,11 @@
   },
   {
     "cmd": "brew",
+    "args": ["leaves"],
+    "result": { "stdout": "git\nripgrep\n", "stderr": "", "exitCode": 0 }
+  },
+  {
+    "cmd": "brew",
     "args": ["install", "jq"],
     "result": { "stdout": "==> Installing jq\n", "stderr": "", "exitCode": 0 }
   },

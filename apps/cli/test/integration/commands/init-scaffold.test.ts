@@ -13,7 +13,14 @@ import {
 import type { ApplistKey } from '../../../src/config/schema';
 import { ErrPluginUnavailable } from '../../../src/errors';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
-import type { ListOptions, PackageStatus, Plugin, PluginContext } from '../../../src/plugins/types';
+import type {
+  LeavesOptions,
+  ListOptions,
+  PackageRef,
+  PackageStatus,
+  Plugin,
+  PluginContext,
+} from '../../../src/plugins/types';
 
 const silentLog = { info() {}, warn() {}, error() {}, debug() {} };
 
@@ -33,6 +40,9 @@ interface FakeOpts {
   listThrows?: Error;
   /** Throw from list() only for this subtype, to model one subtype breaking. */
   listThrowsFor?: string;
+  /** When set, the fake declares `leaves()` answering with these refs. */
+  leaves?: PackageRef[];
+  leavesThrows?: Error;
 }
 
 function fake(opts: FakeOpts): Plugin {
@@ -65,6 +75,15 @@ function fake(opts: FakeOpts): Plugin {
       const all = opts.statuses ?? [];
       return listOpts.subtype ? all.filter((s) => s.ref.subtype === listOpts.subtype) : all;
     },
+    ...(opts.leaves || opts.leavesThrows
+      ? {
+          async leaves(_ctx: PluginContext, leavesOpts?: LeavesOptions): Promise<PackageRef[]> {
+            if (opts.leavesThrows) throw opts.leavesThrows;
+            const all = opts.leaves ?? [];
+            return leavesOpts?.subtype ? all.filter((r) => r.subtype === leavesOpts.subtype) : all;
+          },
+        }
+      : {}),
   };
   return plugin as unknown as Plugin;
 }
@@ -254,6 +273,53 @@ describe('detectInstalled', () => {
     const result = await detectInstalled(registry, ctx());
     expect(result.scanned).toEqual(['brew.formulas']);
     expect(result.failed.map((f) => f.pluginId)).toEqual(['brew']);
+  });
+
+  // #128: a backend that can tell a chosen install from a dependency answers
+  // through `leaves()`, and the scan files those rather than the closure
+  // `list()` reports. Homebrew is the case that matters: 263 formulas listed,
+  // most of them dependencies nobody asked for.
+  it("files a plugin's leaves rather than everything it lists, when it declares them", async () => {
+    const registry = [
+      fake({
+        id: 'brew',
+        configKeys: ['brew.formulas'],
+        subtypes: [{ id: 'formulas', configKey: 'brew.formulas' }],
+        statuses: [
+          pkg('ripgrep', true, 'formulas'),
+          pkg('pcre2', true, 'formulas'),
+          pkg('git', true, 'formulas'),
+        ],
+        leaves: [
+          { kind: 'formula', name: 'ripgrep', subtype: 'formulas' },
+          { kind: 'formula', name: 'git', subtype: 'formulas' },
+        ],
+      }),
+    ];
+    const result = await detectInstalled(registry, ctx());
+    expect(result.groups).toEqual([
+      {
+        pluginId: 'brew',
+        displayName: 'brew',
+        subtype: 'formulas',
+        key: 'brew.formulas',
+        names: ['git', 'ripgrep'],
+      },
+    ]);
+  });
+
+  it('records a backend whose leaves() fails the same way a failed listing is, and keeps the others', async () => {
+    const registry = [
+      fake({ id: 'npm', configKeys: ['npm'], statuses: [pkg('typescript', true)] }),
+      fake({
+        id: 'brew',
+        configKeys: ['brew.formulas'],
+        leavesThrows: new Error('leaves exploded'),
+      }),
+    ];
+    const result = await detectInstalled(registry, ctx());
+    expect(result.groups.map((g) => g.pluginId)).toEqual(['npm']);
+    expect(result.failed).toEqual([{ pluginId: 'brew', reason: 'leaves exploded' }]);
   });
 });
 

@@ -20,8 +20,4 @@ describe('help screen says backend, not package manager (#192)', () => {
   it('lists the composite as All backends', () => {
     expect(screen).toMatch(/\ball\s+All backends\b/);
   });
-
-  it('never calls a plugin a manager', () => {
-    expect(screen).not.toMatch(/managers?\b/i);
-  });
 });

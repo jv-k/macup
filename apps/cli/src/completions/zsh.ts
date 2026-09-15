@@ -100,7 +100,7 @@ _macup() {
 
   case $state in
     (plugin)
-      _describe -t plugins 'package manager' plugins
+      _describe -t plugins 'backend' plugins
       _describe -t commands 'command' commands
       ;;
     (command)

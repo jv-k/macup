@@ -84,8 +84,11 @@ describe('generateZshCompletions', () => {
     expect(out).toContain('_macup()');
   });
 
-  it('groups plugins under a "package manager" heading', () => {
-    expect(out).toContain("_describe -t plugins 'package manager' plugins");
+  it('groups plugins under a "backend" heading, the glossary term (#192)', () => {
+    // CONTEXT.md avoids "package manager" for a plugin: not every backend is
+    // one. The heading is the text zsh shows above the plugin group.
+    expect(out).toContain("_describe -t plugins 'backend' plugins");
+    expect(out).not.toContain("'package manager'");
   });
 
   it('offers the shells to the commands that take one', () => {

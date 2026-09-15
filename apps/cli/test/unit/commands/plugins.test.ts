@@ -185,6 +185,6 @@ describe('runPlugins (wiring)', () => {
     expect(out).toContain('plugins: 2 / 3 available');
     expect(out).toContain('brew');
     expect(out).toContain('missing: npm');
-    expect(out).toMatch(/✔\s+all\s+All package managers/);
+    expect(out).toMatch(/✔\s+all\s+All backends/);
   });
 });

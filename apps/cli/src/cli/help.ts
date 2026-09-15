@@ -96,9 +96,7 @@ export function buildHelp(deps: CliDeps): string {
   say('');
 
   // Plugins
-  say(
-    ` ${logui.header('PLUGINS')} ${s.dim('Package and App managers + their available commands')}`,
-  );
+  say(` ${logui.header('PLUGINS')} ${s.dim('Backends and their available commands')}`);
   // `deps.registry` holds only real backends (ADR 0033, ADR 0053); the
   // composite `all` is appended from its own declaration so it keeps
   // appearing here exactly as it did when it lived in the registry.

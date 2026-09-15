@@ -99,7 +99,7 @@ The per-run classification of one package by an install: `installed` (macup put 
 _Avoid_: install status, result, skipped (for already-present)
 
 **Update outcome**:
-The per-run classification of one package by an update: `updated`, `failed`, or `unavailable`. The sibling of Install outcome with no `already-present` case, because an already-current package is filtered out before `update()` is ever called. Classified host-side from the `list()` snapshot after the batch (ADR 0052). A run exits non-zero iff at least one package `failed`, and `unavailable` alone never does.
+The per-run classification of one package by an update: `updated`, `failed`, or `unavailable`. The sibling of Install outcome with no `already-present` case, because an already-current package is filtered out before `update()` is ever called. Classified host-side from the `list()` snapshot after the batch (ADR 0052). A run exits non-zero iff at least one package `failed` or a backend errored out entirely before it could name one, and `unavailable` alone never does.
 _Avoid_: update status, result, skipped, up-to-date (for a package the run never touched)
 
 ### Bundles

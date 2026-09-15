@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { ErrPluginUnavailable } from '../../../src/errors';
-import { type ProbeDeps, probe, probeOrThrow } from '../../../src/plugins/probe';
+import { type ProbeDeps, type ProbeOptions, probe, probeOrThrow } from '../../../src/plugins/probe';
 import type { ListOptions, PackageStatus, Plugin, PluginContext } from '../../../src/plugins/types';
 
 const silentLog = { info() {}, warn() {}, error() {}, debug() {} };
@@ -170,6 +170,13 @@ describe('probe', () => {
       message: 'broken venv',
       error: broken,
     });
+  });
+
+  it('refuses skipCheck and skipList together at the type level, since that probe would ask nothing (#194)', () => {
+    // A compile-time contract: the pair is not an option the type admits.
+    // @ts-expect-error skipCheck and skipList are mutually exclusive
+    const both: ProbeOptions = { skipCheck: true, skipList: true };
+    expect(both).toBeDefined();
   });
 
   it('propagates an already-aborted caller signal into the plugin context', async () => {

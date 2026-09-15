@@ -14,9 +14,10 @@
  * pre-promotion probe did.
  *
  * The mirror opt-out, `skipList`, is for the caller that wants availability
- * alone: the composite's dry-run install plan (#194), which has no report to
- * feed a listing to and would otherwise classify a thrown `check()` itself,
- * a second copy of the unavailable-vs-failed split this module exists to own.
+ * alone: the composite's install plan where no report will read a listing, a
+ * dry run or a constituent with nothing tracked (#194). It would otherwise
+ * classify a thrown `check()` itself, a second copy of the unavailable-vs-
+ * failed split this module exists to own.
  *
  * @module
  */
@@ -45,23 +46,34 @@ export interface ProbeDeps {
   readonly signal: AbortSignal;
 }
 
-/** Tuning for one {@link probe} call, beyond the plugin, deps, and list options. */
-export interface ProbeOptions {
+/**
+ * Tuning for one {@link probe} call, beyond the plugin, deps, and list
+ * options. At most one step can be skipped: a probe that skipped both would
+ * report `ok` having asked the backend nothing, so the type refuses the pair.
+ */
+export type ProbeOptions = {
   /** Bounds the whole call (both steps); omit for no timeout. */
   readonly timeoutMs?: number;
-  /**
-   * Skip `check()` and go straight to `list()`. For a caller that already
-   * established availability its own way. @see the module doc for why the
-   * doctor's deep checks are the one caller that sets this.
-   */
-  readonly skipCheck?: boolean;
-  /**
-   * Run `check()` alone and skip `list()`: an `ok` outcome then carries no
-   * statuses. For a caller that wants only the availability classification,
-   * with no listing to take. @see the module doc.
-   */
-  readonly skipList?: boolean;
-}
+} & (
+  | {
+      /**
+       * Skip `check()` and go straight to `list()`. For a caller that already
+       * established availability its own way. @see the module doc for why the
+       * doctor's deep checks are the one caller that sets this.
+       */
+      readonly skipCheck?: boolean;
+      readonly skipList?: undefined;
+    }
+  | {
+      /**
+       * Run `check()` alone and skip `list()`: an `ok` outcome then carries no
+       * statuses. For a caller that wants only the availability classification,
+       * with no listing to take. @see the module doc.
+       */
+      readonly skipList?: boolean;
+      readonly skipCheck?: undefined;
+    }
+);
 
 /** `check()`/`list()` may throw non-Error values — coerce via String() (issue #42). */
 export function errorMessage(err: unknown): string {
@@ -82,12 +94,12 @@ class ProbeTimeoutError extends Error {
 /**
  * Ask a backend what it has: `check()` then `list()`, defensively, so a
  * missing or misbehaving backend becomes a reported outcome rather than an
- * aborted caller. Either step can be skipped (`opts.skipCheck`,
+ * aborted caller. One step can be skipped (`opts.skipCheck` or
  * `opts.skipList`); the classification of whatever runs is the same.
- * `opts.timeoutMs`, when given, bounds the whole call and
- * chains its own abort onto `deps.signal`, so both a SIGINT and the probe's
- * own timeout reach the underlying subprocess. Omit it for a caller that
- * wants no timeout at all — the common case outside the doctor's deep checks.
+ * `opts.timeoutMs`, when given, bounds the whole call and chains its own
+ * abort onto `deps.signal`, so both a SIGINT and the probe's own timeout
+ * reach the underlying subprocess. Omit it for a caller that wants no
+ * timeout at all — the common case outside the doctor's deep checks.
  */
 export async function probe(
   plugin: Plugin,

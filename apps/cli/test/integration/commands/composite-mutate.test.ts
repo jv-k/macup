@@ -301,6 +301,10 @@ describe('fanOutComposite — install', () => {
     expect(brew.list).toHaveBeenCalledTimes(1);
     expect(npm.list).not.toHaveBeenCalled();
     expect(live[1]).toMatchObject({ status: 'planned', refs: [], before: [] });
+
+    // The one-call form threads the same choice through to planning.
+    await fanOutComposite('install', [brew], store, makeCtx, { dryRun: true });
+    expect(brew.list).toHaveBeenCalledTimes(1);
   });
 
   it('tells an unavailable install backend from one that errors, at the listing as at check(), and keeps the refs each would have run', async () => {
@@ -333,7 +337,7 @@ describe('fanOutComposite — install', () => {
       ['error', 'pip: broken venv'],
     ]);
     // Install selects from the applist, so a backend that never runs still
-    // names what it would have installed, for the report; update cannot.
+    // names what it would have installed, for the report. Update cannot.
     expect(plans.map((p) => p.refs.map((r) => r.name))).toEqual([['jq'], ['left-pad'], ['black']]);
   });
 });
@@ -388,7 +392,7 @@ interface InstallFakeOptions {
   readonly failWith?: Readonly<Record<string, (ref: PackageRef) => unknown>>;
   readonly check?: () => Promise<void>;
   readonly list?: () => Promise<PackageStatus[]>;
-  /** The applist keys the fake selects its tracked refs from; `[id]` by default (`brew` reads `brew.formulas`). */
+  /** The applist keys the fake selects its tracked refs from. `[id]` by default, and `brew` reads `brew.formulas`. */
   readonly configKeys?: readonly ApplistKey[];
 }
 
@@ -810,8 +814,10 @@ describe('all install continues within and across backends, distinguishes alread
     expect(process.exitCode).toBe(1);
   });
 
-  it('leaves the exit code alone when the only shortfalls are an unavailable backend and already-present packages', async () => {
-    const store = await storeWith('brew:\n  formulas:\n    - git\nappstore:\n  - "123"\n');
+  it("classifies already-present per backend from each one's own listing, and leaves the exit code alone when that and an unavailable backend are the only shortfalls", async () => {
+    const store = await storeWith(
+      'brew:\n  formulas:\n    - git\nnpm:\n  - left-pad\n  - chalk\nappstore:\n  - "123"\n',
+    );
     const appstore = installFake({
       id: 'appstore',
       check: async () => {
@@ -819,14 +825,18 @@ describe('all install continues within and across backends, distinguishes alread
       },
     });
     const brew = installFake({ id: 'brew', present: ['git'] });
-    await runCommand(allInstallCommand([appstore, brew], store), { rawArgs: [] });
+    const npm = installFake({ id: 'npm', present: ['left-pad'] });
+    await runCommand(allInstallCommand([appstore, brew, npm], store), { rawArgs: [] });
 
     expect(attemptedNames(brew)).toEqual(['git']);
+    expect(attemptedNames(npm)).toEqual(['left-pad', 'chalk']);
     const out = stdout();
-    expect(out).toMatch(/git\s+already present/);
+    expect(out).toMatch(/brew\s+git\s+already present/);
+    expect(out).toMatch(/npm\s+left-pad\s+already present/);
+    expect(out).toMatch(/npm\s+chalk\s+installed/);
     expect(out).toMatch(/123\s+unavailable/);
     expect(out).toMatch(/appstore\s+unavailable/);
-    expect(out).toContain('1 already present, 1 unavailable');
+    expect(out).toContain('1 installed, 2 already present, 1 unavailable');
     expect(out).not.toContain('failed');
     expect(process.exitCode).toBe(savedExitCode);
   });

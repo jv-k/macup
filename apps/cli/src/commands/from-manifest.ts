@@ -167,7 +167,7 @@ interface CompositeFlags {
 // 0052). Planning first (no mutation) lets us prompt with a count and skip the
 // prompt on a no-op. Both verbs end in one combined report, always printed,
 // whose exit code a whole-backend error forces non-zero and an unavailable
-// backend never does (#164, #165); an excluded backend is not a run at all,
+// backend never does (#164, #165). An excluded backend is not a run at all,
 // so it keeps its own info line rather than a report status.
 async function runCompositeMutation(
   deps: CommandDeps,
@@ -208,7 +208,7 @@ async function runCompositeMutation(
   const outcomes = await applyComposite(mode, plans, () => makeCtx(deps), { dryRun });
 
   // A dry run mutates nothing, so there is no after snapshot to reconcile and
-  // no report to build; the pre-report lines and the zero exit stand.
+  // no report to build. The pre-report lines and the zero exit stand.
   if (dryRun) {
     for (const o of outcomes) reportConstituentLine(printHuman, o);
     if (total === 0) printHuman(log.info(`Nothing to ${mode}.`));

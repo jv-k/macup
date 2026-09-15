@@ -34,7 +34,12 @@ export interface ConstituentPlan {
    * select them (`update`).
    */
   readonly refs: readonly PackageRef[];
-  /** The planning probe's listing, kept so the end-of-run report has a `before` snapshot to pair with its `after` (ADR 0052 rule 2). Empty where planning took no listing: a constituent that never ran, or an `install` with no report to feed (see {@link PlanOptions.dryRun}). */
+  /**
+   * The planning probe's listing, kept so the end-of-run report has a
+   * `before` snapshot to pair with its `after` (ADR 0052 rule 2). Empty where
+   * planning took no listing: a constituent that never ran, or an `install`
+   * with no report to feed (see {@link PlanOptions.dryRun}).
+   */
   readonly before: readonly PackageStatus[];
   readonly message?: string;
 }
@@ -111,32 +116,35 @@ export async function planComposite(
       plans.push(await planFromCheck(plugin, ctx, refs));
       continue;
     }
-    const outcome = await probe(plugin, ctx, {});
-    plans.push(planFromProbe(plugin, outcome, () => refs, refs));
+    plans.push(planFromProbe(plugin, await probe(plugin, ctx, {}), refs));
   }
   return plans;
 }
 
+/** The signature `install()` and `update()` share. */
+type MutateFn = NonNullable<Plugin['install']>;
+
 /** The verb a mode runs on a plugin, or undefined where the plugin lacks it. */
-export function mutateFor(mode: MutationMode, plugin: Plugin): Plugin['install'] {
+export function mutateFor(mode: MutationMode, plugin: Plugin): MutateFn | undefined {
   return mode === 'update' ? plugin.update : plugin.install;
 }
 
-// A missing backend is `unavailable` (ErrPluginUnavailable), distinct from a
-// real `error`, and a timeout is an error with a synthesized reason. `unrun`
-// is what the plan names in either case: the refs already selected without
-// the backend, or nothing where the listing was to select them.
+// `refs` is either already selected without the backend (install, from the
+// tracked applist), and then the plan names them whatever the probe found,
+// or a selector over the listing (update), and then a backend that never ran
+// names nothing.
 function planFromProbe(
   plugin: Plugin,
   outcome: ProbeOutcome,
-  refsFor: (statuses: readonly PackageStatus[]) => PackageRef[],
-  unrun: readonly PackageRef[] = [],
+  refs: readonly PackageRef[] | ((statuses: readonly PackageStatus[]) => PackageRef[]),
 ): ConstituentPlan {
   if (outcome.kind === 'ok') {
-    return { plugin, status: 'planned', refs: refsFor(outcome.statuses), before: outcome.statuses };
+    const planned = typeof refs === 'function' ? refs(outcome.statuses) : refs;
+    return { plugin, status: 'planned', refs: planned, before: outcome.statuses };
   }
   const status = outcome.kind === 'unavailable' ? 'unavailable' : 'error';
-  return { plugin, status, refs: unrun, before: [], message: probeOutcomeReason(outcome) };
+  const known = typeof refs === 'function' ? [] : refs;
+  return { plugin, status, refs: known, before: [], message: probeOutcomeReason(outcome) };
 }
 
 // Availability alone, the same split as the probe's, for an install plan
@@ -213,7 +221,7 @@ export async function fanOutComposite(
   makeCtx: () => PluginContext,
   opts: MutateOptions,
 ): Promise<ConstituentOutcome[]> {
-  const plans = await planComposite(mode, constituents, store, makeCtx);
+  const plans = await planComposite(mode, constituents, store, makeCtx, { dryRun: opts.dryRun });
   return applyComposite(mode, plans, makeCtx, opts);
 }
 

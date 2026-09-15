@@ -152,9 +152,10 @@ macup brew install --json | jq -r '.packages[] | select(.outcome == "installed")
 line per backend in `plugins` as for `all update`. A backend that is not on
 this machine still names each tracked package it would have installed, with
 the outcome `unavailable`. One that errored out as a whole names each as
-`failed` with its reason. Every backend and every package is attempted even
-when one fails, and the exit code is `1` iff a package or a backend `failed`.
-An unavailable backend or an already-present package never forces it.
+`failed` with its reason. Every backend is attempted even when one fails, and
+so is every package of a backend that could be listed. The exit code is `1`
+iff a package or a backend `failed`. An unavailable backend or an
+already-present package never forces it.
 
 Flag spellings are exact: `--json`, `--all`, `--only-outdated` (hyphenated, not
 `--onlyOutdated`).

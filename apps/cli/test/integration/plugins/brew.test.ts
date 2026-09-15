@@ -226,7 +226,7 @@ describe('brew plugin — leaves', () => {
 });
 
 describe('brew plugin — healthCheck', () => {
-  function ctxWith(fixtures: FixtureEntry[], lines: string[]): PluginContext {
+  function healthCtx(fixtures: FixtureEntry[], lines: string[]): PluginContext {
     return {
       exec: new FixtureExecRunner({ fixtures, onPath: ['brew'] }),
       log: { info: (m) => lines.push(m), warn: () => {}, error: () => {}, debug: () => {} },
@@ -236,7 +236,7 @@ describe('brew plugin — healthCheck', () => {
 
   it('invokes `brew doctor`', async () => {
     const lines: string[] = [];
-    const ctx = ctxWith(
+    const ctx = healthCtx(
       [{ cmd: 'brew', args: ['doctor'], result: { stdout: '', stderr: '', exitCode: 0 } }],
       lines,
     );
@@ -248,7 +248,7 @@ describe('brew plugin — healthCheck', () => {
   // the proof that nothing ran (#152).
   it('under dryRun prints `[dry-run] brew doctor` and runs nothing', async () => {
     const lines: string[] = [];
-    const ctx = ctxWith([], lines);
+    const ctx = healthCtx([], lines);
     await expect(brewPlugin.healthCheck?.(ctx, { dryRun: true })).resolves.toBeUndefined();
     expect(lines).toEqual(['[dry-run] brew doctor']);
   });

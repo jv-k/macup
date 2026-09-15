@@ -136,7 +136,7 @@ describe('pnpm plugin — update', () => {
 });
 
 describe('pnpm plugin — healthCheck', () => {
-  function ctxWith(fixtures: FixtureEntry[], lines: string[]): PluginContext {
+  function healthCtx(fixtures: FixtureEntry[], lines: string[]): PluginContext {
     return {
       exec: new FixtureExecRunner({ fixtures, onPath: ['pnpm'] }),
       log: { info: (m) => lines.push(m), warn: () => {}, error: () => {}, debug: () => {} },
@@ -146,7 +146,7 @@ describe('pnpm plugin — healthCheck', () => {
 
   it('invokes `pnpm doctor`', async () => {
     const lines: string[] = [];
-    const ctx = ctxWith(
+    const ctx = healthCtx(
       [{ cmd: 'pnpm', args: ['doctor'], result: { stdout: '', stderr: '', exitCode: 0 } }],
       lines,
     );
@@ -158,7 +158,7 @@ describe('pnpm plugin — healthCheck', () => {
   // the proof that nothing ran (#152).
   it('under dryRun prints `[dry-run] pnpm doctor` and runs nothing', async () => {
     const lines: string[] = [];
-    const ctx = ctxWith([], lines);
+    const ctx = healthCtx([], lines);
     await expect(pnpmPlugin.healthCheck?.(ctx, { dryRun: true })).resolves.toBeUndefined();
     expect(lines).toEqual(['[dry-run] pnpm doctor']);
   });

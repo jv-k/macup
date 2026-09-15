@@ -121,7 +121,7 @@ export async function runUnlessDryRun(
   await ctx.exec.run(cmd, args, { signal: ctx.signal });
 }
 
-/** The one spelling of "would have run this", so every dry-run line reads the same. */
+/** The spelling of "would have run this" that `mutateRefs` and `runUnlessDryRun` share. */
 function dryRunLine(cmd: string, args: readonly string[]): string {
   return `[dry-run] ${cmd} ${args.join(' ')}`;
 }

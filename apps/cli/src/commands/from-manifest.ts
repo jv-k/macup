@@ -13,6 +13,7 @@ import { confirm, isCancel } from '@clack/prompts';
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ApplistKey } from '../config/schema';
 import type { ConfigStore, SaveResult } from '../config/store';
+import { listPackages, trackedNames } from '../plugins/operations';
 import { probeOrThrow } from '../plugins/probe';
 import { resolveSelection } from '../plugins/selection';
 import {
@@ -184,14 +185,13 @@ function requireNames(rawArgs: string[], pluginId: string, command: string): str
   return names;
 }
 
-/**
- * Exported so the init scaffolder (#14) resolves a subtype to its applist key
- * the same way the track verb does, rather than keeping a third copy of the
- * subtype-table lookup. Thin wrapper over the host helper (`plugins/subtype-table.ts`)
- * that also enforces the invariant every track-capable manifest must meet.
- * @throws Error when the plugin declares no `configKeys`, which a track-capable manifest must.
- */
-export function resolveConfigKey(plugin: Plugin, subtype: string | undefined): ApplistKey {
+// The one applist key a mutating verb (install, track, untrack) acts on: a
+// thin wrapper over the host helper (`plugins/subtype-table.ts`) that also
+// enforces the invariant every track-capable manifest must meet. The read
+// side (`list`, the wizard, the init scan) resolves its scope through
+// `plugins/operations.ts` instead, which may span every key.
+// @throws Error when the plugin declares no `configKeys`, which a track-capable manifest must.
+function resolveConfigKey(plugin: Plugin, subtype: string | undefined): ApplistKey {
   const key = configKeyForSubtype(plugin.manifest, subtype);
   if (!key) throw new Error(`Plugin ${plugin.manifest.id} has no configKeys`);
   return key;
@@ -282,77 +282,39 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           Boolean(args.formula);
         const subtype = userSpecifiedSubtype ? resolved.subtype : undefined;
         const showJson = Boolean(args.json);
-        const showAll = Boolean(args.all);
-
-        // Capture query-failure warnings the plugin emits via ctx.log.warn
-        // (e.g. pnpm's "global bin dir not in PATH") so --json can carry an
-        // `error` field instead of an empty list — an errored query is
-        // otherwise indistinguishable from a genuinely empty one (A-2/#51).
-        // The wrapped warn still delegates, so default mode keeps printing
-        // the warning line.
-        const queryWarnings: string[] = [];
-        const listCtx: PluginContext = {
-          ...makeCtx(deps),
-          log: {
-            ...deps.log,
-            warn: (m: string) => {
-              queryWarnings.push(m);
-              deps.log.warn(m);
-            },
-          },
-        };
+        const onlyOutdated = Boolean(args['only-outdated']);
 
         // --json owns stdout, and the spinner's "... done." lands there on a
         // TTY, so a piped-to-jq run would break on an interactive terminal but
         // pass in CI. suppressBar is the existing seam for exactly this.
-        let statuses = await withSpinner(
+        //
+        // Tracked scoping, the fell-back verdict, and the plugin's warnings
+        // all come back as data from the operation (#141). ConfigStore.load()
+        // handles "no file" by starting with an empty doc, so anything the
+        // store throws here is a real error (invalid YAML, permission denied)
+        // and propagates rather than silently dropping the user into "show
+        // all" mode.
+        const result = await withSpinner(
           showJson ? { ...deps, suppressBar: true } : deps,
           `Fetching ${manifest.displayName} packages…`,
           () =>
-            probeOrThrow(plugin, listCtx, {
+            listPackages(plugin, makeCtx(deps), deps.getStore, {
               subtype,
-              onlyOutdated: Boolean(args['only-outdated']),
+              onlyOutdated,
+              showAll: Boolean(args.all),
             }),
         );
 
-        // Default: show only tracked packages (from applist.yaml).
-        // --all shows everything installed by the package manager.
-        // ConfigStore.load() handles "no file" by starting with an empty
-        // doc — anything that throws here is a real error (invalid YAML,
-        // permission denied) and gets propagated rather than silently
-        // dropping the user back into "show all" mode.
-        if (!showAll && manifest.configKeys.length > 0) {
-          const store = await deps.getStore();
-          const tracked = new Set<string>();
-          // When a subtype is specified, restrict to that subtype's
-          // config key. When unspecified, gather every tracked name
-          // across all of the plugin's config keys — otherwise plugins
-          // with multiple subtypes (e.g. brew formulas + casks) lose
-          // half their tracked set to a single-key lookup.
-          const keysToCheck =
-            subtype !== undefined
-              ? [configKeyForSubtype(manifest, subtype)].filter(
-                  (k): k is ApplistKey => k !== undefined,
-                )
-              : manifest.configKeys;
-          for (const key of keysToCheck) {
-            for (const name of store.list(key)) {
-              tracked.add(name);
-            }
-          }
-          if (tracked.size > 0) {
-            statuses = statuses.filter((s) => tracked.has(s.ref.name));
-          } else {
-            // Advice for a human, not part of the payload. On stdout it would
-            // precede the JSON and break the parse, so --json routes it to
-            // stderr rather than dropping it: piped output stays valid and the
-            // hint still reaches a watching terminal.
-            const notice = log.warning(
-              `No tracked packages. Showing all installed. Track with: macup ${manifest.id} track <name...>`,
-            );
-            if (showJson) console.error(notice);
-            else log.print(notice);
-          }
+        if (result.fellBackToAll) {
+          // Advice for a human, not part of the payload. On stdout it would
+          // precede the JSON and break the parse, so --json routes it to
+          // stderr rather than dropping it: piped output stays valid and the
+          // hint still reaches a watching terminal.
+          const notice = log.warning(
+            `No tracked packages. Showing all installed. Track with: macup ${manifest.id} track <name...>`,
+          );
+          if (showJson) console.error(notice);
+          else log.print(notice);
         }
 
         if (showJson) {
@@ -360,12 +322,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           // of a bare array, so a consumer can tell "errored" from "empty"
           // (#51). The success path keeps the documented PackageStatus[] shape.
           const payload =
-            queryWarnings.length > 0
-              ? { error: queryWarnings.join('; '), packages: statuses }
-              : statuses;
+            result.warnings.length > 0
+              ? { error: result.warnings.join('; '), packages: result.statuses }
+              : result.statuses;
           console.log(JSON.stringify(payload, null, 2));
         } else {
-          log.print(renderList(manifest.displayName, statuses, Boolean(args['only-outdated'])));
+          log.print(renderList(manifest.displayName, result.statuses, onlyOutdated));
         }
       },
     });
@@ -542,16 +504,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           // `install` and `list` (D-1). `--all` upgrades everything outdated.
           // Plugins without a tracked applist (system, xcode) skip this and
           // stay system-wide; the composite `all` took the fan-out path above.
-          const tracked = new Set<string>();
-          const keysToCheck =
-            subtype !== undefined
-              ? [configKeyForSubtype(manifest, subtype)].filter(
-                  (k): k is ApplistKey => k !== undefined,
-                )
-              : manifest.configKeys;
-          for (const key of keysToCheck) {
-            for (const name of store.list(key)) tracked.add(name);
-          }
+          const tracked = new Set(trackedNames(plugin, store, subtype));
           filtered = filtered.filter((s) => tracked.has(s.ref.name));
         }
 

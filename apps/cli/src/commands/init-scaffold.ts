@@ -22,9 +22,9 @@
 
 import type { ApplistKey } from '../config/schema';
 import { ErrPluginUnavailable } from '../errors';
+import { trackedKeys } from '../plugins/operations';
 import { errorMessage, probe, probeOutcomeReason } from '../plugins/probe';
 import type { Plugin, PluginContext } from '../plugins/types';
-import { resolveConfigKey } from './from-manifest';
 
 /** One applist key's worth of detected packages. */
 export interface DetectedGroup {
@@ -132,7 +132,10 @@ export async function detectInstalled(
     const subtypeIds =
       m.subtypes && m.subtypes.length > 0 ? m.subtypes.map((s) => s.id) : [undefined];
     for (const subtype of subtypeIds) {
-      const key = resolveConfigKey(plugin, subtype);
+      // The key this subtype's tracked scope reads (#141): the same one the
+      // track verb writes to, so the scaffold files names where `list` will
+      // later look for them. A plugin without subtypes has one key.
+      const [key] = trackedKeys(m, subtype);
       if (!key) continue;
 
       const asked = await askNames(plugin, ctx, subtype);

@@ -91,9 +91,11 @@ export interface UnavailablePlugin {
 export interface FailedPlugin {
   readonly kind: 'failed';
   readonly pluginId: string;
-  /** The refs it was asked to act on, each reported `failed` with the reason. Empty when the error came before they could be selected. */
+  /** The refs it was asked to act on, each reported `failed`. Empty when the error came before they could be selected. */
   readonly refs: readonly PackageRef[];
   readonly reason: string;
+  /** The per-ref detail the batch recorded before the backend failed as a whole (ADR 0052 rule 2); a ref without one carries `reason`. */
+  readonly failures?: readonly MutateFailure[];
 }
 
 /** What the caller knows about one plugin at the end of the run. */
@@ -214,14 +216,14 @@ function unavailableEntries(run: UnavailablePlugin): PackageOutcomeEntry<'unavai
   return run.refs.map((ref) => ({ pluginId: run.pluginId, ref, outcome: 'unavailable' }));
 }
 
-// The plugin's one reason is every ref's detail: the backend never got as
-// far as saying anything about a particular package.
+// The backend's own words for a ref where it said any; the plugin's one
+// reason for the rest, since the failure as a whole is all that is known.
 function failedEntries(run: FailedPlugin): PackageOutcomeEntry<'failed'>[] {
   return run.refs.map((ref) => ({
     pluginId: run.pluginId,
     ref,
     outcome: 'failed',
-    detail: run.reason,
+    detail: run.failures?.find((f) => refKey(f.ref) === refKey(ref))?.message ?? run.reason,
   }));
 }
 
@@ -317,7 +319,8 @@ const STYLE: Readonly<Record<PackageOutcome, OutcomeStyle>> = {
 
 /**
  * The human report. One line per package, the backend's message dimmed under
- * a failure, one line per unavailable plugin, then the totals:
+ * a failure, one line per plugin that never ran (unavailable, or failed as a
+ * whole), then the totals, with failed backends counted after the packages:
  *
  *     ✔ brew  jq       installed
  *     • brew  ripgrep  already present

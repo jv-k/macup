@@ -231,7 +231,7 @@ describe('fanOutComposite — install', () => {
     // Install acts on the tracked applist (not plugin.list, which only
     // enumerates installed packages); skip.all still drops a whole backend.
     const store = await storeWith(
-      'brew:\n  formulas:\n    - jq\nnpm:\n  - left-pad\nskip:\n  all:\n    - npm\n',
+      'brew:\n  formulas:\n    - jq\n    - fd\nnpm:\n  - left-pad\nskip:\n  all:\n    - npm\n',
     );
     const installed: Record<string, string[]> = {};
     const installFake = (id: string, configKeys: readonly ApplistKey[]): Plugin => ({
@@ -253,7 +253,7 @@ describe('fanOutComposite — install', () => {
       check: async () => {},
       list: async () => [],
       install: async (_ctx, refs) => {
-        installed[id] = refs.map((r) => r.name);
+        installed[id] = [...(installed[id] ?? []), ...refs.map((r) => r.name)];
       },
     });
 
@@ -265,7 +265,7 @@ describe('fanOutComposite — install', () => {
       {},
     );
 
-    expect(installed.brew).toEqual(['jq']);
+    expect(installed.brew).toEqual(['jq', 'fd']);
     expect(installed.npm).toBeUndefined(); // excluded via skip.all
   });
 });
@@ -309,12 +309,8 @@ function statefulPlugin(opts: StatefulOptions): Plugin {
   };
 }
 
-function allUpdateCommand(constituents: readonly Plugin[], store: ConfigStore): CommandDef {
-  const all: Plugin = {
-    ...fakePlugin('all', [], {}),
-    manifest: { ...fakePlugin('all', [], {}).manifest, configKeys: [] },
-    list: async () => [],
-  };
+function allCommands(constituents: readonly Plugin[], store: ConfigStore): SubCommandsDef {
+  const all: Plugin = { ...fakePlugin('all', [], {}), list: async () => [] };
   const cmd = commandsFromManifest(all, {
     exec: new FixtureExecRunner({ fixtures: [], onPath: [] }),
     log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
@@ -323,7 +319,11 @@ function allUpdateCommand(constituents: readonly Plugin[], store: ConfigStore): 
     signal: new AbortController().signal,
     constituents,
   });
-  return (cmd.subCommands as SubCommandsDef).update as CommandDef;
+  return cmd.subCommands as SubCommandsDef;
+}
+
+function allUpdateCommand(constituents: readonly Plugin[], store: ConfigStore): CommandDef {
+  return allCommands(constituents, store).update as CommandDef;
 }
 
 function updatedNames(plugin: Plugin): string[] {
@@ -524,6 +524,93 @@ describe('all update continues within and across backends, and reports (#164)', 
     await runCommand(allUpdateCommand([brew, npm], store), { rawArgs: [] });
     expect(stdout()).toMatch(/npm\s+failed: npm registry down/);
     expect(stdout()).toContain('1 backend failed');
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('names a ref that failed under --dry-run, where no report follows to name it', async () => {
+    const store = await storeWith('');
+    const brew = statefulPlugin({
+      id: 'brew',
+      names: ['git', 'jq'],
+      failWith: { jq: () => new Error('jq: checksum mismatch') },
+    });
+    await runCommand(allUpdateCommand([brew], store), { rawArgs: ['--dry-run'] });
+
+    expect(updatedNames(brew)).toEqual(['git', 'jq']);
+    expect(stdout()).toContain('brew: 1 of 2 package(s) failed');
+    expect(stdout()).toContain('jq: jq: checksum mismatch');
+    expect(stdout()).not.toContain('brew: 2 package(s)');
+  });
+
+  it('all install keeps its pre-report lines, naming a ref whose install() threw rather than reporting success', async () => {
+    // `all install` gets its report in #165; until then a failure the per-ref
+    // loop isolated must still reach the user through the constituent line.
+    const store = await storeWith('brew:\n  formulas:\n    - jq\n    - fd\n');
+    const brew: Plugin = {
+      ...statefulPlugin({ id: 'brew', names: [] }),
+      manifest: { ...fakePlugin('brew', [], {}).manifest },
+      install: vi.fn(async (_ctx, refs: readonly PackageRef[]) => {
+        if (refs.some((r) => r.name === 'jq')) throw new Error('jq: no bottle available');
+      }),
+    };
+    await runCommand(allCommands([brew], store).install as CommandDef, { rawArgs: [] });
+
+    expect((brew.install as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1][0].name)).toEqual([
+      'jq',
+      'fd',
+    ]);
+    expect(stdout()).toContain('brew: 1 of 2 package(s) failed');
+    expect(stdout()).toContain('jq: jq: no bottle available');
+    expect(stdout()).not.toContain('brew: 2 package(s)');
+    expect(stdout()).not.toMatch(/jq\s+(installed|failed)/);
+    expect(process.exitCode).toBe(savedExitCode);
+  });
+
+  it("keeps the backend's own message for a ref when its listing after the batch cannot be taken", async () => {
+    // The after probe failing is a whole-backend failure, but a ref the
+    // backend itself named keeps that detail (ADR 0052 rule 2).
+    const store = await storeWith('');
+    let listed = 0;
+    const brew = statefulPlugin({
+      id: 'brew',
+      names: ['git', 'jq'],
+      failWith: { jq: () => new Error('jq: checksum mismatch') },
+      list: async () => {
+        if (listed++ > 0) throw new Error('brew: database locked');
+        return [
+          {
+            ref: { kind: 'brew', name: 'git' },
+            installed: true,
+            installedVersion: '1',
+            latestVersion: '2',
+            updateStatus: 'outdated',
+          },
+          {
+            ref: { kind: 'brew', name: 'jq' },
+            installed: true,
+            installedVersion: '1',
+            latestVersion: '2',
+            updateStatus: 'outdated',
+          },
+        ];
+      },
+    });
+    await runCommand(allUpdateCommand([brew], store), { rawArgs: ['--json'] });
+
+    const report = JSON.parse(logSpy.mock.calls[0]?.[0] as string);
+    expect(report.plugins).toEqual([
+      {
+        pluginId: 'brew',
+        status: 'failed',
+        reason: 'verifying after the batch: brew: database locked',
+      },
+    ]);
+    expect(
+      report.packages.map((p: { ref: { name: string }; detail: string }) => [p.ref.name, p.detail]),
+    ).toEqual([
+      ['git', 'verifying after the batch: brew: database locked'],
+      ['jq', 'jq: checksum mismatch'],
+    ]);
     expect(process.exitCode).toBe(1);
   });
 

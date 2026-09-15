@@ -231,12 +231,15 @@ describe('buildMutationReport: backend that errored out entirely (#164)', () => 
     ]);
     expect(unknownRefs.packages).toEqual([]);
 
+    // Refs known, the backend's own words kept where it said any (ADR 0052
+    // rule 2), the plugin's reason for the rest.
     const knownRefs = buildMutationReport('install', [
       {
         kind: 'failed',
         pluginId: 'npm',
         refs: [ref('typescript', 'npm'), ref('eslint', 'npm')],
         reason: 'npm registry down',
+        failures: [{ ref: ref('typescript', 'npm'), message: 'npm ERR! 403 Forbidden' }],
       },
     ]);
     expect(knownRefs.packages).toEqual([
@@ -244,7 +247,7 @@ describe('buildMutationReport: backend that errored out entirely (#164)', () => 
         pluginId: 'npm',
         ref: ref('typescript', 'npm'),
         outcome: 'failed',
-        detail: 'npm registry down',
+        detail: 'npm ERR! 403 Forbidden',
       },
       {
         pluginId: 'npm',

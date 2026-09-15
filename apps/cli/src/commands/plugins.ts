@@ -11,6 +11,7 @@
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import type { Plugin, PluginCapabilities } from '../plugins/types';
 import { GLYPHS, paint } from '../ui/log';
+import { withComposite } from './composite';
 
 /** One plugin's availability on this machine, with the resolved binary path when it has one. */
 export interface PluginStatus {
@@ -52,19 +53,12 @@ export function buildPluginsReport(
     const osSupported = m.supportedOS.includes(deps.platform);
     const missing = m.requires.filter((bin) => !deps.onPath(bin));
 
-    let available = osSupported && missing.length === 0;
+    const available = osSupported && missing.length === 0;
     let reason: string | undefined;
     if (!osSupported) {
       reason = `unsupported on ${deps.platform} (needs ${m.supportedOS.join('/')})`;
     } else if (missing.length > 0) {
       reason = `missing: ${missing.join(', ')}`;
-    }
-
-    // The composite `all` plugin has no requires/supportedOS of its own;
-    // treat it as available whenever we have it registered.
-    if (m.id === 'all') {
-      available = true;
-      reason = undefined;
     }
 
     return {
@@ -144,9 +138,14 @@ export function formatPluginsReport(report: PluginsReport, opts: FormatOptions =
   return lines.join('\n');
 }
 
-/** `macup plugins`: one line per plugin, flagging any whose binary is missing. */
+/**
+ * `macup plugins`: one line per plugin, flagging any whose binary is missing.
+ * `deps.registry` holds only the real backends (ADR 0033, ADR 0053) — the
+ * composite `all` is appended from its own declaration so it still shows up
+ * here exactly as it did when it lived in the registry.
+ */
 export async function runPlugins(_args: ParsedArgs, deps: CliDeps): Promise<void> {
-  const report = buildPluginsReport(deps.registry, {
+  const report = buildPluginsReport(withComposite(deps.registry), {
     platform: deps.platform,
     onPath: (b) => deps.exec.onPath(b),
   });

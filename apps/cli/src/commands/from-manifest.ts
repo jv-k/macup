@@ -9,12 +9,11 @@
  * @module
  */
 
-import { confirm, isCancel } from '@clack/prompts';
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ApplistKey } from '../config/schema';
 import type { ConfigStore, SaveResult } from '../config/store';
 import type { MutateFailure } from '../errors';
-import { probe, probeOrThrow, probeOutcomeReason } from '../plugins/probe';
+import { probeOrThrow } from '../plugins/probe';
 import { resolveSelection } from '../plugins/selection';
 import {
   configKeyForSubtype,
@@ -33,15 +32,6 @@ import type {
 import { useColor } from '../runtime';
 import * as log from '../ui/log';
 import {
-  type ConstituentOutcome,
-  type ConstituentPlan,
-  applyComposite,
-  mutateFor,
-  planComposite,
-} from './composite-mutate';
-import {
-  type MutationMode,
-  type PluginRun,
   type RanPlugin,
   buildMutationReport,
   exitCodeFor,
@@ -61,12 +51,6 @@ export interface CommandDeps extends SpinnerDeps {
   /** Process-wide cancellation signal — aborted on SIGINT by the caller. */
   readonly signal: AbortSignal;
   /**
-   * The individual plugins the composite `all` command fans out over. Set only
-   * for the `all` command; the host owns this fan-out (ADR 0033), not the
-   * composite plugin.
-   */
-  readonly constituents?: readonly Plugin[];
-  /**
    * The shared plugin context built once at bootstrap (`CliDeps.pluginContext`,
    * #136). Optional so a test can hand this factory a hand-rolled
    * `CommandDeps` with no outer bootstrap in the loop — {@link makeCtx} falls
@@ -78,160 +62,6 @@ export interface CommandDeps extends SpinnerDeps {
 /** Exported for the unit test proving the shared-vs-fallback behaviour (#136). */
 export function makeCtx(deps: CommandDeps): PluginContext {
   return deps.pluginContext ?? { exec: deps.exec, log: deps.log, signal: deps.signal };
-}
-
-// One line per constituent, for the one path that prints no report: a dry
-// run. A ref failure the per-ref loop recorded is named here, since no report
-// follows to name it. 'planned' and 'nothing' say nothing.
-function reportConstituentLine(print: (line: string) => void, o: ConstituentOutcome): void {
-  if (o.status === 'acted') {
-    const failed = o.failures ?? [];
-    if (failed.length === 0) {
-      print(log.success(`${o.pluginId}: ${o.refs.length} package(s)`));
-      return;
-    }
-    print(log.warning(`${o.pluginId}: ${failed.length} of ${o.refs.length} package(s) failed`));
-    for (const f of failed) print(log.warning(`  ${f.ref.name}: ${f.message}`));
-  } else if (o.status === 'excluded') {
-    print(log.info(`${o.pluginId}: excluded (skip.all)`));
-  } else if (o.status === 'unavailable') {
-    print(log.info(`${o.pluginId}: unavailable`));
-  } else if (o.status === 'error') {
-    print(log.warning(`${o.pluginId}: failed: ${o.message}`));
-  }
-}
-
-// What one constituent of `all install` or `all update` contributes to the
-// combined report, or nothing for one that is not a run at all: excluded by
-// skip.all, or with no verb to run. A backend that ran gets its after
-// snapshot here, through the same probe that planned it (ADR 0052 rule 2),
-// so the verdict is its own listing rather than its exit code: the outdated
-// listing for update, the full listing for install, the same shape its
-// before snapshot has, so a ref present at both ends reads as
-// `already-present` rather than dropping out of one of them. A probe that
-// fails afterwards is a whole-backend failure with the refs known, not a run
-// the report could classify: it must not read as `updated` or `installed` on
-// an empty listing. `nothing` is a backend that ran and had no work, so its
-// planning listing stands in for both snapshots, and it is not probed a
-// second time for a report that has nothing to reconcile.
-async function compositeRunFor(
-  deps: CommandDeps,
-  mode: MutationMode,
-  plan: ConstituentPlan,
-  o: ConstituentOutcome,
-): Promise<PluginRun | undefined> {
-  const pluginId = plan.plugin.manifest.id;
-  switch (o.status) {
-    case 'excluded':
-      return undefined;
-    case 'unavailable':
-      return { kind: 'unavailable', pluginId, refs: plan.refs, reason: o.message ?? 'unavailable' };
-    case 'error':
-      return { kind: 'failed', pluginId, refs: plan.refs, reason: o.message ?? 'error' };
-    case 'nothing':
-      if (!mutateFor(mode, plan.plugin)) return undefined;
-      return { kind: 'ran', pluginId, refs: [], before: plan.before, after: plan.before };
-    case 'acted':
-      break;
-  }
-  const after = await withSpinner(
-    deps,
-    `Verifying ${plan.plugin.manifest.displayName} packages…`,
-    () => probe(plan.plugin, makeCtx(deps), mode === 'update' ? { onlyOutdated: true } : {}),
-  );
-  const failures = o.failures ? { failures: o.failures } : {};
-  if (after.kind !== 'ok') {
-    const reason = `verifying after the batch: ${probeOutcomeReason(after)}`;
-    return { kind: 'failed', pluginId, refs: o.refs, reason, ...failures };
-  }
-  return {
-    kind: 'ran',
-    pluginId,
-    refs: o.refs,
-    before: plan.before,
-    after: after.statuses,
-    ...failures,
-  };
-}
-
-/** The flags the composite reads off `all install` / `all update`. */
-interface CompositeFlags {
-  readonly dryRun: boolean;
-  /** Render the end-of-run report as one JSON document on stdout. */
-  readonly json: boolean;
-}
-
-// The composite `all` install/update: the host fans out over the constituents
-// (ADR 0033), honoring per-plugin skip/pin and skip.all backend exclusion (ADR
-// 0037), attempts every ref of every backend, and isolates each failure (ADR
-// 0052). Planning first (no mutation) lets us prompt with a count and skip the
-// prompt on a no-op. Both verbs end in one combined report, always printed,
-// whose exit code a whole-backend error forces non-zero and an unavailable
-// backend never does (#164, #165). An excluded backend is not a run at all,
-// so it keeps its own info line rather than a report status.
-async function runCompositeMutation(
-  deps: CommandDeps,
-  displayName: string,
-  mode: MutationMode,
-  flags: CompositeFlags,
-): Promise<void> {
-  const { dryRun } = flags;
-  const showJson = flags.json;
-  // --json owns stdout, the same seam the single-plugin path uses: spinners
-  // suppressed, every human line to stderr, so stdout holds one document.
-  const runDeps: CommandDeps = showJson ? { ...deps, suppressBar: true } : deps;
-  const printHuman = showJson ? log.printErr : log.print;
-  const verb = mode === 'update' ? 'Updating' : 'Installing';
-  const store = await deps.getStore();
-  const plans = await planComposite(mode, deps.constituents ?? [], store, () => makeCtx(deps), {
-    dryRun,
-  });
-  // Only what will run counts toward the prompt: a backend that never runs
-  // may still name its refs, for the report.
-  const total = plans.reduce((n, p) => n + (p.status === 'planned' ? p.refs.length : 0), 0);
-
-  if (total > 0) {
-    if (process.stdout.isTTY) {
-      const ans = await confirm({
-        message: `This ${mode}s ${total} package(s) across all managers. Continue?`,
-        initialValue: true,
-      });
-      if (isCancel(ans) || !ans) {
-        printHuman(log.warning(`${verb} cancelled.`));
-        return;
-      }
-    }
-    printHuman('');
-    printHuman(log.header(`${verb} ${displayName}`));
-    printHuman('');
-  }
-  const outcomes = await applyComposite(mode, plans, () => makeCtx(deps), { dryRun });
-
-  // A dry run mutates nothing, so there is no after snapshot to reconcile and
-  // no report to build. The pre-report lines and the zero exit stand.
-  if (dryRun) {
-    for (const o of outcomes) reportConstituentLine(printHuman, o);
-    if (total === 0) printHuman(log.info(`Nothing to ${mode}.`));
-    return;
-  }
-
-  const planFor = new Map(plans.map((p) => [p.plugin.manifest.id, p]));
-  const runs: PluginRun[] = [];
-  for (const o of outcomes) {
-    if (o.status === 'excluded') reportConstituentLine(printHuman, o);
-    const plan = planFor.get(o.pluginId);
-    const run = plan && (await compositeRunFor(runDeps, mode, plan, o));
-    if (run) runs.push(run);
-  }
-  const report = buildMutationReport(mode, runs);
-  if (showJson) {
-    console.log(renderJson(report));
-  } else {
-    log.print('');
-    log.print(renderText(report, { color: useColor() }));
-  }
-  // Never write 0 over a non-zero code an earlier step already set.
-  if (exitCodeFor(report) === 1) process.exitCode = 1;
 }
 
 // Wrapper around store.save() that turns disk/permissions failures into
@@ -511,16 +341,6 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
        * (`deps.signal`), when the failure is rethrown so Ctrl-C ends the run.
        */
       async run({ args, rawArgs }) {
-        // `all` is the composite: host-owned fan-out (ADR 0033), not a per-ref
-        // loop. Only `all` is composite — system/xcode also have empty
-        // configKeys but are real plugins that run their own install below.
-        if (manifest.id === 'all') {
-          await runCompositeMutation(deps, manifest.displayName, 'install', {
-            dryRun: Boolean(args['dry-run']),
-            json: Boolean(args.json),
-          });
-          return;
-        }
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
         const subtype = resolved.subtype;
@@ -682,16 +502,6 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
        * (`deps.signal`), when the failure is rethrown so Ctrl-C ends the run.
        */
       async run({ args, rawArgs }) {
-        // Only `all` is the composite (ADR 0033); system/xcode also have empty
-        // configKeys but update via the generic outdated→update path below.
-        if (manifest.id === 'all') {
-          // Host-owned fan-out honoring skip/pin and skip.all (ADR 0033/0037).
-          await runCompositeMutation(deps, manifest.displayName, 'update', {
-            dryRun: Boolean(args['dry-run']),
-            json: Boolean(args.json),
-          });
-          return;
-        }
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
         const subtype = resolved.subtype;

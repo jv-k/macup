@@ -96,19 +96,6 @@ describe('buildOutdatedReport', () => {
     expect(report.totalOutdated).toBe(2);
   });
 
-  it('excludes the composite `all` plugin so its constituents are not double-counted', async () => {
-    const report = await buildOutdatedReport({
-      plugins: [
-        mkPlugin({ id: 'brew', outdated: ['deno'] }),
-        mkPlugin({ id: 'all', outdated: ['deno', 'eslint'] }),
-        mkPlugin({ id: 'npm', outdated: ['eslint'] }),
-      ],
-      makeCtx,
-    });
-    expect(report.plugins.map((p) => p.pluginId)).toEqual(['brew', 'npm']);
-    expect(report.totalOutdated).toBe(2);
-  });
-
   it('returns an empty report when no plugins are registered', async () => {
     const report = await buildOutdatedReport({ plugins: [], makeCtx });
     expect(report).toEqual<OutdatedReport>({ plugins: [], totalOutdated: 0, totalUncheckable: 0 });

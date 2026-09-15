@@ -80,3 +80,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0050](0050-one-availability-probe.md) | One availability probe for every check-then-list site | accepted |
 | [0051](0051-leaves-is-an-optional-plugin-operation.md) | `leaves` is an optional plugin operation, and `init` scaffolds from it | accepted |
 | [0052](0052-install-update-continue-past-failure.md) | Install and update continue past a package failure, classify host-side, and report | accepted |
+| [0053](0053-composite-is-a-host-surface.md) | The composite `all` is a host surface, closed to real backends | accepted |

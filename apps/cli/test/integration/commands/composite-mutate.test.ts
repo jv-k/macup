@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type CommandDef, type SubCommandsDef, runCommand } from 'citty';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildCompositeCommand } from '../../../src/commands/composite';
 import { fanOutComposite, planComposite } from '../../../src/commands/composite-mutate';
-import { commandsFromManifest } from '../../../src/commands/from-manifest';
 import type { ApplistKey } from '../../../src/config/schema';
 import { ConfigStore } from '../../../src/config/store';
 import { ErrMutateFailed, ErrPluginUnavailable } from '../../../src/errors';
@@ -430,14 +430,12 @@ function installFake(opts: InstallFakeOptions): Plugin {
 }
 
 function allCommands(constituents: readonly Plugin[], store: ConfigStore): SubCommandsDef {
-  const all: Plugin = { ...fakePlugin('all', [], {}), list: async () => [] };
-  const cmd = commandsFromManifest(all, {
+  const cmd = buildCompositeCommand(constituents, {
     exec: new FixtureExecRunner({ fixtures: [], onPath: [] }),
     log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
     getStore: async () => store,
     suppressBar: true,
     signal: new AbortController().signal,
-    constituents,
   });
   return cmd.subCommands as SubCommandsDef;
 }

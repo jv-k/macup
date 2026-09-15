@@ -17,6 +17,7 @@
 
 import { FLAG_COMMAND_ALIASES } from './cli/argv';
 import { CHECK_ARGS } from './commands/check';
+import { withComposite } from './commands/composite';
 import { INIT_ARGS } from './commands/init';
 import { OUTDATED_ARGS } from './commands/outdated';
 import {
@@ -265,7 +266,10 @@ function bareFormFor(flag: string): string | undefined {
 export function docsMetadata(): DocsMetadata {
   return {
     version: getVersion(),
-    plugins: BUILTIN_PLUGINS.map(pluginDoc),
+    // BUILTIN_PLUGINS holds only real backends (ADR 0033, ADR 0053); the
+    // composite `all` is appended from its own declaration so the docs
+    // reference keeps listing it exactly as it did before that split.
+    plugins: withComposite(BUILTIN_PLUGINS).map(pluginDoc),
     topLevelCommands: [
       {
         name: 'outdated',

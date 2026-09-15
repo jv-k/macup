@@ -250,23 +250,27 @@ describe('synthetic subtyped plugin — flags come from the manifest table (#138
 // #14: bare `macup init` grew flags of its own, and a flag the CLI accepts but
 // no shell offers may as well not exist.
 describe('init flag completion (#14)', () => {
-  it('zsh offers --dry-run and --force after `init`', () => {
+  it('zsh offers --dry-run, --force and --prune after `init`', () => {
     const out = generateZshCompletions(plugins);
     expect(out).toContain('init:*)');
     expect(out).toMatch(/init:\*\)[^\n]*--dry-run/);
     expect(out).toMatch(/init:\*\)[^\n]*--force/);
+    // #127
+    expect(out).toMatch(/init:\*\)[^\n]*--prune/);
   });
 
   it('bash offers them in the position after `init`', () => {
     const out = generateBashCompletions(plugins);
     expect(out).toMatch(/init\) COMPREPLY[^\n]*--dry-run/);
     expect(out).toMatch(/init\) COMPREPLY[^\n]*--force/);
+    expect(out).toMatch(/init\) COMPREPLY[^\n]*--prune/);
   });
 
   it('fish gates them on having seen `init`', () => {
     const out = generateFishCompletions(plugins);
     expect(out).toMatch(/__fish_seen_subcommand_from init[^\n]*-l dry-run/);
     expect(out).toMatch(/__fish_seen_subcommand_from init[^\n]*-l force/);
+    expect(out).toMatch(/__fish_seen_subcommand_from init[^\n]*-l prune/);
   });
 
   it('still offers the shells to `init`, which keeps its positional', () => {

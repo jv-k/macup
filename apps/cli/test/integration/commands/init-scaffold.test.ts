@@ -31,6 +31,8 @@ interface FakeOpts {
   unavailable?: string;
   checkThrows?: Error;
   listThrows?: Error;
+  /** Throw from list() only for this subtype, to model one subtype breaking. */
+  listThrowsFor?: string;
 }
 
 function fake(opts: FakeOpts): Plugin {
@@ -57,6 +59,9 @@ function fake(opts: FakeOpts): Plugin {
     },
     async list(_ctx: PluginContext, listOpts: ListOptions): Promise<PackageStatus[]> {
       if (opts.listThrows) throw opts.listThrows;
+      if (opts.listThrowsFor && listOpts.subtype === opts.listThrowsFor) {
+        throw new Error(`${opts.id} ${opts.listThrowsFor} exploded`);
+      }
       const all = opts.statuses ?? [];
       return listOpts.subtype ? all.filter((s) => s.ref.subtype === listOpts.subtype) : all;
     },
@@ -207,6 +212,49 @@ describe('detectInstalled', () => {
     const result = await detectInstalled(registry, ctx());
     expect(result.groups[0]?.names).toEqual(['typescript']);
   });
+
+  // #127: a prune may only touch keys the scan actually covered, so the plan
+  // has to say which those were — including a key whose listing came back
+  // empty, which is a real answer ("nothing installed"), not an absence.
+  it('records every key whose listing succeeded, empty ones included', async () => {
+    const registry = [
+      fake({ id: 'npm', configKeys: ['npm'], statuses: [pkg('typescript', true)] }),
+      fake({ id: 'pnpm', configKeys: ['pnpm'], statuses: [] }),
+    ];
+    const result = await detectInstalled(registry, ctx());
+    expect(result.scanned).toEqual(['npm', 'pnpm']);
+  });
+
+  it('leaves an unavailable or failed backend out of the scanned keys', async () => {
+    const registry = [
+      fake({ id: 'npm', configKeys: ['npm'], statuses: [pkg('typescript', true)] }),
+      fake({ id: 'appstore', configKeys: ['appstore'], unavailable: '`mas` was not found' }),
+      fake({ id: 'pip', configKeys: ['pip'], listThrows: new Error('pip exploded') }),
+    ];
+    const result = await detectInstalled(registry, ctx());
+    expect(result.scanned).toEqual(['npm']);
+  });
+
+  it('scans per key, so one subtype failing does not cover or uncover the other', async () => {
+    // Found in review: the guard is per key, not per backend. brew's formulas
+    // answering while its casks throw leaves brew.formulas scanned and
+    // brew.casks not, so a prune may touch the first and never the second.
+    const registry = [
+      fake({
+        id: 'brew',
+        configKeys: ['brew.formulas', 'brew.casks'],
+        subtypes: [
+          { id: 'formulas', configKey: 'brew.formulas' },
+          { id: 'casks', configKey: 'brew.casks' },
+        ],
+        statuses: [pkg('ripgrep', true, 'formulas')],
+        listThrowsFor: 'casks',
+      }),
+    ];
+    const result = await detectInstalled(registry, ctx());
+    expect(result.scanned).toEqual(['brew.formulas']);
+    expect(result.failed.map((f) => f.pluginId)).toEqual(['brew']);
+  });
 });
 
 describe('formatDetectionPlan', () => {
@@ -220,6 +268,7 @@ describe('formatDetectionPlan', () => {
       },
       { pluginId: 'npm', displayName: 'npm', key: 'npm' as ApplistKey, names: ['typescript'] },
     ],
+    scanned: ['brew.formulas' as ApplistKey, 'npm' as ApplistKey],
     unavailable: [{ pluginId: 'appstore', reason: '`mas` was not found' }],
     failed: [],
   };
@@ -236,7 +285,7 @@ describe('formatDetectionPlan', () => {
   });
 
   it('says so plainly when nothing was found', () => {
-    expect(formatDetectionPlan({ groups: [], unavailable: [], failed: [] })).toMatch(
+    expect(formatDetectionPlan({ groups: [], scanned: [], unavailable: [], failed: [] })).toMatch(
       /nothing|no packages/i,
     );
   });
@@ -268,6 +317,7 @@ describe('runInitScaffold', () => {
         groups: [
           { pluginId: 'npm', displayName: 'npm', key: 'npm' as ApplistKey, names: ['typescript'] },
         ],
+        scanned: ['npm' as ApplistKey],
         unavailable: [],
         failed: [],
       },
@@ -280,6 +330,8 @@ describe('runInitScaffold', () => {
       dryRun: false,
       interactive: true,
       force: false,
+      prune: false,
+      confirmPrune: async () => true,
       ...over,
     };
     return { args, printed, added, saves };
@@ -295,7 +347,7 @@ describe('runInitScaffold', () => {
 
   it('writes nothing and exits 0 when the scan found nothing', async () => {
     const { args, added, saves, printed } = harness({
-      plan: { groups: [], unavailable: [], failed: [] },
+      plan: { groups: [], scanned: [], unavailable: [], failed: [] },
     });
     await expect(runInitScaffold(args)).resolves.toBe(0);
     expect(added).toEqual([]);
@@ -387,5 +439,197 @@ describe('runInitScaffold', () => {
     const { args, printed } = harness({ store: store as never });
     await expect(runInitScaffold(args)).resolves.toBe(0);
     expect(printed.join('\n')).toMatch(/already|unchanged|nothing to add/i);
+  });
+});
+
+// #127: `--prune` is the opt-in other half of merging. It untracks what the
+// scan did not find, but only under keys the scan actually covered, so a
+// backend that was unavailable or broke this run can never cost the user its
+// entries. Destructive, so it has a confirmation of its own.
+describe('runInitScaffold --prune (#127)', () => {
+  function pruneHarness(
+    tracked: Record<string, readonly string[]>,
+    over: Partial<Parameters<typeof runInitScaffold>[0]> = {},
+  ) {
+    const printed: string[] = [];
+    const added: Array<{ key: string; names: readonly string[] }> = [];
+    const removed: Array<{ key: string; names: readonly string[] }> = [];
+    const saves: string[] = [];
+    const store = {
+      list: (key: string) => tracked[key] ?? [],
+      add: (key: string, names: readonly string[]) => {
+        added.push({ key, names });
+        return { added: [...names], skipped: [] };
+      },
+      remove: (key: string, names: readonly string[]) => {
+        removed.push({ key, names });
+        return { removed: [...names], missing: [] };
+      },
+      save: async (op: string) => {
+        saves.push(op);
+        return { changed: true, backupPath: '/tmp/backups/applist_init_x.yaml' };
+      },
+    };
+    const trackedAlready = Object.values(tracked).reduce((n, names) => n + names.length, 0);
+    const args = {
+      plan: {
+        groups: [
+          { pluginId: 'npm', displayName: 'npm', key: 'npm' as ApplistKey, names: ['typescript'] },
+        ],
+        scanned: ['npm' as ApplistKey],
+        unavailable: [{ pluginId: 'pip', reason: '`pip3` was not found' }],
+        failed: [],
+      },
+      store: store as never,
+      applistPath: '/home/u/.config/macup/applist.yaml',
+      trackedAlready,
+      confirm: async () => true,
+      confirmPrune: async () => true,
+      print: (s: string) => printed.push(s),
+      printErr: (s: string) => printed.push(s),
+      dryRun: false,
+      interactive: true,
+      force: false,
+      prune: true,
+      ...over,
+    };
+    return { args, printed, added, removed, saves };
+  }
+
+  it('untracks what was not found under a scanned key, and nothing under an unscanned one', async () => {
+    // pip was unavailable this run, so its `requests` entry is not evidence of
+    // anything and must survive. nodemon is tracked under npm, which the scan
+    // did cover and did not report, so it goes.
+    const { args, removed, saves } = pruneHarness({
+      npm: ['typescript', 'nodemon'],
+      pip: ['requests'],
+    });
+    await expect(runInitScaffold(args)).resolves.toBe(0);
+    expect(removed).toEqual([{ key: 'npm', names: ['nodemon'] }]);
+    expect(saves).toEqual(['init']);
+  });
+
+  it('names what it would untrack and asks before doing so', async () => {
+    let asked = false;
+    const { args, printed, removed } = pruneHarness(
+      { npm: ['typescript', 'nodemon'] },
+      {
+        confirmPrune: async () => {
+          asked = true;
+          return true;
+        },
+      },
+    );
+    await runInitScaffold(args);
+    expect(asked).toBe(true);
+    // The list comes before the question, so the user knows what "yes" means.
+    const listAt = printed.findIndex((l) => l.includes('nodemon'));
+    expect(listAt).toBeGreaterThanOrEqual(0);
+    expect(removed).toEqual([{ key: 'npm', names: ['nodemon'] }]);
+  });
+
+  it('untracks nothing when the prune is declined', async () => {
+    const { args, removed, saves, printed } = pruneHarness(
+      { npm: ['typescript', 'nodemon'] },
+      { confirmPrune: async () => false },
+    );
+    await expect(runInitScaffold(args)).resolves.toBe(0);
+    expect(removed).toEqual([]);
+    expect(saves).toEqual([]);
+    expect(printed.join('\n')).toMatch(/cancelled/i);
+  });
+
+  it('refuses under a pipe rather than untracking unattended', async () => {
+    // The merge already refuses without --force under a pipe; the prune is
+    // more destructive, not less, so it cannot be looser.
+    const { args, removed, saves, printed } = pruneHarness(
+      { npm: ['typescript', 'nodemon'] },
+      { interactive: false },
+    );
+    await expect(runInitScaffold(args)).resolves.toBe(1);
+    expect(removed).toEqual([]);
+    expect(saves).toEqual([]);
+    expect(printed.join('\n')).toContain('--force');
+  });
+
+  it('proceeds without the prune prompt under --force', async () => {
+    let asked = false;
+    const { args, removed, saves } = pruneHarness(
+      { npm: ['typescript', 'nodemon'] },
+      {
+        interactive: false,
+        force: true,
+        confirmPrune: async () => {
+          asked = true;
+          return true;
+        },
+      },
+    );
+    await expect(runInitScaffold(args)).resolves.toBe(0);
+    expect(asked).toBe(false);
+    expect(removed).toEqual([{ key: 'npm', names: ['nodemon'] }]);
+    expect(saves).toEqual(['init']);
+  });
+
+  it('treats an empty listing over a covered key as "everything here is stale"', async () => {
+    // The scan asked npm and npm answered "nothing installed". That is a real
+    // answer, unlike an unavailable backend, so the entries under it go.
+    const { args, removed } = pruneHarness(
+      { npm: ['typescript', 'nodemon'] },
+      {
+        force: true,
+        plan: { groups: [], scanned: ['npm' as ApplistKey], unavailable: [], failed: [] },
+      },
+    );
+    await expect(runInitScaffold(args)).resolves.toBe(0);
+    expect(removed).toEqual([{ key: 'npm', names: ['typescript', 'nodemon'] }]);
+  });
+
+  it('reports a no-op when the applist already matches the machine', async () => {
+    const { args, added, removed, saves, printed } = pruneHarness({ npm: ['typescript'] });
+    await expect(runInitScaffold(args)).resolves.toBe(0);
+    expect(added).toEqual([]);
+    expect(removed).toEqual([]);
+    expect(saves).toEqual([]);
+    expect(printed.join('\n')).toMatch(/nothing to add or untrack/i);
+  });
+
+  it('says so when --prune was asked for but no backend could be scanned', async () => {
+    // Found in review: "Nothing to write." alone reads as "nothing to prune
+    // either", when the truth is that no key was covered, so nothing was safe
+    // to prune. The user asked; tell them why nothing happened.
+    const { args, removed, saves, printed } = pruneHarness(
+      { npm: ['typescript'] },
+      {
+        force: true,
+        plan: {
+          groups: [],
+          scanned: [],
+          unavailable: [{ pluginId: 'npm', reason: '`npm` was not found' }],
+          failed: [],
+        },
+      },
+    );
+    await expect(runInitScaffold(args)).resolves.toBe(0);
+    expect(removed).toEqual([]);
+    expect(saves).toEqual([]);
+    expect(printed.join('\n')).toMatch(/nothing to prune/i);
+  });
+
+  it('under --dry-run names the keys a prune would touch and opens nothing', async () => {
+    // The store is not opened under --dry-run (ADR 0047), so the stale names
+    // cannot be listed — but the keys can, and those are the guard.
+    const store = {
+      list: () => {
+        throw new Error('dry-run must not read the store');
+      },
+    };
+    const { args, printed, saves } = pruneHarness({}, { dryRun: true, store: store as never });
+    await expect(runInitScaffold(args)).resolves.toBe(0);
+    expect(saves).toEqual([]);
+    const out = printed.join('\n');
+    expect(out).toMatch(/dry-run/i);
+    expect(out).toMatch(/untrack/i);
+    expect(out).toContain('npm');
   });
 });

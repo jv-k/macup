@@ -47,6 +47,19 @@ only what is new and leaves pins, skip lists, and comments intact. A populated
 applist prompts first; under a pipe it refuses rather than rewriting a config
 unattended, and `--force` is how a script says yes in advance (ADR 0047).
 
+Merging can only grow the file. To bring it back in line with the machine after
+uninstalling things, add `--prune`:
+
+```bash
+macup init --prune
+```
+
+It lists the tracked packages the scan did not find and asks before untracking
+them. Only keys the scan covered are touched, so a backend that is missing this
+run (no `mas`, say) never loses its entries, and pins and skip lists stay as
+they are. Under a pipe it refuses like the merge does, and `--prune --force` is
+the script spelling.
+
 Note `macup init <shell>` is a different command. That one emits shell
 integration code to eval from your rc file, for example
 `eval "$(macup init zsh)"`.

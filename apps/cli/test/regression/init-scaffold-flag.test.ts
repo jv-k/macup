@@ -229,3 +229,60 @@ describe('bare `macup init` scaffolds the applist (#14)', () => {
     expect(again.stdout).toMatch(/nothing to add/i);
   });
 });
+
+// #127: merging can only grow the applist, so `--prune` is the opt-in way to
+// bring it back in line with the machine. Only keys the scan covered are
+// touched: the stub brew is the one backend on PATH, so a stale brew entry
+// goes and an npm entry — a backend that was not there to ask — stays.
+describe('`macup init --prune` untracks what the scan did not find (#127)', () => {
+  // jq is tracked but the stub brew does not list it; typescript lives under a
+  // key no available backend covered this run. The pin is on jq, the name that
+  // gets pruned, so the assertion below can actually fail (found in review).
+  const STALE =
+    'version: 1\nbrew:\n  formulas:\n    - jq\n    - ripgrep\nnpm:\n  - typescript\npins:\n  brew:\n    jq: 1.7.1\n';
+
+  it('drops the stale entry under a scanned key and leaves an unscanned key alone', async () => {
+    const { env, applist } = sandbox(STALE);
+    const { stdout, code } = await run(env, 'init --prune --force');
+    expect(code).toBe(0);
+    expect(stdout).toMatch(/Untracked 1 package/);
+    const text = readFileSync(applist, 'utf8');
+    expect(text).not.toMatch(/^\s+- jq$/m);
+    expect(text).toContain('ripgrep');
+    expect(text).toContain('typescript');
+    // The pin is hand-written intent and untrack never touches pins, even
+    // for the name it just pruned; dropping it is `unpin`'s decision.
+    expect(text).toContain('jq: 1.7.1');
+  });
+
+  it('refuses under a pipe without --force, and untracks nothing', async () => {
+    // Everything the stub reports is already tracked, so the merge has nothing
+    // to guard and the refusal can only come from the prune.
+    const seed =
+      'version: 1\nbrew:\n  formulas:\n    - jq\n    - ripgrep\n    - fd\n  casks:\n    - firefox\n';
+    const { env, applist } = sandbox(seed);
+    const { stdout, stderr, code } = await run(env, 'init --prune');
+    expect(code).toBe(1);
+    expect(stdout).toContain('jq');
+    expect(stderr).toContain('--force');
+    expect(readFileSync(applist, 'utf8')).toBe(seed);
+  });
+
+  it('writes nothing under --dry-run --prune', async () => {
+    const { env, applist } = sandbox(STALE);
+    const { stdout, code } = await run(env, 'init --dry-run --prune');
+    expect(code).toBe(0);
+    expect(stdout).toMatch(/dry-run.*untrack/i);
+    expect(readFileSync(applist, 'utf8')).toBe(STALE);
+  });
+
+  it('is a no-op once the applist matches the machine', async () => {
+    const { env, applist } = sandbox(STALE);
+    await run(env, 'init --prune --force');
+    const after = readFileSync(applist, 'utf8');
+    const again = await run(env, 'init --prune --force');
+    expect(again.code).toBe(0);
+    expect(again.stdout).toMatch(/nothing to add or untrack/i);
+    expect(readFileSync(applist, 'utf8')).toBe(after);
+  });
+});

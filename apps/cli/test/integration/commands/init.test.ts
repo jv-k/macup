@@ -94,6 +94,49 @@ describe('macup init — argument handling', () => {
     expect(logSpy).toHaveBeenCalled();
   });
 
+  it('bare `macup init --prune --force` reaches the store with the stale names (#127)', async () => {
+    // Args coverage for the flag itself (docs/CODING_STANDARDS.md), in process:
+    // one fake backend that answers "nothing installed" for its key, and a
+    // store that tracks something under it. The flag has to arrive as a
+    // removal; the scaffolder's own suite covers the decisions around it.
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const removed: Array<{ key: string; names: readonly string[] }> = [];
+    const deps = {
+      ...stubDeps,
+      // The scan probes each plugin through this context; the stub's empty
+      // registry never needed one.
+      pluginContext: { exec: stubDeps.exec, log: stubDeps.log, signal: stubDeps.signal },
+      registry: [
+        {
+          manifest: {
+            id: 'npm',
+            displayName: 'npm',
+            supportedOS: ['darwin'],
+            requires: [],
+            configKeys: ['npm'],
+            capabilities: { list: true, track: true, untrack: true },
+          },
+          async check() {},
+          async list() {
+            return [];
+          },
+        },
+      ],
+      getStore: async () => ({
+        list: (key: string) => (key === 'npm' ? ['nodemon'] : []),
+        add: () => ({ added: [], skipped: [] }),
+        remove: (key: string, names: readonly string[]) => {
+          removed.push({ key, names });
+          return { removed: [...names], missing: [] };
+        },
+        save: async () => ({ changed: true }),
+      }),
+    } as unknown as Parameters<typeof buildInitCommand>[0];
+    await runCommand(buildInitCommand(deps) as CommandDef, { rawArgs: ['--prune', '--force'] });
+    expect(process.exitCode).toBe(0);
+    expect(removed).toEqual([{ key: 'npm', names: ['nodemon'] }]);
+  });
+
   it('rejects an unsupported shell with exit code 1', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     await runInit(['tcsh']);

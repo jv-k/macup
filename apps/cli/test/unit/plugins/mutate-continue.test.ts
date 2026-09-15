@@ -45,6 +45,14 @@ interface Loop {
   readonly argv: (name: string) => readonly [string, readonly string[]];
 }
 
+// Named so the system-only suite below can address it without a positional lookup.
+const systemInstall: Loop = {
+  label: 'system install',
+  run: (ctx, refs, opts) => mutator(systemPlugin, 'install')(ctx, refs, opts),
+  ref: (name) => ({ kind: 'system', name }),
+  argv: (name) => ['softwareupdate', ['--install', name, '--verbose']],
+};
+
 const loops: readonly Loop[] = [
   {
     label: 'mas install (runMasAction)',
@@ -58,12 +66,7 @@ const loops: readonly Loop[] = [
     ref: (name) => ({ kind: 'appstore', name }),
     argv: (name) => ['mas', ['upgrade', name]],
   },
-  {
-    label: 'system install',
-    run: (ctx, refs, opts) => mutator(systemPlugin, 'install')(ctx, refs, opts),
-    ref: (name) => ({ kind: 'system', name }),
-    argv: (name) => ['softwareupdate', ['--install', name, '--verbose']],
-  },
+  systemInstall,
   {
     label: 'system update',
     run: (ctx, refs, opts) => mutator(systemPlugin, 'update')(ctx, refs, opts),
@@ -187,7 +190,7 @@ describe.each(loops)('$label — failure message is bounded', (loop) => {
     } catch (err) {
       const message = (err as ErrMutateFailed).failures[0]?.message ?? '';
       // The same text the helper would produce for this stderr: one cap, not a copy.
-      expect(message).toBe(boundedFailureMessage(longStderr, ''));
+      expect(message).toBe(boundedFailureMessage({ stdout: '', stderr: longStderr }));
       expect(message.length).toBeLessThan(longStderr.length);
     }
   });
@@ -209,7 +212,7 @@ describe.each(loops)('$label — failure message is bounded', (loop) => {
 // says so on stdout (#120). That no-op is a failure for its ref, and it joins
 // the aggregate like a non-zero exit rather than aborting the batch.
 describe('system — the exit-0 "No such update" no-op is one failure among the batch', () => {
-  const sys = loops[2] as Loop;
+  const sys = systemInstall;
   const noSuchUpdate = (label: string): ExecResult => ({
     stdout: `${label}: No such update\nNo updates are available.\n`,
     stderr: '',

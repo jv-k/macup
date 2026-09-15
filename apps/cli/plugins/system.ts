@@ -84,7 +84,7 @@ async function runInstall(
       kind: 'user-action',
     });
     if (r.exitCode !== 0) {
-      failures.push({ ref, message: boundedFailureMessage(r.stderr, r.stdout) });
+      failures.push({ ref, message: boundedFailureMessage(r) });
     } else if (reportsNoSuchUpdate(r)) {
       failures.push({ ref, message: NO_SUCH_UPDATE_MESSAGE });
     }

@@ -154,7 +154,7 @@ export async function runMasAction(
       kind: 'user-action',
     });
     if (r.exitCode !== 0) {
-      failures.push({ ref, message: boundedFailureMessage(r.stderr, r.stdout) });
+      failures.push({ ref, message: boundedFailureMessage(r) });
     }
   }
   if (failures.length > 0) {

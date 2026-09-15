@@ -10,7 +10,7 @@
  */
 
 import { ErrMutateFailed, type MutateFailure } from '../errors';
-import type { MutateOptions, PackageRef, PackageStatus, PluginContext } from './types';
+import type { ExecResult, MutateOptions, PackageRef, PackageStatus, PluginContext } from './types';
 
 // Cap on a per-ref failure message inside the aggregate ErrMutateFailed.
 // Backend stderr can run to thousands of characters (a brew build log, say);
@@ -22,10 +22,11 @@ const MAX_FAILURE_MESSAGE_LENGTH = 200;
  * The per-ref failure text inside an {@link ErrMutateFailed}: stderr, falling
  * back to stdout, cut to the cap above. Exported so the plugins that keep a
  * hand-rolled loop (mas, system, xcode — #160) bound their failures the same
- * way `mutateRefs` does, with one cap rather than a copy in each.
+ * way `mutateRefs` does, with one cap rather than a copy in each. Takes the
+ * exec result rather than two positional strings so no call site can swap them.
  */
-export function boundedFailureMessage(stderr: string, stdout: string): string {
-  const text = stderr.trim() || stdout.trim();
+export function boundedFailureMessage(result: Pick<ExecResult, 'stdout' | 'stderr'>): string {
+  const text = result.stderr.trim() || result.stdout.trim();
   if (text.length <= MAX_FAILURE_MESSAGE_LENGTH) return text;
   return `${text.slice(0, MAX_FAILURE_MESSAGE_LENGTH)}… (+${text.length - MAX_FAILURE_MESSAGE_LENGTH} chars)`;
 }
@@ -82,7 +83,7 @@ export async function mutateRefs(
     }
     const r = await ctx.exec.run(cmd, args, { signal: ctx.signal, kind: 'user-action' });
     if (r.exitCode !== 0) {
-      failures.push({ ref, message: boundedFailureMessage(r.stderr, r.stdout) });
+      failures.push({ ref, message: boundedFailureMessage(r) });
     }
   }
   if (failures.length > 0) {

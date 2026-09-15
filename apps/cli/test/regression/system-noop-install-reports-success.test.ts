@@ -93,6 +93,7 @@ describe('#120: a system install softwareupdate no-ops is a failure', () => {
       )
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ErrMutateFailed);
+    expect((err as ErrMutateFailed).exitCode).toBe(1);
     expect((err as ErrMutateFailed).failures.map((f) => f.ref.name)).toEqual([NOOP_LABEL]);
     expect(exec.calls).toEqual([
       ['softwareupdate', '--install', NOOP_LABEL, '--verbose'],
@@ -149,6 +150,7 @@ describe('#120: what must keep working', () => {
       .install?.(ctx, [{ kind: 'system', name: 'NeedsRoot-1.0' }], {})
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ErrMutateFailed);
+    expect((err as ErrMutateFailed).exitCode).toBe(1);
     expect((err as ErrMutateFailed).failures[0]?.message).toBe(
       'softwareupdate: must be run as root',
     );

@@ -19,6 +19,7 @@ import {
   COMPOSITE_MANIFEST,
   buildCompositeCommand,
   listComposite,
+  withComposite,
 } from '../../../src/commands/composite';
 import type { CommandDeps } from '../../../src/commands/from-manifest';
 import { ConfigStore } from '../../../src/config/store';
@@ -83,6 +84,18 @@ describe('COMPOSITE_MANIFEST', () => {
 describe('COMPOSITE_DECLARATION', () => {
   it('exposes the manifest for read-only surfaces (help/completions/docs/plugins report)', () => {
     expect(COMPOSITE_DECLARATION.manifest).toBe(COMPOSITE_MANIFEST);
+  });
+});
+
+describe('withComposite', () => {
+  it('appends COMPOSITE_DECLARATION after the given plugins, in order', () => {
+    const a = fakePlugin('a', async () => []);
+    const b = fakePlugin('b', async () => []);
+    expect(withComposite([a, b])).toEqual([a, b, COMPOSITE_DECLARATION]);
+  });
+
+  it('appends the declaration even for an empty list', () => {
+    expect(withComposite([])).toEqual([COMPOSITE_DECLARATION]);
   });
 });
 

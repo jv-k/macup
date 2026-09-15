@@ -17,7 +17,7 @@
 
 import { FLAG_COMMAND_ALIASES } from './cli/argv';
 import { CHECK_ARGS } from './commands/check';
-import { COMPOSITE_DECLARATION } from './commands/composite';
+import { withComposite } from './commands/composite';
 import { INIT_ARGS } from './commands/init';
 import { OUTDATED_ARGS } from './commands/outdated';
 import {
@@ -269,7 +269,7 @@ export function docsMetadata(): DocsMetadata {
     // BUILTIN_PLUGINS holds only real backends (ADR 0033, ADR 0052); the
     // composite `all` is appended from its own declaration so the docs
     // reference keeps listing it exactly as it did before that split.
-    plugins: [...BUILTIN_PLUGINS, COMPOSITE_DECLARATION].map(pluginDoc),
+    plugins: withComposite(BUILTIN_PLUGINS).map(pluginDoc),
     topLevelCommands: [
       {
         name: 'outdated',

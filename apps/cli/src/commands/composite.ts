@@ -88,6 +88,17 @@ export const COMPOSITE_DECLARATION: Plugin = {
 };
 
 /**
+ * `plugins` with {@link COMPOSITE_DECLARATION} appended. The one shape the
+ * four read-only surfaces (help, completions, the docs reference, `macup
+ * plugins`) all want: their real-backend list, plus `all`, in the same
+ * append-at-the-end order the composite always rendered in when it lived in
+ * `BUILTIN_PLUGINS`.
+ */
+export function withComposite(plugins: readonly Plugin[]): Plugin[] {
+  return [...plugins, COMPOSITE_DECLARATION];
+}
+
+/**
  * The `list` fan-out: ask every constituent, isolating one backend's failure
  * from the rest. Moved verbatim out of the old `createAllPlugin.list()` — the
  * loop-with-isolation shape is unchanged, only its home is (ADR 0033).

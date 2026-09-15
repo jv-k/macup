@@ -11,7 +11,7 @@
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import type { Plugin, PluginCapabilities } from '../plugins/types';
 import { GLYPHS, paint } from '../ui/log';
-import { COMPOSITE_DECLARATION } from './composite';
+import { withComposite } from './composite';
 
 /** One plugin's availability on this machine, with the resolved binary path when it has one. */
 export interface PluginStatus {
@@ -145,7 +145,7 @@ export function formatPluginsReport(report: PluginsReport, opts: FormatOptions =
  * here exactly as it did when it lived in the registry.
  */
 export async function runPlugins(_args: ParsedArgs, deps: CliDeps): Promise<void> {
-  const report = buildPluginsReport([...deps.registry, COMPOSITE_DECLARATION], {
+  const report = buildPluginsReport(withComposite(deps.registry), {
     platform: deps.platform,
     onPath: (b) => deps.exec.onPath(b),
   });

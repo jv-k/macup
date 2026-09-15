@@ -111,6 +111,19 @@ Gating, because the binary is not a `pnpm test` prerequisite:
 
 Root `pnpm test` runs the turbo `build` task first, and that task owns `dist/` (tsup cleans it), so under `pnpm test` the binary is never there and the file always skips. `pnpm --filter macup test:e2e` is the way to drive it: it runs only this directory and sets `MACUP_E2E_BINARY` to the current arch's binary when the variable is unset, so a missing binary fails the run rather than skipping it. Locally, `pnpm --filter macup build:binary && pnpm --filter macup test:e2e`. CI's `compile-smoke` job does the same with the variable set explicitly to the target it just built.
 
+**Workflows to cover**, with what the suite holds today:
+
+| # | Scenario | Success criteria | Status |
+|---|----------|------------------|--------|
+| 1 | First run: no config present | Tool offers to create default `applist.yaml`; file exists and parses; exit 0 | open |
+| 2 | `macup update` with valid applist | Correct subcommands invoked on each manager in expected order; summary printed; exit 0 | open (the dry-run form is covered by 5) |
+| 3 | Partial failure: brew fails on one formula | Other managers still run; summary reflects the failure; exit code matches policy (see section 10) | open |
+| 4 | Non-interactive mode (`CI=true` or `--yes`) | No prompts emitted; defaults applied; deterministic exit code | open |
+| 5 | Dry-run | No mutating commands invoked; intended actions are logged | covered: `all update --dry-run` |
+| 6 | Idempotent init | Running `init` twice does not modify an existing applist | open |
+| 7 | Unknown command or flag | Usage printed to stderr; non-zero exit | covered: `--bogus`, `--doctor` |
+| 8 | Read paths across the bundle | `--version`, `brew list`, `outdated --json`, `doctor` boot, dispatch, and exit 0 | covered |
+
 ### 3.4 Regression tests: `apps/cli/test/regression/`
 
 One file per historical bug, named to describe the symptom (see existing examples like [add-remove-sees-packages.test.ts](../apps/cli/test/regression/add-remove-sees-packages.test.ts)). Each test references the issue/PR that introduced it. Never delete a regression test without a PR explaining why.
@@ -181,7 +194,8 @@ Existing workflow: [.github/workflows/ci.yml](.github/workflows/ci.yml).
 2. **Typecheck:** `pnpm typecheck` (turbo run typecheck)
 3. **Test:** `pnpm test` (turbo run test: unit + integration + regression)
 4. **Build:** `pnpm build` (turbo run build) to catch bundler regressions
-5. **Coverage:** `vitest run --coverage` via v8 provider; upload to Codecov or as artifact
+5. **Compile smoke:** `pnpm --filter macup build:binary` then `pnpm --filter macup test:e2e` (the `compile-smoke` job), the one stage that runs the packaged binary
+6. **Coverage:** `vitest run --coverage` via v8 provider; upload to Codecov or as artifact
 
 **Runner:** `macos-latest`. Optionally matrix across `macos-13` / `macos-14` if behaviour diverges.
 

@@ -53,17 +53,17 @@ const VERSION = (
 // the earlier file wins.
 const RECORDING_FILES = ['brew', 'npm', 'pnpm', 'mas', 'xcode', 'system'] as const;
 
-// `doctor` probes `<bin> --version` for its report line. The plugins never
-// call it, so it is not in the recordings; without it every probe would be a
-// logged miss and the doctor line would drop to the bare display name.
+// `doctor` probes `<requires[0]> --version` for each plugin's report line, so
+// one probe per plugin's first required binary (xcode's is `mas`, already
+// listed). The plugins never call it, so it is not in the recordings; without
+// it every probe would be a logged miss and the doctor line would drop to the
+// bare display name.
 const VERSION_PROBES: readonly Recording[] = (
   [
     ['brew', 'Homebrew 4.2.7'],
     ['npm', '10.8.2'],
     ['pnpm', '9.12.0'],
     ['mas', '1.8.6'],
-    ['xcode-select', 'xcode-select version 2408.'],
-    ['pkgutil', 'pkgutil 1.0'],
     ['softwareupdate', 'softwareupdate 1.0'],
   ] as const
 ).map(([cmd, line]) => ({
@@ -92,12 +92,15 @@ function sandbox(): Sandbox {
     dir,
     stubs,
     // Built from nothing rather than layered over process.env: the point is
-    // that the only backends the binary can find are the stubs.
+    // that the only backends the binary can find are the stubs. The rest is
+    // the determinism set TESTING_STRATEGY §4 and §7 prescribe.
     env: {
       PATH: stubs.bin,
       HOME: home,
+      XDG_CONFIG_HOME: join(dir, 'xdg'),
       SHELL: '/bin/zsh',
       MACUP_CONFIG: applist,
+      CI: 'true',
       NO_COLOR: '1',
       LC_ALL: 'C',
       TZ: 'UTC',
@@ -122,8 +125,13 @@ function macup(box: Sandbox, args: readonly string[]): Run {
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 
-/** A backend call that would change the machine, in any of the recorded verbs' spellings. */
-const MUTATING_CALL = / --?(install|upgrade|update|add)\b/;
+/**
+ * A backend call that would change the machine, in any of the recorded verbs'
+ * spellings: `brew upgrade`, `npm update -g`, `pnpm add -g`, `mas install`,
+ * `softwareupdate --install`, `xcode-select --install`. The dashes are
+ * optional, so the bare-verb forms match too.
+ */
+const MUTATING_CALL = / -{0,2}(install|upgrade|update|add)\b/;
 
 interface OutdatedRow {
   pluginId: string;
@@ -209,6 +217,15 @@ describe.skipIf(!PRESENT)('compiled binary smoke', () => {
     ]) {
       expect(stdout).toContain(line);
     }
+    // Everything the binary said it would run is a call the guard below
+    // recognises as mutating, so the guard is proven non-vacuous by the same
+    // output it protects. Then: none of those calls reached a stub.
+    const planned = stdout
+      .split('\n')
+      .filter((line) => line.startsWith('[dry-run] '))
+      .map((line) => line.slice('[dry-run] '.length));
+    expect(planned.length).toBeGreaterThanOrEqual(5);
+    for (const command of planned) expect(command).toMatch(MUTATING_CALL);
     const calls = box.stubs.calls();
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.filter((c) => MUTATING_CALL.test(c))).toEqual([]);
@@ -225,7 +242,7 @@ describe.skipIf(!PRESENT)('compiled binary smoke', () => {
     expect(stdout).toContain(`Homebrew 4.2.7 (${join(box.stubs.bin, 'brew')})`);
     expect(stdout).toContain('0 errors');
     // Every built-in is probed, PATH-filtered or not: the three with no stub
-    // show up as disabled rather than vanishing.
+    // show up as unavailable rather than vanishing.
     for (const missing of ['pip3', 'go', 'cargo']) {
       expect(stdout).toContain(`\`${missing}\` not on PATH`);
     }

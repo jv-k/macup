@@ -1,15 +1,18 @@
-// The stub PATH the binary smoke suite runs against is generated from the same
-// recordings the plugin suites replay (`test/fixtures/recordings/*.json`), so
-// the canned backend output lives in one place. This file proves the generated
-// scripts behave like the FixtureExecRunner does: exact-argv replay, a loud
-// miss, and a log of every call.
+// The stub PATH the binary smoke suite (`test/e2e`) runs against is generated
+// from the same recordings the plugin suites replay
+// (`test/fixtures/recordings/*.json`), so the canned backend output lives in
+// one place. This file proves the generated scripts behave like the
+// FixtureExecRunner does: exact-argv replay, a loud miss, and a log of every
+// call. It lives under `unit/` rather than beside the helper because it needs
+// no binary: `pnpm test` proves the generator on every run, and `e2e/` keeps
+// meaning "drives the compiled binary".
 
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { type Recording, writeStubPath } from './stub-path';
+import { type Recording, writeStubPath } from '../e2e/stub-path';
 
 const RECORDINGS: readonly Recording[] = [
   {

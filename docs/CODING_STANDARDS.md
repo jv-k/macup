@@ -120,7 +120,8 @@ Tests are organised by concern under `test/`:
   runs the plugin contract against every built-in. New plugins must pass it.
 - `test/completions/` and `test/config/` cover completion-output and
   config load/backup behaviour.
-- `test/e2e/` runs `macup` end-to-end via the built bundle.
+- `test/e2e/` spawns the bun-compiled binary against a PATH of stub backends
+  (gated on `MACUP_E2E_BINARY`; see `docs/TESTING_STRATEGY.md`, section 3.3).
 
 ### Rules
 

@@ -86,7 +86,7 @@ function installCommand(
   return (cmd.subCommands as SubCommandsDef).install as CommandDef;
 }
 
-function installedNames(plugin: Plugin): string[] {
+function attemptedNames(plugin: Plugin): string[] {
   return (plugin.install as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1][0].name);
 }
 
@@ -116,7 +116,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
     const plugin = fakePlugin({ failWith: { beta: mutateFailure('beta: no bottle available') } });
     await runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta', 'gamma'] });
 
-    expect(installedNames(plugin)).toEqual(['alpha', 'beta', 'gamma']);
+    expect(attemptedNames(plugin)).toEqual(['alpha', 'beta', 'gamma']);
     const out = stdout();
     expect(out).toMatch(/alpha\s+installed/);
     expect(out).toMatch(/beta\s+failed/);
@@ -131,7 +131,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
     await runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta'] });
 
     // The backend is still asked, as before; the report is what changed.
-    expect(installedNames(plugin)).toEqual(['alpha', 'beta']);
+    expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     const out = stdout();
     expect(out).toMatch(/alpha\s+already present/);
     expect(out).not.toMatch(/alpha\s+installed/);
@@ -157,7 +157,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
     const plugin = fakePlugin({});
     await runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta'] });
 
-    expect(installedNames(plugin)).toEqual(['alpha', 'beta']);
+    expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     const out = stdout();
     expect(out).toMatch(/alpha\s+installed/);
     expect(out).toMatch(/beta\s+installed/);
@@ -170,7 +170,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
     const plugin = fakePlugin({});
     await runCommand(installCommand(plugin, { tracked: ['alpha', 'beta'] }), { rawArgs: [] });
 
-    expect(installedNames(plugin)).toEqual(['alpha', 'beta']);
+    expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     expect(stdout()).toContain('2 installed');
   });
 
@@ -180,7 +180,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
     });
     await runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta'] });
 
-    expect(installedNames(plugin)).toEqual(['alpha', 'beta']);
+    expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     const out = stdout();
     expect(out).toMatch(/alpha\s+failed/);
     expect(out).toContain('registry refused the install');
@@ -274,24 +274,35 @@ describe('install continues past a failed ref and reports (#163)', () => {
       }),
     ).rejects.toBe(boom);
 
-    expect(installedNames(plugin)).toEqual(['alpha', 'beta']);
+    expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     expect(stdout()).not.toMatch(/gamma\s+(installed|failed)/);
   });
 
-  it('--dry-run skips the after snapshot and the report, and exits 0', async () => {
+  it('--dry-run takes no snapshot and prints no report, and exits 0', async () => {
     const plugin = fakePlugin({});
     // A dry run mutates nothing: the fake keeps listing neither ref, which
     // the report would otherwise have to guess at.
     (plugin.install as ReturnType<typeof vi.fn>).mockImplementation(async () => {});
     await runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta', '--dry-run'] });
 
-    expect(installedNames(plugin)).toEqual(['alpha', 'beta']);
+    expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     expect((plugin.install as ReturnType<typeof vi.fn>).mock.calls[0]?.[2]).toEqual({
       dryRun: true,
     });
-    expect(plugin.list).toHaveBeenCalledTimes(1);
+    expect(plugin.list).not.toHaveBeenCalled();
     expect(stdout()).not.toMatch(/alpha\s+(installed|failed)/);
     expect(process.exitCode).toBe(savedExitCode);
+  });
+
+  it('--dry-run rethrows an install() failure, since no report would carry it', async () => {
+    const boom = new Error('plugin bug under dry-run');
+    const plugin = fakePlugin({ failWith: { alpha: () => boom } });
+    await expect(
+      runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta', '--dry-run'] }),
+    ).rejects.toBe(boom);
+
+    expect(attemptedNames(plugin)).toEqual(['alpha']);
+    expect(stdout()).not.toMatch(/alpha\s+(installed|failed)/);
   });
 
   it('still fails outright when the one backend is unavailable, before any ref is attempted', async () => {

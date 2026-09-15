@@ -487,21 +487,24 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         // The before snapshot is what tells `already-present` from
         // `installed` (ADR 0052 rule 2). A full listing, never `onlyOutdated`:
         // a present ref that is up to date drops out of an outdated listing
-        // and would read as freshly installed.
-        const before = await withSpinner(
-          spinnerDeps,
-          `Checking ${manifest.displayName} packages…`,
-          () => probeOrThrow(plugin, makeCtx(deps), { subtype }),
-        );
+        // and would read as freshly installed. A dry run prints no report,
+        // and the report is the snapshot's only reader, so it takes none.
+        const before = dryRun
+          ? []
+          : await withSpinner(spinnerDeps, `Checking ${manifest.displayName} packages…`, () =>
+              probeOrThrow(plugin, makeCtx(deps), { subtype }),
+            );
 
         printHuman('');
         printHuman(log.header(`Installing ${manifest.displayName}`, refs.length));
         printHuman('');
         // Every ref is attempted whatever happened to the one before it (ADR
         // 0052): a failure is recorded for the report and the loop moves on.
-        // The one exception is cancellation, where the failure is what a
-        // SIGINT-cancelled subprocess threw, and the run must end as it did
-        // before rather than march through the remaining refs.
+        // Two exceptions rethrow as the loop always did. Cancellation, where
+        // the failure is what a SIGINT-cancelled subprocess threw and the run
+        // must end there rather than march through the remaining refs. And a
+        // dry run, which prints no report, so a failure recorded for one
+        // would never be seen: the throw is the only way it reaches the user.
         const failures: MutateFailure[] = [];
         for (let i = 0; i < refs.length; i++) {
           const ref = refs[i] as PackageRef;
@@ -514,13 +517,13 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
               },
             );
           } catch (err) {
+            if (dryRun || deps.signal.aborted) throw err;
             failures.push(...failuresFor(ref, err));
-            if (deps.signal.aborted) throw err;
           }
         }
 
-        // A dry run mutates nothing, so the after snapshot would call every
-        // ref failed. Keep the pre-report output and the zero exit instead.
+        // A dry run mutates nothing and took no snapshot, so there is no
+        // report to build. Keep the pre-report output and the zero exit.
         if (dryRun) {
           await runHealthCheck(spinnerDeps, plugin, makeCtx(deps));
           return;

@@ -5,7 +5,7 @@ description: Script against macup's JSON output to count outdated packages, list
 
 # Pipe macup outdated into jq
 
-`macup outdated --json` and a per-plugin `macup <id> list --json` both emit JSON. Pipe either into [jq](https://jqlang.github.io/jq/) to script against the result.
+This recipe pipes `macup outdated --json` and a per-plugin `macup <id> list --json` into [jq](https://jqlang.github.io/jq/) to script against the result.
 
 <Callout type="info">
 

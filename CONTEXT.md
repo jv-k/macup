@@ -31,7 +31,7 @@ The `all` surface: the single "do it across every backend" view for list/install
 _Avoid_: aggregate, meta-plugin
 
 **Unavailable**:
-A plugin whose backend is missing on this machine: a required binary is not on PATH, so `check()` throws `ErrPluginUnavailable`. A runtime fact about the machine, never a user choice. That distinction is why it is not called a skip. The Composite and `bundle install` isolate an unavailable target and carry on; `doctor` and `plugins` report it.
+A plugin whose backend is missing on this machine: a required binary is not on PATH, so `check()` throws `ErrPluginUnavailable`. A runtime fact about the machine, never a user choice. That distinction is why it is not called a skip. The Composite and `bundle install` isolate an unavailable target and carry on; `doctor` and `plugins` report it. In an install or update report it is the outcome of every package whose plugin never ran, and on an ordinary `all` run it never forces a non-zero exit on its own (ADR 0052). Only `bundle install` counts a package stranded under an unavailable target as a shortfall (ADR 0038).
 _Avoid_: skipped, excluded (that is `skip.all`), missing, disabled
 
 ### Packages
@@ -95,8 +95,12 @@ Backend verbs that act on the machine: install puts a package on the machine thr
 _Avoid_: upgrade (for update)
 
 **Install outcome**:
-The per-run classification of one package by an install: `installed` (macup put it on the machine this run), `already-present` (it was there before), `failed`. An outcome, not a state: an `already-present` package is Installed exactly as much as an `installed` one. What separates them is whether this run put it there, which is what Provenance records (ADR 0038).
+The per-run classification of one package by an install: `installed` (macup put it on the machine this run), `already-present` (it was there before), `failed`, or `unavailable` (its plugin never ran). An outcome, not a state: an `already-present` package is Installed exactly as much as an `installed` one. What separates them is whether this run put it there, which is what Provenance records (ADR 0038). Classified host-side by reconciling `list()` snapshots taken before and after the batch, never by the plugin (ADR 0038, ADR 0052).
 _Avoid_: install status, result, skipped (for already-present)
+
+**Update outcome**:
+The per-run classification of one package by an update: `updated`, `failed`, or `unavailable`. The sibling of Install outcome with no `already-present` case, because an already-current package is filtered out before `update()` is ever called. Classified host-side from the `list()` snapshot after the batch (ADR 0052). A run exits non-zero iff at least one package `failed`, and `unavailable` alone never does.
+_Avoid_: update status, result, skipped, up-to-date (for a package the run never touched)
 
 ### Bundles
 

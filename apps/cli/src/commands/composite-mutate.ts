@@ -9,8 +9,8 @@
  */
 
 import type { ConfigStore } from '../config/store';
-import { ErrPluginUnavailable, type MutateFailure } from '../errors';
-import { type ProbeOutcome, errorMessage, probe, probeOutcomeReason } from '../plugins/probe';
+import type { MutateFailure } from '../errors';
+import { type ProbeOutcome, probe, probeOutcomeReason } from '../plugins/probe';
 import { resolveSelection } from '../plugins/selection';
 import { kindForConfigKey } from '../plugins/subtype-table';
 import type {
@@ -84,8 +84,9 @@ export interface ConstituentOutcome {
  * lists for the report alone: its `before` snapshot (ADR 0052 rule 2), a
  * full listing so a present ref that is up to date is not misread as
  * freshly installed. Where no report will read that snapshot (a dry run,
- * or nothing tracked), availability alone decides the install plan, and no
- * listing is taken.
+ * or nothing tracked), availability alone decides the install plan: the
+ * probe runs check() and skips the listing (`skipList`), so the
+ * unavailable-vs-error split is read off the probe in every case.
  */
 export async function planComposite(
   mode: MutationMode,
@@ -112,11 +113,8 @@ export async function planComposite(
       continue;
     }
     const refs = selectInstallRefs(plugin, store);
-    if (opts.dryRun || refs.length === 0) {
-      plans.push(await planFromCheck(plugin, ctx, refs));
-      continue;
-    }
-    plans.push(planFromProbe(plugin, await probe(plugin, ctx, {}), refs));
+    const skipList = opts.dryRun || refs.length === 0;
+    plans.push(planFromProbe(plugin, await probe(plugin, ctx, {}, { skipList }), refs));
   }
   return plans;
 }
@@ -124,7 +122,9 @@ export async function planComposite(
 // `refs` is either already selected without the backend (install, from the
 // tracked applist), and then the plan names them whatever the probe found,
 // or a selector over the listing (update), and then a backend that never ran
-// names nothing.
+// names nothing. A probe that skipped its listing reports `ok` with no
+// statuses, which is the empty `before` an install plan without a report
+// wants.
 function planFromProbe(
   plugin: Plugin,
   outcome: ProbeOutcome,
@@ -137,22 +137,6 @@ function planFromProbe(
   const status = outcome.kind === 'unavailable' ? 'unavailable' : 'error';
   const known = typeof refs === 'function' ? [] : refs;
   return { plugin, status, refs: known, before: [], message: probeOutcomeReason(outcome) };
-}
-
-// Availability alone, the same split as the probe's, for an install plan
-// with no listing to take.
-async function planFromCheck(
-  plugin: Plugin,
-  ctx: PluginContext,
-  refs: readonly PackageRef[],
-): Promise<ConstituentPlan> {
-  try {
-    await plugin.check(ctx);
-    return { plugin, status: 'planned', refs, before: [] };
-  } catch (err) {
-    const status = err instanceof ErrPluginUnavailable ? 'unavailable' : 'error';
-    return { plugin, status, refs, before: [], message: errorMessage(err) };
-  }
 }
 
 /**

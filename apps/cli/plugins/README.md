@@ -118,11 +118,14 @@ handled uniformly by `ConfigStore` based on the plugin's
 ## Health check
 
 A plugin that wants a health check run after its own `install` or `update`
-implements the optional `healthCheck(ctx)` method. The host calls it once,
-after all refs for that command have been applied, whenever the plugin
+implements the optional `healthCheck(ctx, opts)` method. The host calls it
+once, after all refs for that command have been applied, whenever the plugin
 defines it (presence is the signal, same as `search`, with no separate
-capabilities flag). brew, npm, and pnpm implement it by running their
-backend's own `doctor` command (`brew doctor`, `npm doctor`, `pnpm doctor`).
+capabilities flag). `opts` is the same `MutateOptions` the mutation ran under,
+so under `--dry-run` the check prints what it would run and runs nothing,
+like every other mutating verb. brew, npm, and pnpm implement it by running
+their backend's own `doctor` command (`brew doctor`, `npm doctor`,
+`pnpm doctor`) through the `runUnlessDryRun` helper, which carries that gate.
 
 ## Leaves
 

@@ -121,3 +121,47 @@ describe('post-install/update health check — method presence dispatch (#137)',
     expect(calls).toEqual(['update']);
   });
 });
+
+// The host threads `--dry-run` into the health check the way it does into
+// `install`/`update` (#152). Whether the plugin then runs nothing is the
+// plugin's contract, proven in each plugin's own suite; what the host owes is
+// the flag itself, so these assert on the second argument only.
+describe('post-install/update health check — dry-run threading (#152)', () => {
+  it('install --dry-run: healthCheck receives { dryRun: true }', async () => {
+    const plugin = fakePlugin({ withHealthCheck: true }, []);
+    const subCmds = cmdFor(plugin).subCommands as SubCommandsDef;
+    await runCommand(subCmds.install as CommandDef, { rawArgs: ['alpha', '--dry-run'] });
+    expect(plugin.install).toHaveBeenCalledWith(expect.anything(), expect.anything(), {
+      dryRun: true,
+    });
+    expect(plugin.healthCheck).toHaveBeenCalledTimes(1);
+    expect(plugin.healthCheck).toHaveBeenCalledWith(expect.anything(), { dryRun: true });
+  });
+
+  it('install without the flag: healthCheck receives { dryRun: false }', async () => {
+    const plugin = fakePlugin({ withHealthCheck: true }, []);
+    const subCmds = cmdFor(plugin).subCommands as SubCommandsDef;
+    await runCommand(subCmds.install as CommandDef, { rawArgs: ['alpha'] });
+    expect(plugin.healthCheck).toHaveBeenCalledTimes(1);
+    expect(plugin.healthCheck).toHaveBeenCalledWith(expect.anything(), { dryRun: false });
+  });
+
+  it('update --dry-run: healthCheck receives { dryRun: true }', async () => {
+    const plugin = fakePlugin({ withHealthCheck: true }, []);
+    const subCmds = cmdFor(plugin).subCommands as SubCommandsDef;
+    await runCommand(subCmds.update as CommandDef, { rawArgs: ['--all', '--dry-run'] });
+    expect(plugin.update).toHaveBeenCalledWith(expect.anything(), expect.anything(), {
+      dryRun: true,
+    });
+    expect(plugin.healthCheck).toHaveBeenCalledTimes(1);
+    expect(plugin.healthCheck).toHaveBeenCalledWith(expect.anything(), { dryRun: true });
+  });
+
+  it('update without the flag: healthCheck receives { dryRun: false }', async () => {
+    const plugin = fakePlugin({ withHealthCheck: true }, []);
+    const subCmds = cmdFor(plugin).subCommands as SubCommandsDef;
+    await runCommand(subCmds.update as CommandDef, { rawArgs: ['--all'] });
+    expect(plugin.healthCheck).toHaveBeenCalledTimes(1);
+    expect(plugin.healthCheck).toHaveBeenCalledWith(expect.anything(), { dryRun: false });
+  });
+});

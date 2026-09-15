@@ -26,6 +26,7 @@ import type {
   ExecRunner,
   ListOptions,
   Logger,
+  MutateOptions,
   PackageRef,
   PackageStatus,
   Plugin,
@@ -109,15 +110,18 @@ async function commitMutation<T>(
 // Presence of `plugin.healthCheck` is the capability signal (ADR 0039) — no
 // per-backend map to look `pluginId` up in. A plugin that doesn't define the
 // method (composite `all`, appstore/mas, system, xcode) is a no-op, exactly
-// as an absent map entry was before.
+// as an absent map entry was before. `opts` is the same dry-run the mutation
+// ran under, so `--dry-run` reaches `brew doctor` the way it reaches `brew
+// upgrade` (#152).
 async function runHealthCheck(
   deps: SpinnerDeps,
   plugin: Plugin,
   ctx: PluginContext,
+  opts: MutateOptions,
 ): Promise<void> {
   if (!plugin.healthCheck) return;
   await withSpinner(deps, `Checking ${plugin.manifest.id} health…`, async () => {
-    await plugin.healthCheck?.(ctx);
+    await plugin.healthCheck?.(ctx, opts);
   });
 }
 
@@ -217,7 +221,7 @@ async function finishMutation(deps: CommandDeps, plugin: Plugin, run: MutationRu
   // A dry run mutates nothing, so the after snapshot would call every ref
   // failed. Keep the pre-report output and the zero exit instead.
   if (dryRun) {
-    await runHealthCheck(spinnerDeps, plugin, makeCtx(deps));
+    await runHealthCheck(spinnerDeps, plugin, makeCtx(deps), { dryRun });
     return;
   }
 
@@ -236,7 +240,7 @@ async function finishMutation(deps: CommandDeps, plugin: Plugin, run: MutationRu
     ...(failures.length > 0 ? { failures } : {}),
   };
   const report = buildMutationReport(mode, [ran]);
-  await runHealthCheck(spinnerDeps, plugin, makeCtx(deps));
+  await runHealthCheck(spinnerDeps, plugin, makeCtx(deps), { dryRun });
   if (showJson) {
     console.log(renderJson(report));
   } else {

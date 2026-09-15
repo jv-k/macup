@@ -1,5 +1,5 @@
 import { defaultCheck } from '../src/plugins/defaults';
-import { filterOutdated, mutateRefs, safeParseJson } from '../src/plugins/helpers';
+import { filterOutdated, mutateRefs, runUnlessDryRun, safeParseJson } from '../src/plugins/helpers';
 import type {
   ListOptions,
   MutateOptions,
@@ -99,8 +99,8 @@ const pnpm: Plugin = {
     await mutateRefs(ctx, refs, opts, (ref) => ['pnpm', ['update', '-g', ref.name]]);
   },
 
-  async healthCheck(ctx: PluginContext): Promise<void> {
-    await ctx.exec.run('pnpm', ['doctor'], { signal: ctx.signal });
+  async healthCheck(ctx: PluginContext, opts: MutateOptions): Promise<void> {
+    await runUnlessDryRun(ctx, opts, 'pnpm', ['doctor']);
   },
 };
 

@@ -1,6 +1,6 @@
 import { runJson } from '../src/exec/json';
 import { defaultCheck } from '../src/plugins/defaults';
-import { filterOutdated, mutateRefs } from '../src/plugins/helpers';
+import { filterOutdated, mutateRefs, runUnlessDryRun } from '../src/plugins/helpers';
 import type {
   LeavesOptions,
   ListOptions,
@@ -245,8 +245,8 @@ const brew: Plugin = {
     return [...formulas, ...casks];
   },
 
-  async healthCheck(ctx: PluginContext): Promise<void> {
-    await ctx.exec.run('brew', ['doctor'], { signal: ctx.signal });
+  async healthCheck(ctx: PluginContext, opts: MutateOptions): Promise<void> {
+    await runUnlessDryRun(ctx, opts, 'brew', ['doctor']);
   },
 };
 

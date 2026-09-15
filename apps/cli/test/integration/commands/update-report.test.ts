@@ -1,8 +1,6 @@
 // Single-plugin `update` continues past a failed ref and ends with the report
-// (#162, ADR 0052). The fake backend here is stateful on purpose: a real
-// `outdated` listing drops a package once it is upgraded, so the after
-// snapshot the host reconciles against must show only the refs still behind.
-// The fake lives in test/fixtures/fake-plugin.ts.
+// (#162, ADR 0052). The stateful fake plugin it drives lives in
+// test/fixtures/fake-plugin.ts.
 
 import { runCommand } from 'citty';
 import { type Mock, describe, expect, it } from 'vitest';
@@ -10,9 +8,9 @@ import { ErrPluginUnavailable } from '../../../src/errors';
 import {
   attemptedNames,
   captureConsole,
+  commandFor,
   fakePlugin,
   mutateFailure,
-  updateCommand,
 } from '../../fixtures/fake-plugin';
 
 describe('update continues past a failed ref and reports (#162)', () => {
@@ -24,7 +22,7 @@ describe('update continues past a failed ref and reports (#162)', () => {
       outdated: ['alpha', 'beta', 'gamma'],
       failWith: { beta: mutateFailure('beta: no bottle available') },
     });
-    await runCommand(updateCommand(plugin), { rawArgs: ['--all'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['--all'] });
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta', 'gamma']);
     const out = io.stdout();
@@ -39,7 +37,7 @@ describe('update continues past a failed ref and reports (#162)', () => {
 
   it('prints the report on a fully successful run and leaves the exit code alone', async () => {
     const plugin = fakePlugin({ verb: 'update', outdated: ['alpha', 'beta'] });
-    await runCommand(updateCommand(plugin), { rawArgs: ['--all'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['--all'] });
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     const out = io.stdout();
@@ -56,7 +54,7 @@ describe('update continues past a failed ref and reports (#162)', () => {
       outdated: ['alpha', 'beta'],
       failWith: { alpha: () => new Error('registry refused the upgrade') },
     });
-    await runCommand(updateCommand(plugin), { rawArgs: ['--all'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['--all'] });
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     const out = io.stdout();
@@ -73,7 +71,7 @@ describe('update continues past a failed ref and reports (#162)', () => {
       outdated: ['alpha'],
       failWith: { alpha: () => new Error(long) },
     });
-    await runCommand(updateCommand(plugin), { rawArgs: ['--all'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['--all'] });
 
     const out = io.stdout();
     expect(out).not.toContain(long);
@@ -86,7 +84,7 @@ describe('update continues past a failed ref and reports (#162)', () => {
       outdated: ['alpha', 'beta'],
       failWith: { beta: mutateFailure('npm ERR! code EACCES') },
     });
-    await runCommand(updateCommand(plugin), { rawArgs: ['--all', '--json'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['--all', '--json'] });
 
     expect(io.log).toHaveBeenCalledTimes(1);
     const report = JSON.parse(io.log.mock.calls[0]?.[0] as string);
@@ -108,7 +106,7 @@ describe('update continues past a failed ref and reports (#162)', () => {
 
   it('--json prints the empty report when nothing is outdated, so stdout is still a document', async () => {
     const plugin = fakePlugin({ verb: 'update', outdated: [] });
-    await runCommand(updateCommand(plugin), { rawArgs: ['--all', '--json'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['--all', '--json'] });
 
     expect(plugin.update).not.toHaveBeenCalled();
     expect(io.log).toHaveBeenCalledTimes(1);
@@ -125,7 +123,7 @@ describe('update continues past a failed ref and reports (#162)', () => {
 
   it('keeps the text messages and prints no report when nothing is outdated', async () => {
     const plugin = fakePlugin({ verb: 'update', outdated: [] });
-    await runCommand(updateCommand(plugin), { rawArgs: ['--all'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['--all'] });
 
     expect(io.stdout()).toContain('All Fake packages are up-to-date!');
     expect(io.stdout()).not.toContain('Nothing to update');
@@ -146,7 +144,7 @@ describe('update continues past a failed ref and reports (#162)', () => {
       },
     });
     await expect(
-      runCommand(updateCommand(plugin, { signal: controller.signal }), { rawArgs: ['--all'] }),
+      runCommand(commandFor(plugin, { signal: controller.signal }), { rawArgs: ['--all'] }),
     ).rejects.toBe(boom);
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
@@ -158,7 +156,7 @@ describe('update continues past a failed ref and reports (#162)', () => {
     // A dry run mutates nothing: the fake keeps reporting both outdated, which
     // the report would otherwise read as two failures.
     (plugin.update as Mock).mockImplementation(async () => {});
-    await runCommand(updateCommand(plugin), { rawArgs: ['--all', '--dry-run'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['--all', '--dry-run'] });
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     expect(io.stdout()).not.toMatch(/alpha\s+(updated|failed)/);
@@ -174,9 +172,7 @@ describe('update continues past a failed ref and reports (#162)', () => {
         throw unavailable;
       },
     });
-    await expect(runCommand(updateCommand(plugin), { rawArgs: ['--all'] })).rejects.toBe(
-      unavailable,
-    );
+    await expect(runCommand(commandFor(plugin), { rawArgs: ['--all'] })).rejects.toBe(unavailable);
 
     expect(plugin.update).not.toHaveBeenCalled();
     expect(unavailable.exitCode).toBe(1);

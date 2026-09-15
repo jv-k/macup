@@ -1,9 +1,7 @@
 // Single-plugin `install` continues past a failed ref, tells a package that
 // was already on the machine from one this run put there, and ends with the
-// report (#163, ADR 0052). The fake backend is stateful on purpose: like
-// brew, its `list()` enumerates only what is installed, so the before and
-// after snapshots the host reconciles against differ by exactly what
-// `install()` managed to add. The fake lives in test/fixtures/fake-plugin.ts.
+// report (#163, ADR 0052). The stateful fake plugin it drives lives in
+// test/fixtures/fake-plugin.ts.
 
 import { runCommand } from 'citty';
 import { type Mock, describe, expect, it } from 'vitest';
@@ -11,8 +9,8 @@ import { ErrPluginUnavailable } from '../../../src/errors';
 import {
   attemptedNames,
   captureConsole,
+  commandFor,
   fakePlugin,
-  installCommand,
   mutateFailure,
 } from '../../fixtures/fake-plugin';
 
@@ -24,7 +22,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
       verb: 'install',
       failWith: { beta: mutateFailure('beta: no bottle available') },
     });
-    await runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta', 'gamma'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta', 'gamma'] });
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta', 'gamma']);
     const out = io.stdout();
@@ -37,8 +35,8 @@ describe('install continues past a failed ref and reports (#163)', () => {
   });
 
   it('reports a package that was on the machine before the run as already present, not installed', async () => {
-    const plugin = fakePlugin({ verb: 'install', present: ['alpha'] });
-    await runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta'] });
+    const plugin = fakePlugin({ verb: 'install', installed: ['alpha'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta'] });
 
     // The backend is still asked, as before; the report is what changed.
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
@@ -51,8 +49,8 @@ describe('install continues past a failed ref and reports (#163)', () => {
   });
 
   it('takes both snapshots as full listings, never onlyOutdated, and after the loop for the second', async () => {
-    const plugin = fakePlugin({ verb: 'install', present: ['alpha'] });
-    await runCommand(installCommand(plugin), { rawArgs: ['beta'] });
+    const plugin = fakePlugin({ verb: 'install', installed: ['alpha'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['beta'] });
 
     const listCalls = (plugin.list as Mock).mock.calls;
     expect(listCalls).toHaveLength(2);
@@ -65,7 +63,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
 
   it('prints the report on a fully successful run and leaves the exit code alone', async () => {
     const plugin = fakePlugin({ verb: 'install' });
-    await runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta'] });
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     const out = io.stdout();
@@ -78,7 +76,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
 
   it('installs the tracked applist when no package is named', async () => {
     const plugin = fakePlugin({ verb: 'install' });
-    await runCommand(installCommand(plugin, { tracked: ['alpha', 'beta'] }), { rawArgs: [] });
+    await runCommand(commandFor(plugin, { tracked: ['alpha', 'beta'] }), { rawArgs: [] });
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     expect(io.stdout()).toContain('2 installed');
@@ -89,7 +87,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
       verb: 'install',
       failWith: { alpha: () => new Error('registry refused the install') },
     });
-    await runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta'] });
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     const out = io.stdout();
@@ -102,7 +100,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
   it('bounds a bare Error message the way mutateRefs bounds subprocess output', async () => {
     const long = 'x'.repeat(500);
     const plugin = fakePlugin({ verb: 'install', failWith: { alpha: () => new Error(long) } });
-    await runCommand(installCommand(plugin), { rawArgs: ['alpha'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['alpha'] });
 
     const out = io.stdout();
     expect(out).not.toContain(long);
@@ -112,10 +110,10 @@ describe('install continues past a failed ref and reports (#163)', () => {
   it('--json puts exactly one report document on stdout and the human lines on stderr', async () => {
     const plugin = fakePlugin({
       verb: 'install',
-      present: ['alpha'],
+      installed: ['alpha'],
       failWith: { gamma: mutateFailure('npm ERR! code EACCES') },
     });
-    await runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta', 'gamma', '--json'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta', 'gamma', '--json'] });
 
     expect(io.log).toHaveBeenCalledTimes(1);
     const report = JSON.parse(io.log.mock.calls[0]?.[0] as string);
@@ -143,7 +141,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
 
   it('--json prints the empty report when nothing is tracked, so stdout is still a document', async () => {
     const plugin = fakePlugin({ verb: 'install' });
-    await runCommand(installCommand(plugin), { rawArgs: ['--json'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['--json'] });
 
     expect(plugin.install).not.toHaveBeenCalled();
     expect(plugin.list).not.toHaveBeenCalled();
@@ -161,7 +159,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
 
   it('keeps the text hint and prints no report when nothing is tracked', async () => {
     const plugin = fakePlugin({ verb: 'install' });
-    await runCommand(installCommand(plugin), { rawArgs: [] });
+    await runCommand(commandFor(plugin), { rawArgs: [] });
 
     expect(plugin.list).not.toHaveBeenCalled();
     expect(io.stdout()).toContain('No packages tracked in npm.');
@@ -182,7 +180,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
       },
     });
     await expect(
-      runCommand(installCommand(plugin, { signal: controller.signal }), {
+      runCommand(commandFor(plugin, { signal: controller.signal }), {
         rawArgs: ['alpha', 'beta', 'gamma'],
       }),
     ).rejects.toBe(boom);
@@ -196,7 +194,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
     // A dry run mutates nothing: the fake keeps listing neither ref, which
     // the report would otherwise have to guess at.
     (plugin.install as Mock).mockImplementation(async () => {});
-    await runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta', '--dry-run'] });
+    await runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta', '--dry-run'] });
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     expect((plugin.install as Mock).mock.calls[0]?.[2]).toEqual({
@@ -211,7 +209,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
     const boom = new Error('plugin bug under dry-run');
     const plugin = fakePlugin({ verb: 'install', failWith: { alpha: () => boom } });
     await expect(
-      runCommand(installCommand(plugin), { rawArgs: ['alpha', 'beta', '--dry-run'] }),
+      runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta', '--dry-run'] }),
     ).rejects.toBe(boom);
 
     expect(attemptedNames(plugin)).toEqual(['alpha']);
@@ -226,9 +224,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
         throw unavailable;
       },
     });
-    await expect(runCommand(installCommand(plugin), { rawArgs: ['alpha'] })).rejects.toBe(
-      unavailable,
-    );
+    await expect(runCommand(commandFor(plugin), { rawArgs: ['alpha'] })).rejects.toBe(unavailable);
 
     expect(plugin.install).not.toHaveBeenCalled();
     expect(plugin.list).not.toHaveBeenCalled();

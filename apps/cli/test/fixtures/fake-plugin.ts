@@ -1,4 +1,4 @@
-// The fake single-verb backend the install-report and update-report suites
+// The fake single-verb plugin the install-report and update-report suites
 // drive `commandsFromManifest` with (#162, #163, ADR 0052). Pulled out during
 // #163's review (#189): install-report.test.ts had copied its scaffold from
 // update-report.test.ts, and the two copies were one edit away from drifting.
@@ -12,14 +12,14 @@
 // console capture, the failure helper) is the same for both.
 
 import type { CommandDef, SubCommandsDef } from 'citty';
-import { type MockInstance, afterEach, beforeEach, vi } from 'vitest';
+import { type Mock, type MockInstance, afterEach, beforeEach, vi } from 'vitest';
 import { type CommandDeps, commandsFromManifest } from '../../src/commands/from-manifest';
 import type { ConfigStore } from '../../src/config/store';
 import { ErrMutateFailed } from '../../src/errors';
 import { FixtureExecRunner } from '../../src/exec/fixtures';
 import type { PackageRef, Plugin, PluginManifest } from '../../src/plugins/types';
 
-/** The two mutating verbs the fake can stand in for, one per plugin. */
+/** The two mutating verbs the fake can carry, one per plugin. */
 export type FakeVerb = 'install' | 'update';
 
 /** Options both verbs share. */
@@ -30,21 +30,21 @@ interface FakeCommonOptions {
   readonly check?: () => Promise<void>;
 }
 
-/** An install backend: `list()` enumerates only what is installed. */
+/** An install plugin: `list()` enumerates only what is installed. */
 export interface FakeInstallState {
   readonly verb: 'install';
-  /** Names on the machine before the run, so the first snapshot already lists them. */
-  readonly present?: readonly string[];
+  /** Names installed before the run, so the first snapshot already lists them. */
+  readonly installed?: readonly string[];
 }
 
-/** An update backend: `list()` shows every name, flagged by whether it is still behind. */
+/** An update plugin: `list()` shows every name, flagged by whether it is still behind. */
 export interface FakeUpdateState {
   readonly verb: 'update';
   /** Names the backend reports outdated before the batch. */
   readonly outdated: readonly string[];
 }
 
-/** What {@link fakePlugin} takes: the verb picks the backend state it keeps. */
+/** What {@link fakePlugin} takes: the verb picks the backend state the fake keeps. */
 export type FakePluginOptions = FakeCommonOptions & (FakeInstallState | FakeUpdateState);
 
 /** The manifest literal, with only the chosen verb switched on. */
@@ -66,8 +66,13 @@ export function fakeManifest(verb: FakeVerb): PluginManifest {
   } as PluginManifest;
 }
 
+/** One `list()` row: every fake package is installed at 1.0.0, and only its update status varies. */
+function listing(name: string, updateStatus: 'current' | 'outdated') {
+  return { ref: { kind: 'fake', name }, installed: true, installedVersion: '1.0.0', updateStatus };
+}
+
 /**
- * Builds the fake backend. Its `list()` and the chosen verb are `vi.fn`s so a
+ * Builds the fake plugin. Its `list()` and the chosen verb are `vi.fn`s so a
  * test can count calls and read their order.
  */
 export function fakePlugin(opts: FakePluginOptions): Plugin {
@@ -84,21 +89,14 @@ export function fakePlugin(opts: FakePluginOptions): Plugin {
     });
 
   if (opts.verb === 'install') {
-    const installed = new Set(opts.present);
+    const installed = new Set(opts.installed);
     return {
       ...base,
       // Nothing here is ever outdated, so an `onlyOutdated` listing (the update
       // verb's snapshot, the wrong one for install) comes back empty and would
-      // misclassify a present ref as freshly installed.
+      // misclassify an already-installed ref as one this run put there.
       list: vi.fn(async (_ctx, listOpts) =>
-        listOpts?.onlyOutdated
-          ? []
-          : [...installed].map((name) => ({
-              ref: { kind: 'fake', name },
-              installed: true,
-              installedVersion: '1.0.0',
-              updateStatus: 'current' as const,
-            })),
+        listOpts?.onlyOutdated ? [] : [...installed].map((name) => listing(name, 'current')),
       ),
       install: mutate((name) => installed.add(name)),
     };
@@ -110,11 +108,8 @@ export function fakePlugin(opts: FakePluginOptions): Plugin {
     list: vi.fn(async (_ctx, listOpts) =>
       opts.outdated
         .map((name) => ({
-          ref: { kind: 'fake', name },
-          installed: true,
-          installedVersion: '1.0.0',
+          ...listing(name, outdated.has(name) ? 'outdated' : 'current'),
           latestVersion: '1.1.0',
-          updateStatus: outdated.has(name) ? ('outdated' as const) : ('current' as const),
         }))
         .filter((s) => !listOpts?.onlyOutdated || s.updateStatus === 'outdated'),
     ),
@@ -148,26 +143,20 @@ export function fakeDeps(opts: FakeCommandOptions = {}): CommandDeps {
   };
 }
 
-function verbCommand(plugin: Plugin, verb: FakeVerb, opts?: FakeCommandOptions): CommandDef {
+// The fake carries exactly one mutating verb, so the manifest names it.
+function verbOf(plugin: Plugin): FakeVerb {
+  return plugin.manifest.capabilities.install ? 'install' : 'update';
+}
+
+/** The generated subcommand for the fake's verb, ready for citty's `runCommand`. */
+export function commandFor(plugin: Plugin, opts?: FakeCommandOptions): CommandDef {
   const cmd = commandsFromManifest(plugin, fakeDeps(opts));
-  return (cmd.subCommands as SubCommandsDef)[verb] as CommandDef;
-}
-
-/** The generated `install` subcommand, ready for citty's `runCommand`. */
-export function installCommand(plugin: Plugin, opts?: FakeCommandOptions): CommandDef {
-  return verbCommand(plugin, 'install', opts);
-}
-
-/** The generated `update` subcommand, ready for citty's `runCommand`. */
-export function updateCommand(plugin: Plugin, opts?: FakeCommandOptions): CommandDef {
-  return verbCommand(plugin, 'update', opts);
+  return (cmd.subCommands as SubCommandsDef)[verbOf(plugin)] as CommandDef;
 }
 
 /** The names the fake's verb was asked for, in order, one per call. */
 export function attemptedNames(plugin: Plugin): string[] {
-  // The fake carries exactly one mutating verb, so whichever is present is it.
-  const verb = plugin.install ?? plugin.update;
-  return (verb as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1][0].name);
+  return (plugin[verbOf(plugin)] as Mock).mock.calls.map((c) => c[1][0].name);
 }
 
 /** An `ErrMutateFailed` for one ref, the shape `mutateRefs` throws for a backend failure. */

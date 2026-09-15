@@ -1,6 +1,6 @@
 import { runCommand } from 'citty';
 import type { CommandDef, SubCommandsDef } from 'citty';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { commandsFromManifest } from '../../../src/commands/from-manifest';
 import type { ConfigStore } from '../../../src/config/store';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
@@ -54,6 +54,14 @@ function build(plugin: Plugin) {
     signal: new AbortController().signal,
   });
 }
+
+// The fake reports every ref outdated on every `list()` call, so the after
+// snapshot the update verb now takes (#162) classifies each as failed and
+// sets exitCode=1. Restore it so the verdict cannot leak into other files.
+const savedExitCode = process.exitCode;
+afterEach(() => {
+  process.exitCode = savedExitCode;
+});
 
 describe('--dry-run threads MutateOptions.dryRun to the plugin', () => {
   it('update --dry-run calls plugin.update with dryRun: true', async () => {

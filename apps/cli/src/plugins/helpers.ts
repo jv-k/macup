@@ -12,7 +12,7 @@
 import { ErrMutateFailed, type MutateFailure } from '../errors';
 import type { ExecResult, MutateOptions, PackageRef, PackageStatus, PluginContext } from './types';
 
-// Cap on a per-ref failure message inside the aggregate ErrMutateFailed.
+// Cap on a per-ref failure message, in ErrMutateFailed and in the run report.
 // Backend stderr can run to thousands of characters (a brew build log, say);
 // this keeps the thrown error's message readable while still naming every
 // failed ref, per the "bounded/truncated, never raw unbounded output" contract.
@@ -26,7 +26,17 @@ const MAX_FAILURE_MESSAGE_LENGTH = 200;
  * exec result rather than two positional strings so no call site can swap them.
  */
 export function boundedFailureMessage(result: Pick<ExecResult, 'stdout' | 'stderr'>): string {
-  const text = result.stderr.trim() || result.stdout.trim();
+  return boundFailureText(result.stderr.trim() || result.stdout.trim());
+}
+
+/**
+ * The cap itself, over any failure text. The single-plugin command loop
+ * (#162) applies it to the message of a bare Error a plugin threw, so the
+ * report carries one truncation rule whether the text came from a subprocess
+ * or from an exception.
+ */
+export function boundFailureText(raw: string): string {
+  const text = raw.trim();
   if (text.length <= MAX_FAILURE_MESSAGE_LENGTH) return text;
   return `${text.slice(0, MAX_FAILURE_MESSAGE_LENGTH)}… (+${text.length - MAX_FAILURE_MESSAGE_LENGTH} chars)`;
 }

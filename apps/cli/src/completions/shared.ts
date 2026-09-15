@@ -87,7 +87,7 @@ export function flagsForCommand(plugin: Plugin, command: string): string[] {
   const flags: string[] = [];
   if (command === 'list') flags.push('--only-outdated', '--all', '--json');
   if (command === 'install') flags.push('--dry-run');
-  if (command === 'update') flags.push('--dry-run', '--all');
+  if (command === 'update') flags.push('--dry-run', '--all', '--json');
   if ((plugin.manifest.subtypes?.length ?? 0) > 1 && SUBTYPE_COMMANDS.has(command)) {
     for (const entry of plugin.manifest.subtypes ?? []) {
       if (entry.flag) flags.push(`--${entry.flag}`);

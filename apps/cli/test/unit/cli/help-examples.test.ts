@@ -18,7 +18,7 @@ import type { Plugin } from '../../../src/plugins/types';
 
 const silentLog = { info() {}, warn() {}, error() {}, debug() {} };
 
-// The composite `all` is a host surface, not a plugin (ADR 0033, ADR 0052) —
+// The composite `all` is a host surface, not a plugin (ADR 0033, ADR 0053) —
 // BUILTIN_PLUGINS never carries it, so its subcommand tree comes from
 // buildCompositeCommand rather than the generic commandsFromManifest.
 function treeFor(plugin: Plugin): Record<string, CommandDef> {

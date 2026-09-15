@@ -32,7 +32,7 @@ describe('regression: contextual help contains no stray artefacts', () => {
   it('every plugin with capabilities.install provides the method', () => {
     // BUILTIN_PLUGINS holds only real backends — the composite `all`
     // declares install/update but the host provides them (ADR 0033, ADR
-    // 0052), so it is not one of these and needs no exclusion here.
+    // 0053), so it is not one of these and needs no exclusion here.
     for (const plugin of BUILTIN_PLUGINS) {
       if (plugin.manifest.capabilities.install) {
         expect(typeof plugin.install).toBe('function');

@@ -8,7 +8,7 @@ describe('docsMetadata', () => {
     const ids = docsMetadata()
       .plugins.map((p) => p.id)
       .sort();
-    // BUILTIN_PLUGINS holds only real backends (ADR 0033, ADR 0052); the
+    // BUILTIN_PLUGINS holds only real backends (ADR 0033, ADR 0053); the
     // composite is not one of them, but the docs reference still lists it.
     const expected = [
       ...BUILTIN_PLUGINS.map((p) => p.manifest.id),

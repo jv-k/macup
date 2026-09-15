@@ -179,7 +179,7 @@ describe('runPlugins (wiring)', () => {
     }
     const out = lines.join('\n');
     // `deps.registry` holds only real backends; the composite `all` is
-    // appended from its own declaration (ADR 0033, ADR 0052), always
+    // appended from its own declaration (ADR 0033, ADR 0053), always
     // available (no requires of its own), which is why the denominator and
     // available count are one more than the injected registry's length.
     expect(out).toContain('plugins: 2 / 3 available');

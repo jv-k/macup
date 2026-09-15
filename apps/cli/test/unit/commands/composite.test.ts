@@ -1,5 +1,5 @@
 // The composite `all` is a host surface, not a plugin (issue #140, ADR 0033,
-// ADR 0052): COMPOSITE_MANIFEST/COMPOSITE_DECLARATION are what help,
+// ADR 0053): COMPOSITE_MANIFEST/COMPOSITE_DECLARATION are what help,
 // completions, the docs reference, and `macup plugins` read instead of
 // finding an `all` entry in BUILTIN_PLUGINS; listComposite is the host loop
 // that replaced the old plugin's own list() method. The install/update

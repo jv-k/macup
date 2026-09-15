@@ -266,7 +266,7 @@ function bareFormFor(flag: string): string | undefined {
 export function docsMetadata(): DocsMetadata {
   return {
     version: getVersion(),
-    // BUILTIN_PLUGINS holds only real backends (ADR 0033, ADR 0052); the
+    // BUILTIN_PLUGINS holds only real backends (ADR 0033, ADR 0053); the
     // composite `all` is appended from its own declaration so the docs
     // reference keeps listing it exactly as it did before that split.
     plugins: withComposite(BUILTIN_PLUGINS).map(pluginDoc),

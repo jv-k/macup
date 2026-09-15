@@ -199,7 +199,7 @@ for (const plugin of deps.registry) {
     pluginContext: deps.pluginContext,
   });
 }
-// The composite `all` is a host surface, not a plugin (ADR 0033, ADR 0052,
+// The composite `all` is a host surface, not a plugin (ADR 0033, ADR 0053,
 // issue #140): `deps.registry` holds only the real backends, so it doubles as
 // the constituent list the host fans `all` out over.
 pluginSubCommands.all = buildCompositeCommand(deps.registry, {

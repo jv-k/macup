@@ -218,6 +218,48 @@ describe('buildMutationReport: unavailable backend', () => {
   });
 });
 
+describe('buildMutationReport: backend that errored out entirely (#164)', () => {
+  it('gives the plugin a failed line with its reason and, where its refs are known, one failed entry per ref carrying that reason', () => {
+    // `all update` plans each backend with a probe; one whose probe threw a
+    // real error (not ErrPluginUnavailable) never selected its refs, so the
+    // plugin line is the only place the failure can show.
+    const unknownRefs = buildMutationReport('update', [
+      { kind: 'failed', pluginId: 'npm', refs: [], reason: 'npm registry down' },
+    ]);
+    expect(unknownRefs.plugins).toEqual([
+      { pluginId: 'npm', status: 'failed', reason: 'npm registry down' },
+    ]);
+    expect(unknownRefs.packages).toEqual([]);
+
+    // Refs known, the backend's own words kept where it said any (ADR 0052
+    // rule 2), the plugin's reason for the rest.
+    const knownRefs = buildMutationReport('install', [
+      {
+        kind: 'failed',
+        pluginId: 'npm',
+        refs: [ref('typescript', 'npm'), ref('eslint', 'npm')],
+        reason: 'npm registry down',
+        failures: [{ ref: ref('typescript', 'npm'), message: 'npm ERR! 403 Forbidden' }],
+      },
+    ]);
+    expect(knownRefs.packages).toEqual([
+      {
+        pluginId: 'npm',
+        ref: ref('typescript', 'npm'),
+        outcome: 'failed',
+        detail: 'npm ERR! 403 Forbidden',
+      },
+      {
+        pluginId: 'npm',
+        ref: ref('eslint', 'npm'),
+        outcome: 'failed',
+        detail: 'npm registry down',
+      },
+    ]);
+    expect(knownRefs.summary.failed).toBe(2);
+  });
+});
+
 describe('exitCodeFor', () => {
   it('is 1 exactly when at least one package failed', () => {
     const clean = buildMutationReport('install', [
@@ -249,6 +291,19 @@ describe('exitCodeFor', () => {
       },
     ]);
     expect(exitCodeFor(report)).toBe(0);
+  });
+
+  it('is 1 for a backend that errored out entirely, even with no package entry to count', () => {
+    // The gap ADR 0052 names: `all update` exited 0 when a whole backend
+    // errored out, because the error left no per-package failure to count.
+    // Unlike an unavailable backend, this is a real failure, not a fact
+    // about the machine.
+    const report = buildMutationReport('update', [
+      { kind: 'ran', pluginId: 'brew', refs: [ref('jq')], before: [outdated('jq')], after: [] },
+      { kind: 'failed', pluginId: 'npm', refs: [], reason: 'npm registry down' },
+    ]);
+    expect(report.summary.failed).toBe(0);
+    expect(exitCodeFor(report)).toBe(1);
   });
 });
 
@@ -287,6 +342,7 @@ const EVERY_UPDATE_OUTCOME: readonly PluginRun[] = [
     refs: [ref('macOS 15.1', 'system')],
     reason: 'softwareupdate not on PATH',
   },
+  { kind: 'failed', pluginId: 'pnpm', refs: [], reason: 'pnpm: global bin dir not found' },
 ];
 
 describe('renderJson', () => {
@@ -325,6 +381,13 @@ describe('renderText', () => {
     expect(text).toMatch(/macOS 15\.1\s+unavailable/);
     expect(text).toContain('1 updated, 1 failed, 1 unavailable');
     expect(text).not.toContain('already present');
+  });
+
+  it('tells a backend that errored out from one that is unavailable, on its own line and in the totals', () => {
+    const text = renderText(buildMutationReport('update', EVERY_UPDATE_OUTCOME));
+    expect(text).toMatch(/pnpm\s+failed: pnpm: global bin dir not found/);
+    expect(text).toMatch(/appstore\s+unavailable: mas not on PATH/);
+    expect(text).toContain('1 updated, 1 failed, 1 unavailable, 1 backend failed');
   });
 
   it('says there was nothing to do when no package reached the run', () => {

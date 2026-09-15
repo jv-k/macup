@@ -1,4 +1,4 @@
-# ADR 0052: The composite `all` is a host surface, closed to real backends
+# ADR 0053: The composite `all` is a host surface, closed to real backends
 
 > Status: accepted · Date: 2026-09-15 · Deciders: John Valai
 

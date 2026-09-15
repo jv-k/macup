@@ -8,7 +8,7 @@ only implementations. Adding a new plugin is typically:
 2. Import and append it to `BUILTIN_PLUGINS` in
    [`src/plugins/registry.ts`](../src/plugins/registry.ts), real backends
    only. The composite `all` is a host surface built over that list, not a
-   member of it (`src/commands/composite.ts`, ADR 0033, ADR 0052).
+   member of it (`src/commands/composite.ts`, ADR 0033, ADR 0053).
 3. Write an integration test at `test/integration/plugins/<id>.test.ts` that
    exercises `list` / `install` / `update` against recorded fixtures.
 

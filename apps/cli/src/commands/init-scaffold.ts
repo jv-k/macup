@@ -100,7 +100,7 @@ export async function detectInstalled(
     const m = plugin.manifest;
     // Nothing about an untrackable plugin belongs in an applist: `system` and
     // `xcode` are update-only and declare no config keys. The composite `all`
-    // is a host surface, not a plugin (ADR 0033, ADR 0052), so `registry`
+    // is a host surface, not a plugin (ADR 0033, ADR 0053), so `registry`
     // never carries it — no separate exclusion needed here any more.
     if (!m.capabilities.track || m.configKeys.length === 0) continue;
 

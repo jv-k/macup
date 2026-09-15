@@ -66,7 +66,7 @@ export function buildCheckDeps(deps: CliDeps): CheckDeps {
     // Every built-in gets deep-probed, not just the registry-filtered
     // set — a missing binary should show up as a warning, not vanish.
     // BUILTIN_PLUGINS is real backends only; the composite `all` is a host
-    // surface, not a plugin (ADR 0033, ADR 0052), so there is nothing to
+    // surface, not a plugin (ADR 0033, ADR 0053), so there is nothing to
     // filter out here any more.
     plugins: BUILTIN_PLUGINS,
     paths: deps.resolvePaths(),

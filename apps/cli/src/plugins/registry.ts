@@ -53,7 +53,7 @@ export { isOnPath, pathTo };
  * backends and the rest of the app (`CLAUDE.md`).
  *
  * Real backends only — the composite `all` is a host surface built over this
- * list, not a member of it (ADR 0033, ADR 0052, issue #140). Its own
+ * list, not a member of it (ADR 0033, ADR 0053, issue #140). Its own
  * declaration lives in `commands/composite.ts`.
  */
 export const BUILTIN_PLUGINS: readonly Plugin[] = [

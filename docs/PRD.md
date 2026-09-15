@@ -327,7 +327,7 @@ apps/cli/plugins/xcode.ts
 apps/cli/plugins/system.ts
 apps/cli/src/commands/composite.ts — `all` host surface: fan-out with per-plugin
                                       error isolation over the real backends
-                                      above, not a plugin of its own (ADR 0052)
+                                      above, not a plugin of its own (ADR 0053)
 
 apps/cli/src/exec/run.ts           — ExecaExecRunner (default subprocess runner)
 apps/cli/src/exec/streaming.ts     — StreamingExecRunner decorator → UiSink (TTY default)

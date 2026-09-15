@@ -301,7 +301,7 @@ export interface SearchResult {
  * `check()` is the availability gate and must throw `ErrPluginUnavailable`
  * rather than a bare `Error` (ADR 0011), because the host's `all` fan-out
  * (`commands/composite.ts`) catches exactly that class to isolate an
- * unavailable backend and carry on (ADR 0033, ADR 0052).
+ * unavailable backend and carry on (ADR 0033, ADR 0053).
  * Unavailable is a fact about the machine, not a user choice — `skip.all`
  * (ADR 0037) is the separate mechanism for the latter.
  */

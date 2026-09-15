@@ -162,7 +162,7 @@ export async function runInstallCompletions(args: ParsedArgs, deps: CliDeps): Pr
   const shell = resolveShellArg(value, deps.env);
   if (!shell) return;
 
-  // `deps.registry` holds only real backends (ADR 0033, ADR 0052); the
+  // `deps.registry` holds only real backends (ADR 0033, ADR 0053); the
   // composite `all` is appended from its own declaration so completions keep
   // offering it exactly as they did when it lived in the registry.
   const report = await installCompletions(shell, withComposite(deps.registry), {

@@ -162,7 +162,7 @@ plugins/             one file per backend (sibling of src/, not under it)
   system.ts
 src/commands/composite.ts  the `all` host surface: fan-out with per-plugin
                             error isolation, built over the real backends
-                            rather than a plugin of its own (ADR 0052)
+                            rather than a plugin of its own (ADR 0053)
 src/config/          applist.yaml schema, XDG paths, backup/restore
 src/exec/            subprocess wrapper (run.ts) — central shell-out path
 src/ui/              output helpers, prompt wrappers, log / section / pill

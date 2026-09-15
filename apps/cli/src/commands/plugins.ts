@@ -140,7 +140,7 @@ export function formatPluginsReport(report: PluginsReport, opts: FormatOptions =
 
 /**
  * `macup plugins`: one line per plugin, flagging any whose binary is missing.
- * `deps.registry` holds only the real backends (ADR 0033, ADR 0052) — the
+ * `deps.registry` holds only the real backends (ADR 0033, ADR 0053) — the
  * composite `all` is appended from its own declaration so it still shows up
  * here exactly as it did when it lived in the registry.
  */

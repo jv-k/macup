@@ -81,7 +81,7 @@ export interface OutdatedReportDeps {
  * binary doesn't kill the whole report. Listing fully (not `onlyOutdated`) is
  * what lets `check` see uncheckable packages, which `onlyOutdated` filters out.
  * `deps.plugins` is expected to be real backends only — the composite `all`
- * is a host surface, not a plugin (ADR 0033, ADR 0052), so it is never in
+ * is a host surface, not a plugin (ADR 0033, ADR 0053), so it is never in
  * that list and this no longer needs to filter it out itself.
  */
 export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<OutdatedReport> {

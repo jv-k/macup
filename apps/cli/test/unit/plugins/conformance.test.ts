@@ -87,7 +87,7 @@ describe('plugin conformance — every builtin obeys the contract', () => {
         // Methods are optional on the interface; conformance is "if you claim
         // the capability, you implement the method". BUILTIN_PLUGINS holds
         // only real backends — the composite `all`, whose install/update are
-        // host-owned (ADR 0033, ADR 0052), is not one of them.
+        // host-owned (ADR 0033, ADR 0053), is not one of them.
         if (manifest.capabilities.install) {
           expect(typeof plugin.install).toBe('function');
         }

@@ -1,6 +1,6 @@
 import { runCommand } from 'citty';
 import type { CommandDef, SubCommandsDef } from 'citty';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { commandsFromManifest } from '../../../src/commands/from-manifest';
 import type { ConfigStore } from '../../../src/config/store';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
@@ -55,6 +55,14 @@ function build(plugin: Plugin) {
   });
 }
 
+// The fake reports every ref outdated on every `list()` call, so the after
+// snapshot the update verb now takes (#162) classifies each as failed and
+// sets exitCode=1. Restore it so the verdict cannot leak into other files.
+const savedExitCode = process.exitCode;
+afterEach(() => {
+  process.exitCode = savedExitCode;
+});
+
 describe('--dry-run threads MutateOptions.dryRun to the plugin', () => {
   it('update --dry-run calls plugin.update with dryRun: true', async () => {
     const plugin = fakePlugin();
@@ -88,7 +96,7 @@ describe('a plugin with empty configKeys still updates via its own update()', ()
   it('a system/xcode-like plugin (empty configKeys) updates via its own update()', async () => {
     // Regression: commandsFromManifest never special-cases the composite by id
     // any more — `all` is a host surface built elsewhere (commands/composite.ts,
-    // ADR 0033, ADR 0052) and never reaches this factory. system and xcode have
+    // ADR 0033, ADR 0053) and never reaches this factory. system and xcode have
     // empty configKeys too, but always invoke their own backend directly
     // (ADR 0037: "stays fully available").
     const plugin: Plugin = {

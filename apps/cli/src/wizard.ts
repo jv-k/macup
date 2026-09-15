@@ -121,7 +121,7 @@ function buildGroups(plugins: readonly Plugin[]): Array<{
   items: Array<{ label: string; value: Target }>;
 }> {
   // `plugins` is expected to be real backends only — the composite `all` is a
-  // host surface, not a plugin (ADR 0033, ADR 0052), so it never reaches the
+  // host surface, not a plugin (ADR 0033, ADR 0053), so it never reaches the
   // wizard's target list and there is nothing to filter out here any more.
   const groups = new Map<string, Array<{ label: string; value: Target }>>();
   for (const plugin of plugins) {

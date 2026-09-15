@@ -23,7 +23,7 @@
 import type { ApplistKey } from '../config/schema';
 import { ErrPluginUnavailable } from '../errors';
 import { errorMessage, probe, probeOutcomeReason } from '../plugins/probe';
-import type { ListOptions, Plugin, PluginContext } from '../plugins/types';
+import type { Plugin, PluginContext } from '../plugins/types';
 import { resolveConfigKey } from './from-manifest';
 
 /** One applist key's worth of detected packages. */
@@ -61,17 +61,18 @@ export interface DetectionPlan {
 const COMPOSITE_ID = 'all';
 
 /**
- * The names one scope of a plugin would have the scaffold track: its leaves
+ * The names one subtype of a plugin would have the scaffold track: its leaves
  * when it can tell a chosen install from a dependency (#128), otherwise
  * everything it reports installed. `check()` has already passed for the
- * plugin, so a throw here is a listing fault of this scope alone, and it is
+ * plugin, so a throw here is a listing fault of this subtype alone, and it is
  * classified the way the probe classifies one so the caller sees one shape.
  */
 async function askNames(
   plugin: Plugin,
   ctx: PluginContext,
-  scope: ListOptions,
+  subtype: string | undefined,
 ): Promise<{ names: string[] } | { reason: string }> {
+  const scope = subtype ? { subtype } : {};
   if (plugin.leaves) {
     try {
       return { names: (await plugin.leaves(ctx, scope)).map((r) => r.name) };
@@ -134,7 +135,7 @@ export async function detectInstalled(
       const key = resolveConfigKey(plugin, subtype);
       if (!key) continue;
 
-      const asked = await askNames(plugin, ctx, subtype ? { subtype } : {});
+      const asked = await askNames(plugin, ctx, subtype);
       if ('reason' in asked) {
         failed.push({ pluginId: m.id, reason: asked.reason });
         continue;

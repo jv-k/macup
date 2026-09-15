@@ -65,7 +65,7 @@ A package is installed when it is present on the machine, as its backend reports
 _Avoid_: present
 
 **Leaf**:
-An installed package a person chose, as against one its backend pulled in as a dependency of another. Only a backend with a dependency closure can tell the two apart (Homebrew formulas); where there is no closure, every installed package is a leaf. Bare `init` tracks leaves, because a dependency is a consequence of intent rather than the intent itself (ADR 0051).
+An installed package a person chose, as against one its backend pulled in as a dependency of another. Only a backend with a dependency closure can tell the two apart (Homebrew formulas). Where there is no closure, every installed package is a leaf. Bare `init` tracks leaves, because a dependency is a consequence of intent rather than the intent itself (ADR 0051).
 _Avoid_: top-level, explicit install, on-request, root package
 
 **Outdated**:

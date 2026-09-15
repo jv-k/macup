@@ -196,6 +196,33 @@ describe('brew plugin — leaves', () => {
     const refs = await brewPlugin.leaves?.(ctx);
     expect(refs?.map((r) => r.name)).toEqual(['git', 'ripgrep', 'firefox', 'visual-studio-code']);
   });
+
+  it('throws when `brew leaves` exits non-zero, so init records a failed backend rather than an empty formulas list', async () => {
+    // A non-zero exit is a returned result, not a throw (ExecRunner), so the
+    // plugin has to read it: a broken tap would otherwise scaffold no formulas
+    // and report nothing, which is the silent no-op ADR 0051 rules out.
+    const ctx: PluginContext = {
+      exec: new FixtureExecRunner({
+        fixtures: [
+          {
+            cmd: 'brew',
+            args: ['leaves'],
+            result: {
+              stdout: '',
+              stderr: 'Error: No available formula with the name "x"',
+              exitCode: 1,
+            },
+          },
+        ],
+        onPath: ['brew'],
+      }),
+      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      signal: new AbortController().signal,
+    };
+    await expect(brewPlugin.leaves?.(ctx, { subtype: 'formulas' })).rejects.toThrow(
+      /brew leaves exited 1: Error: No available formula/,
+    );
+  });
 });
 
 describe('brew plugin — healthCheck', () => {

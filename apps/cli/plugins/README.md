@@ -131,7 +131,8 @@ the installed packages a person chose, as `PackageRef[]`, scoped by
 `opts.subtype` the way `list` is. A subtype with no closure answers with
 everything installed under it. Bare `macup init` files leaves rather than the
 whole closure when the method exists and otherwise scans `list()`, so a plugin
-whose installs are already top-level (npm, pnpm, pip) declares nothing.
+whose every install is a leaf already (npm, pnpm, pip) declares nothing.
 Presence is the signal, as with `search` and `healthCheck` (ADR 0051). brew
-implements it with `brew leaves` for formulas and the installed-cask listing
-for casks.
+implements it with `brew leaves` for formulas and the names-only cask listing
+for casks, and turns a non-zero exit into a throw so `init` records a failed
+backend rather than an empty list.

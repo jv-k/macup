@@ -37,6 +37,11 @@
   },
   {
     "cmd": "brew",
+    "args": ["list", "--cask"],
+    "result": { "stdout": "firefox\nvisual-studio-code\n", "stderr": "", "exitCode": 0 }
+  },
+  {
+    "cmd": "brew",
     "args": ["leaves"],
     "result": { "stdout": "git\nripgrep\n", "stderr": "", "exitCode": 0 }
   },

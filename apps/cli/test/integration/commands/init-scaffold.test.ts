@@ -308,7 +308,7 @@ describe('detectInstalled', () => {
     ]);
   });
 
-  it('records a backend whose leaves() fails the same way a failed listing is, and keeps the others', async () => {
+  it('records a backend whose leaves() throws, as it does a failed listing, and keeps the others', async () => {
     const registry = [
       fake({ id: 'npm', configKeys: ['npm'], statuses: [pkg('typescript', true)] }),
       fake({

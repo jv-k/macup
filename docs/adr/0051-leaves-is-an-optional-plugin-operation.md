@@ -13,9 +13,8 @@ Homebrew resolves a different closure.
 
 `brew leaves` is the set wanted: installed formulas that no other installed formula or cask depends
 on. It is formula-only, and Homebrew has no cask counterpart, so every installed cask is filed as a
-leaf. Which backends can tell
-a chosen install from a dependency, and how to ask, is per-backend knowledge, and `CLAUDE.md` keeps
-that inside plugins: `init` must not learn a brew command.
+leaf. Which backends can tell a chosen install from a dependency, and how to ask, is per-backend
+knowledge, and `CLAUDE.md` keeps that inside plugins: `init` must not learn a brew command.
 
 Two precedents constrain the shape. `PluginCapabilities` is the user-facing verb surface, and an
 operation with no verb is signalled by method presence, as `search`, `uninstall`, and
@@ -34,14 +33,17 @@ names. Returning `PackageStatus[]` would oblige every implementer either to fetc
 currency as well (three subprocesses for brew where one does), or to report a currency it never
 checked, which ADR 0036's tri-state forbids.
 
-**brew implements it with `brew leaves` for formulas and the installed-cask listing for casks.**
-`list()` is unchanged.
+**brew implements it with `brew leaves` for formulas and the names-only `brew list --cask` for
+casks.** The names-only form is enough for a set of refs, and unlike the versioned listing `list()`
+runs it does not abort on the first bad cask. `list()` is unchanged.
 
 **`init` prefers `leaves()` where a plugin has one, and otherwise files what `list()` reports
-installed.** The fallback keeps every plugin without the operation exactly as it was: npm, pnpm, pip,
-and the App Store report top-level installs already. A `leaves()` failure is recorded as a failed
+installed.** The fallback keeps every plugin without the operation exactly as it was: for npm, pnpm,
+pip, and the App Store every install is a leaf already. A `leaves()` failure is recorded as a failed
 backend, the same shape a failed listing takes, so one broken backend still does not sink the scan
-(ADR 0047).
+(ADR 0047). A backend that exits non-zero is such a failure: `ExecRunner` returns the exit rather
+than throwing, so the plugin turns it into one, or a broken tap would scaffold no formulas and
+report nothing.
 
 ## Alternatives
 

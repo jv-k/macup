@@ -47,6 +47,7 @@ case "$*" in
   "leaves")                     printf 'ripgrep\\nfd\\n' ;;
   "outdated --json=v2 --formula") printf '{"formulae":[],"casks":[]}' ;;
   "list --cask --versions")     printf 'firefox 130.0\\n' ;;
+  "list --cask")                printf 'firefox\\n' ;;
   "outdated --json=v2 --cask")  printf '{"formulae":[],"casks":[]}' ;;
   *)                            : ;;
 esac

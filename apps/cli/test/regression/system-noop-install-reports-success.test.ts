@@ -20,6 +20,7 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import systemPlugin from '../../plugins/system';
+import { ErrMutateFailed } from '../../src/errors';
 import { type FixtureEntry, FixtureExecRunner, loadFixtures } from '../../src/exec/fixtures';
 import type { ExecResult, PluginContext } from '../../src/plugins/types';
 
@@ -72,26 +73,32 @@ describe('#120: a system install softwareupdate no-ops is a failure', () => {
     ).rejects.toThrow(/no such update/i);
   });
 
-  it('aborts before the remaining refs rather than reporting a partial success', async () => {
-    // Proven by what was invoked, not by the rejection: the second ref has a
-    // perfectly good fixture, so a loop that carried on would still reject
-    // with the first ref's error and the test would pass regardless.
+  it('carries on to the remaining refs and reports the no-op in the aggregate, not as a partial success', async () => {
+    // Proven by what was invoked, not by the rejection alone. Until #160 this
+    // loop aborted at the no-op and the second ref never ran; now every ref is
+    // attempted and the batch throws once, naming only the ref that no-op'd.
     const exec = new RecordingExecRunner({
       fixtures: await fixtures(),
       onPath: ['softwareupdate'],
     });
     const ctx: PluginContext = { exec, log: silentLog, signal: new AbortController().signal };
-    await expect(
-      systemPlugin.install?.(
+    const err = await systemPlugin
+      .install?.(
         ctx,
         [
           { kind: 'system', name: NOOP_LABEL },
           { kind: 'system', name: REAL_LABEL },
         ],
         {},
-      ),
-    ).rejects.toThrow(/no such update/i);
-    expect(exec.calls).toEqual([['softwareupdate', '--install', NOOP_LABEL, '--verbose']]);
+      )
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ErrMutateFailed);
+    expect((err as ErrMutateFailed).exitCode).toBe(1);
+    expect((err as ErrMutateFailed).failures.map((f) => f.ref.name)).toEqual([NOOP_LABEL]);
+    expect(exec.calls).toEqual([
+      ['softwareupdate', '--install', NOOP_LABEL, '--verbose'],
+      ['softwareupdate', '--install', REAL_LABEL, '--verbose'],
+    ]);
   });
 
   it('catches a no-op on a later ref, not just the first', async () => {
@@ -137,11 +144,17 @@ describe('#120: what must keep working', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('still raises on a non-zero exit, preserving the existing message', async () => {
+  it('still raises on a non-zero exit, carrying the backend text through the aggregate', async () => {
     const ctx = await makeCtx();
-    await expect(
-      systemPlugin.install?.(ctx, [{ kind: 'system', name: 'NeedsRoot-1.0' }], {}),
-    ).rejects.toThrow(/exited 1: softwareupdate: must be run as root/);
+    const err = await systemPlugin
+      .install?.(ctx, [{ kind: 'system', name: 'NeedsRoot-1.0' }], {})
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ErrMutateFailed);
+    expect((err as ErrMutateFailed).exitCode).toBe(1);
+    expect((err as ErrMutateFailed).failures[0]?.message).toBe(
+      'softwareupdate: must be run as root',
+    );
+    expect((err as Error).message).toMatch(/NeedsRoot-1\.0: softwareupdate: must be run as root/);
   });
 
   it('executes nothing under --dry-run, so the no-op check cannot fire', async () => {

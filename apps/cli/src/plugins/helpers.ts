@@ -10,7 +10,7 @@
  */
 
 import { ErrMutateFailed, type MutateFailure } from '../errors';
-import type { MutateOptions, PackageRef, PackageStatus, PluginContext } from './types';
+import type { ExecResult, MutateOptions, PackageRef, PackageStatus, PluginContext } from './types';
 
 // Cap on a per-ref failure message, in ErrMutateFailed and in the run report.
 // Backend stderr can run to thousands of characters (a brew build log, say);
@@ -19,12 +19,23 @@ import type { MutateOptions, PackageRef, PackageStatus, PluginContext } from './
 const MAX_FAILURE_MESSAGE_LENGTH = 200;
 
 /**
- * Bound one failure message to the cap above, naming how much was cut.
- * Exported so the command loop applies the same bound to a plugin that threw
- * a bare Error rather than an `ErrMutateFailed` (#162): the report carries one
- * truncation rule, not two.
+ * The per-ref failure text inside an {@link ErrMutateFailed}: stderr, falling
+ * back to stdout, cut to the cap above. Exported so the plugins that keep a
+ * hand-rolled loop (mas, system, xcode — #160) bound their failures the same
+ * way `mutateRefs` does, with one cap rather than a copy in each. Takes the
+ * exec result rather than two positional strings so no call site can swap them.
  */
-export function boundedFailureMessage(raw: string): string {
+export function boundedFailureMessage(result: Pick<ExecResult, 'stdout' | 'stderr'>): string {
+  return boundFailureText(result.stderr.trim() || result.stdout.trim());
+}
+
+/**
+ * The cap itself, over any failure text. The single-plugin command loop
+ * (#162) applies it to the message of a bare Error a plugin threw, so the
+ * report carries one truncation rule whether the text came from a subprocess
+ * or from an exception.
+ */
+export function boundFailureText(raw: string): string {
   const text = raw.trim();
   if (text.length <= MAX_FAILURE_MESSAGE_LENGTH) return text;
   return `${text.slice(0, MAX_FAILURE_MESSAGE_LENGTH)}… (+${text.length - MAX_FAILURE_MESSAGE_LENGTH} chars)`;
@@ -82,7 +93,7 @@ export async function mutateRefs(
     }
     const r = await ctx.exec.run(cmd, args, { signal: ctx.signal, kind: 'user-action' });
     if (r.exitCode !== 0) {
-      failures.push({ ref, message: boundedFailureMessage(r.stderr.trim() || r.stdout.trim()) });
+      failures.push({ ref, message: boundedFailureMessage(r) });
     }
   }
   if (failures.length > 0) {

@@ -101,21 +101,25 @@ export class ErrBackupNotFound extends MacupError {
   }
 }
 
-/** One ref's failed install or update attempt, and its bounded failure text. */
+/** One failed ref inside an install/update batch, and its bounded failure text. */
 export interface MutateFailure {
-  /** The package ref whose install/update attempt failed. */
+  /**
+   * The package ref that failed: a non-zero exit, or an exit-0 no-op the
+   * plugin recognises as one (system's `No such update`).
+   */
   readonly ref: PackageRef;
   /** Bounded/truncated text: a subprocess's stderr (falling back to stdout) from `mutateRefs`, or the message of an error the command loop caught (#162). Never the raw unbounded output. */
   readonly message: string;
 }
 
 /**
- * `mutateRefs` (the shared per-ref loop in `src/plugins/helpers.ts`, used by
- * brew/npm/cargo/pip/go/pnpm) attempts every ref in a batch rather than
- * aborting at the first failure, then throws this once after the batch
- * finishes, naming every ref that failed and its message. Replaces the bare
- * `Error` `mutateRefs` used to throw on a non-zero exit, which escaped the
- * CLI's error boundary as a raw stack trace instead of a one-line message (#122).
+ * An install or update batch attempts every ref rather than aborting at the
+ * first failure, then throws this once after the batch finishes, naming every
+ * ref that failed and its message. `mutateRefs` (the shared per-ref loop in
+ * `src/plugins/helpers.ts`, used by brew/npm/cargo/pip/go/pnpm) throws it, and
+ * so do the loops mas, system and xcode keep for themselves (#160). Replaces
+ * the bare `Error` those loops used to throw on a non-zero exit, which escaped
+ * the CLI's error boundary as a raw stack trace instead of a one-line message (#122).
  */
 export class ErrMutateFailed extends MacupError {
   /** @see {@link MacupError.kind} */

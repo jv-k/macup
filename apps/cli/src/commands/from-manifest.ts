@@ -14,7 +14,7 @@ import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ApplistKey } from '../config/schema';
 import type { ConfigStore, SaveResult } from '../config/store';
 import { ErrMutateFailed, type MutateFailure } from '../errors';
-import { boundedFailureMessage } from '../plugins/helpers';
+import { boundFailureText } from '../plugins/helpers';
 import { errorMessage, probeOrThrow } from '../plugins/probe';
 import { resolveSelection } from '../plugins/selection';
 import {
@@ -190,7 +190,7 @@ async function runHealthCheck(
 // the report carries one truncation rule whichever path the error took.
 function failuresFor(ref: PackageRef, err: unknown): readonly MutateFailure[] {
   if (err instanceof ErrMutateFailed) return err.failures;
-  return [{ ref, message: boundedFailureMessage(errorMessage(err)) }];
+  return [{ ref, message: boundFailureText(errorMessage(err)) }];
 }
 
 /** Extracts non-flag positional args, or prints usage + sets exit 1 and returns null. */

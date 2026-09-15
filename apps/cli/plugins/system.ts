@@ -1,4 +1,6 @@
+import { ErrMutateFailed, type MutateFailure } from '../src/errors';
 import { defaultCheck } from '../src/plugins/defaults';
+import { boundedFailureMessage } from '../src/plugins/helpers';
 import type {
   ListOptions,
   MutateOptions,
@@ -58,11 +60,20 @@ async function fetchUpdates(ctx: PluginContext): Promise<PackageStatus[]> {
   }));
 }
 
+// The per-ref text for the exit-0 no-op. `ErrMutateFailed` prefixes each
+// failure with its ref name, so this does not repeat the label.
+const NO_SUCH_UPDATE_MESSAGE =
+  'no such update, nothing was installed. Apple stamps labels with a version, so this one may be stale or already applied; run `macup system list` for the labels currently on offer.';
+
+// Every ref is attempted; a failed one is recorded, not thrown, so one stale
+// label cannot strand the rest of the batch (#160). Throws one ErrMutateFailed
+// after the loop naming every failure, the same shape `mutateRefs` produces.
 async function runInstall(
   ctx: PluginContext,
   refs: readonly PackageRef[],
   opts: MutateOptions,
 ): Promise<void> {
+  const failures: MutateFailure[] = [];
   for (const ref of refs) {
     if (opts.dryRun) {
       ctx.log.info(`[dry-run] softwareupdate --install ${ref.name} --verbose`);
@@ -73,15 +84,13 @@ async function runInstall(
       kind: 'user-action',
     });
     if (r.exitCode !== 0) {
-      throw new Error(
-        `softwareupdate --install ${ref.name} exited ${r.exitCode}: ${r.stderr.trim()}`,
-      );
+      failures.push({ ref, message: boundedFailureMessage(r) });
+    } else if (reportsNoSuchUpdate(r)) {
+      failures.push({ ref, message: NO_SUCH_UPDATE_MESSAGE });
     }
-    if (reportsNoSuchUpdate(r)) {
-      throw new Error(
-        `softwareupdate --install ${ref.name}: no such update, nothing was installed. Apple stamps labels with a version, so this one may be stale or already applied; run \`macup system list\` for the labels currently on offer.`,
-      );
-    }
+  }
+  if (failures.length > 0) {
+    throw new ErrMutateFailed(failures);
   }
 }
 

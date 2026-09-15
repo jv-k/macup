@@ -275,7 +275,7 @@ describe('fanOutComposite — install', () => {
     // present ref that is up to date drops out of an outdated listing and
     // would read as freshly installed.
     const store = await storeWith('brew:\n  formulas:\n    - jq\n');
-    const brew = mutateFake({ verb: 'install', id: 'brew', present: ['jq'] });
+    const brew = mutateFake({ verb: 'install', id: 'brew', installed: ['jq'] });
     const plans = await planComposite('install', [brew], store, makeCtx);
 
     expect(brew.list).toHaveBeenCalledTimes(1);
@@ -287,7 +287,7 @@ describe('fanOutComposite — install', () => {
 
   it('takes no install listing where no report will read it: a dry run, or nothing tracked', async () => {
     const store = await storeWith('brew:\n  formulas:\n    - jq\n');
-    const brew = mutateFake({ verb: 'install', id: 'brew', present: ['jq'] });
+    const brew = mutateFake({ verb: 'install', id: 'brew', installed: ['jq'] });
     const npm = mutateFake({ verb: 'install', id: 'npm' });
     const plans = await planComposite('install', [brew, npm], store, makeCtx, { dryRun: true });
 
@@ -347,15 +347,15 @@ describe('fanOutComposite — install', () => {
 });
 
 // A stateful constituent for the command blocks. Its `list()` enumerates what
-// is on the machine (like brew), so the before and after snapshots differ by
-// exactly what the verb's mutate managed to do: under update every present
+// is installed (like brew), so the before and after snapshots differ by
+// exactly what the verb's mutate managed to do: under update every installed
 // name starts outdated and `update()` marks it current, under install
-// `install()` adds to the present set (#164, #165).
+// `install()` adds to the installed set (#164, #165).
 interface MutateFakeOptions {
   readonly verb: MutationMode;
   readonly id: string;
-  /** Names on the machine before the run, so the first listing already reports them: outdated under update, current under install. */
-  readonly present?: readonly string[];
+  /** Names installed before the run, so the first listing already reports them: outdated under update, current under install. */
+  readonly installed?: readonly string[];
   /** What the verb's mutate throws for a name, instead of moving it. */
   readonly failWith?: Readonly<Record<string, (ref: PackageRef) => unknown>>;
   readonly check?: () => Promise<void>;
@@ -366,8 +366,8 @@ interface MutateFakeOptions {
 
 function mutateFake(opts: MutateFakeOptions): Plugin {
   const { verb, id } = opts;
-  const present = new Set(opts.present);
-  const outdated = new Set(verb === 'update' ? opts.present : []);
+  const installed = new Set(opts.installed);
+  const outdated = new Set(verb === 'update' ? opts.installed : []);
   const base = fakePlugin(id, [], {});
   const configKeys = opts.configKeys ?? (id === 'brew' ? ['brew.formulas'] : [id]);
   const mutate = vi.fn(async (_ctx: PluginContext, refs: readonly PackageRef[]) => {
@@ -375,7 +375,7 @@ function mutateFake(opts: MutateFakeOptions): Plugin {
       const fail = opts.failWith?.[ref.name];
       if (fail) throw fail(ref);
       if (verb === 'update') outdated.delete(ref.name);
-      else present.add(ref.name);
+      else installed.add(ref.name);
     }
   });
   return {
@@ -384,11 +384,11 @@ function mutateFake(opts: MutateFakeOptions): Plugin {
     check: opts.check ?? (async () => {}),
     // Nothing is outdated under install, so an `onlyOutdated` listing (the
     // update verb's snapshot, the wrong one for install) comes back empty
-    // and would misclassify a present ref as freshly installed.
-    list: vi.fn(
+    // and would misclassify an installed ref as freshly installed.
+    list: vi.fn<Plugin['list']>(
       opts.list ??
         (async (_ctx, listOpts) =>
-          [...present]
+          [...installed]
             .map((name) => ({
               ref: { kind: id, name },
               installed: true,
@@ -399,7 +399,7 @@ function mutateFake(opts: MutateFakeOptions): Plugin {
             }))
             .filter((s) => !listOpts?.onlyOutdated || s.updateStatus === 'outdated')),
     ),
-    ...(verb === 'update' ? { update: mutate } : { install: mutate }),
+    [verb]: mutate,
   };
 }
 
@@ -461,7 +461,7 @@ describe('all update continues within and across backends, and reports (#164)', 
     const brew = mutateFake({
       verb,
       id: 'brew',
-      present: ['git', 'jq', 'fd'],
+      installed: ['git', 'jq', 'fd'],
       failWith: { jq: (ref) => new ErrMutateFailed([{ ref, message: 'jq: checksum mismatch' }]) },
     });
     await runCommand(allCommand(verb, [brew], store), { rawArgs: [] });
@@ -481,7 +481,7 @@ describe('all update continues within and across backends, and reports (#164)', 
     const npm = mutateFake({
       verb,
       id: 'npm',
-      present: ['x'],
+      installed: ['x'],
       list: async () => {
         throw new Error('npm registry down');
       },
@@ -493,7 +493,7 @@ describe('all update continues within and across backends, and reports (#164)', 
         throw new ErrPluginUnavailable('mas', 'mas not on PATH');
       },
     });
-    const brew = mutateFake({ verb, id: 'brew', present: ['git'] });
+    const brew = mutateFake({ verb, id: 'brew', installed: ['git'] });
     await runCommand(allCommand(verb, [npm, mas, brew], store), { rawArgs: [] });
 
     expect(mutatedNames(verb, brew)).toEqual(['git']);
@@ -515,7 +515,7 @@ describe('all update continues within and across backends, and reports (#164)', 
         throw new ErrPluginUnavailable('mas', 'mas not on PATH');
       },
     });
-    const brew = mutateFake({ verb, id: 'brew', present: ['git'] });
+    const brew = mutateFake({ verb, id: 'brew', installed: ['git'] });
     await runCommand(allCommand(verb, [mas, brew], store), { rawArgs: [] });
 
     const out = stdout();
@@ -527,8 +527,8 @@ describe('all update continues within and across backends, and reports (#164)', 
 
   it('prints the report on a fully successful run, keeps the skip.all line, and leaves the exit code alone', async () => {
     const store = await storeWith('skip:\n  all:\n    - system\n');
-    const brew = mutateFake({ verb, id: 'brew', present: ['git', 'jq'] });
-    const system = mutateFake({ verb, id: 'system', present: ['macos-15.6'] });
+    const brew = mutateFake({ verb, id: 'brew', installed: ['git', 'jq'] });
+    const system = mutateFake({ verb, id: 'system', installed: ['macos-15.6'] });
     await runCommand(allCommand(verb, [brew, system], store), { rawArgs: [] });
 
     expect(mutatedNames(verb, brew)).toEqual(['git', 'jq']);
@@ -547,13 +547,13 @@ describe('all update continues within and across backends, and reports (#164)', 
     const brew = mutateFake({
       verb,
       id: 'brew',
-      present: ['git', 'jq'],
+      installed: ['git', 'jq'],
       failWith: { jq: () => new Error('jq: checksum mismatch') },
     });
     const npm = mutateFake({
       verb,
       id: 'npm',
-      present: ['x'],
+      installed: ['x'],
       list: async () => {
         throw new Error('npm registry down');
       },
@@ -565,7 +565,7 @@ describe('all update continues within and across backends, and reports (#164)', 
         throw new ErrPluginUnavailable('mas', 'mas not on PATH');
       },
     });
-    const system = mutateFake({ verb, id: 'system', present: ['macos-15.6'] });
+    const system = mutateFake({ verb, id: 'system', installed: ['macos-15.6'] });
     await runCommand(allCommand(verb, [brew, npm, mas, system], store), { rawArgs: ['--json'] });
 
     expect(logSpy).toHaveBeenCalledTimes(1);
@@ -623,7 +623,7 @@ describe('all update continues within and across backends, and reports (#164)', 
     const npm = mutateFake({
       verb,
       id: 'npm',
-      present: ['x'],
+      installed: ['x'],
       list: async () => {
         throw new Error('npm registry down');
       },
@@ -639,7 +639,7 @@ describe('all update continues within and across backends, and reports (#164)', 
     const brew = mutateFake({
       verb,
       id: 'brew',
-      present: ['git', 'jq'],
+      installed: ['git', 'jq'],
       failWith: { jq: () => new Error('jq: checksum mismatch') },
     });
     await runCommand(allCommand(verb, [brew], store), { rawArgs: ['--dry-run'] });
@@ -658,7 +658,7 @@ describe('all update continues within and across backends, and reports (#164)', 
     const brew = mutateFake({
       verb,
       id: 'brew',
-      present: ['git', 'jq'],
+      installed: ['git', 'jq'],
       failWith: { jq: () => new Error('jq: checksum mismatch') },
       list: async () => {
         if (listed++ > 0) throw new Error('brew: database locked');
@@ -701,7 +701,7 @@ describe('all update continues within and across backends, and reports (#164)', 
 
   it('--dry-run threads dryRun, takes no after snapshot, prints no report, and exits 0', async () => {
     const store = await storeWith('');
-    const brew = mutateFake({ verb, id: 'brew', present: ['git', 'jq'] });
+    const brew = mutateFake({ verb, id: 'brew', installed: ['git', 'jq'] });
     (brew.update as ReturnType<typeof vi.fn>).mockImplementation(async () => {});
     await runCommand(allCommand(verb, [brew], store), { rawArgs: ['--dry-run'] });
 
@@ -724,7 +724,7 @@ describe('all install continues within and across backends, distinguishes alread
     const brew = mutateFake({
       verb,
       id: 'brew',
-      present: ['git'],
+      installed: ['git'],
       failWith: { jq: (ref) => new ErrMutateFailed([{ ref, message: 'jq: no bottle available' }]) },
     });
     await runCommand(allCommand(verb, [brew], store), { rawArgs: [] });
@@ -788,8 +788,8 @@ describe('all install continues within and across backends, distinguishes alread
         throw new ErrPluginUnavailable('appstore', 'mas not on PATH');
       },
     });
-    const brew = mutateFake({ verb, id: 'brew', present: ['git'] });
-    const npm = mutateFake({ verb, id: 'npm', present: ['left-pad'] });
+    const brew = mutateFake({ verb, id: 'brew', installed: ['git'] });
+    const npm = mutateFake({ verb, id: 'npm', installed: ['left-pad'] });
     await runCommand(allCommand(verb, [appstore, brew, npm], store), { rawArgs: [] });
 
     expect(mutatedNames(verb, brew)).toEqual(['git']);
@@ -855,7 +855,7 @@ describe('all install continues within and across backends, distinguishes alread
     const brew = mutateFake({
       verb,
       id: 'brew',
-      present: ['git'],
+      installed: ['git'],
       failWith: { jq: () => new Error('jq: no bottle available') },
     });
     const npm = mutateFake({
@@ -939,7 +939,7 @@ describe('all install continues within and across backends, distinguishes alread
     const brew = mutateFake({
       verb,
       id: 'brew',
-      present: ['git'],
+      installed: ['git'],
       failWith: { jq: () => new Error('jq: no bottle available') },
     });
     await runCommand(allCommand(verb, [brew], store), { rawArgs: ['--dry-run'] });

@@ -279,3 +279,80 @@ describe('init flag completion (#14)', () => {
     );
   });
 });
+
+// #146: the shells offer exactly the flags a verb accepts. `install`/`update`
+// lost their dead per-command `--verbose` (the global flag stays offered in
+// the first position), and `pin`/`unpin`/`skip`/`unskip` accept the subtype
+// shortcuts (ADR 0035) so the shells offer them where they were missing.
+describe('per-verb flags match the command tree (#146)', () => {
+  // pin/unpin/skip/unskip exist only for plugins that track packages, so
+  // these fixtures carry applist keys where the shared ones carry none.
+  const tracking: Plugin[] = [
+    mkPlugin('brew', {
+      configKeys: ['brew.formulas', 'brew.casks'],
+      subtypes: [
+        { id: 'formulas', kind: 'formula', configKey: 'brew.formulas', flag: 'formula' },
+        { id: 'casks', kind: 'cask', configKey: 'brew.casks', flag: 'cask' },
+      ],
+    }),
+    mkPlugin('npm', { configKeys: ['npm'] }),
+  ];
+  const zsh = generateZshCompletions(tracking);
+  const bash = generateBashCompletions(tracking);
+  const fish = generateFishCompletions(tracking);
+
+  it('zsh no longer offers --verbose on install or update', () => {
+    expect(zsh).not.toMatch(/brew:install\)[^\n]*--verbose/);
+    expect(zsh).not.toMatch(/brew:update\)[^\n]*--verbose/);
+    expect(zsh).not.toMatch(/npm:install\)[^\n]*--verbose/);
+  });
+
+  it('bash no longer offers --verbose on install or update', () => {
+    expect(bash).not.toMatch(/brew\/install\)[^\n]*--verbose/);
+    expect(bash).not.toMatch(/brew\/update\)[^\n]*--verbose/);
+  });
+
+  it('fish no longer gates a verbose flag on install or update', () => {
+    expect(fish).not.toMatch(/__fish_seen_subcommand_from install" -l verbose/);
+    expect(fish).not.toMatch(/__fish_seen_subcommand_from update" -l verbose/);
+  });
+
+  it('the global --verbose is still offered in the first position', () => {
+    expect(zsh).toContain("'(-V --verbose)'{-V,--verbose}'");
+    expect(bash).toMatch(/COMP_CWORD} -eq 1[\s\S]*?--verbose/);
+    expect(fish).toContain('__fish_use_subcommand" -l verbose');
+  });
+
+  for (const verb of ['pin', 'unpin', 'skip', 'unskip']) {
+    it(`zsh offers --formula and --cask on brew ${verb}`, () => {
+      expect(zsh).toMatch(new RegExp(`brew:${verb}\\)[^\\n]*--formula`));
+      expect(zsh).toMatch(new RegExp(`brew:${verb}\\)[^\\n]*--cask`));
+    });
+
+    it(`bash offers --formula and --cask on brew ${verb}`, () => {
+      expect(bash).toMatch(new RegExp(`brew/${verb}\\)[^\\n]*--formula`));
+      expect(bash).toMatch(new RegExp(`brew/${verb}\\)[^\\n]*--cask`));
+    });
+
+    it(`fish gates formula and cask on brew ${verb}`, () => {
+      expect(fish).toMatch(
+        new RegExp(
+          `__fish_seen_subcommand_from brew; and __fish_seen_subcommand_from ${verb}" -l formula`,
+        ),
+      );
+      expect(fish).toMatch(
+        new RegExp(
+          `__fish_seen_subcommand_from brew; and __fish_seen_subcommand_from ${verb}" -l cask`,
+        ),
+      );
+    });
+
+    it(`offers no subtype shortcut on npm ${verb}, which has one subtype`, () => {
+      expect(zsh).not.toMatch(new RegExp(`npm:${verb}\\)`));
+      expect(bash).not.toMatch(new RegExp(`npm/${verb}\\)`));
+      expect(fish).not.toMatch(
+        new RegExp(`__fish_seen_subcommand_from npm; and __fish_seen_subcommand_from ${verb}"`),
+      );
+    });
+  }
+});

@@ -275,7 +275,7 @@ export function counter(idx: number, total: number, action: string, name: string
   return `  ${prefix} ${action} ${styled}`;
 }
 
-// ── Verbose per-item trace (one dim line after the spinner) ─────
+// ── Secondary trace lines (one dim line under a message) ────────
 
 /** A dim secondary line under a message: doctor's per-finding hints, and the "did you mean" on an unknown flag. */
 export function trace(detail: string): string {

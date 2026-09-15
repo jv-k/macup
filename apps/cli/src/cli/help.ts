@@ -18,6 +18,24 @@ import { getVersion } from '../version';
 import { TOP_LEVEL_COMMANDS } from './commands';
 import type { CliDeps } from './types';
 
+/**
+ * The EXAMPLES section, as data. Each label is a command line the CLI accepts;
+ * a test drives every one against the command tree, so an example cannot show
+ * a grammar the parser rejects (#146).
+ */
+export const HELP_EXAMPLES: readonly logui.ColumnRow[] = [
+  { label: 'macup', desc: 'Interactive wizard' },
+  { label: 'macup outdated', desc: 'Outdated summary across every plugin' },
+  { label: 'macup brew list', desc: 'Show tracked brew formulas' },
+  { label: 'macup brew list --all', desc: 'Show all installed formulas' },
+  { label: 'macup brew list --only-outdated', desc: 'Show only outdated' },
+  { label: 'macup all update', desc: 'Update everything (with confirmation)' },
+  { label: 'macup brew track git curl jq', desc: 'Track new packages' },
+  { label: 'macup brew track --cask firefox', desc: 'Track a cask' },
+  { label: 'macup npm pin typescript 5.3.3', desc: 'Pin to max version' },
+  { label: 'macup brew skip legacy-dep', desc: 'Skip from future updates' },
+];
+
 /** `--version`: the version with the logo, rather than citty's bare unstyled default. */
 export function printVersionSplash(deps: CliDeps): void {
   console.log(
@@ -63,7 +81,7 @@ export function buildHelp(deps: CliDeps): string {
     typeof process.stdout.columns === 'number' && process.stdout.columns > 0
       ? process.stdout.columns
       : 80;
-  const cols = (rows: logui.ColumnRow[], descStyle?: (x: string) => string) =>
+  const cols = (rows: readonly logui.ColumnRow[], descStyle?: (x: string) => string) =>
     logui.formatColumns(rows, { width, descStyle });
 
   // Usage
@@ -140,19 +158,7 @@ export function buildHelp(deps: CliDeps): string {
 
   // Examples
   say(logui.dimmedHeader('EXAMPLES'));
-  const exampleRows: logui.ColumnRow[] = [
-    { label: 'macup', desc: 'Interactive wizard' },
-    { label: 'macup outdated', desc: 'Outdated summary across every plugin' },
-    { label: 'macup brew list', desc: 'Show tracked brew formulas' },
-    { label: 'macup brew list all', desc: 'Show all installed formulas' },
-    { label: 'macup brew list outdated', desc: 'Show only outdated' },
-    { label: 'macup all update', desc: 'Update everything (with confirmation)' },
-    { label: 'macup brew track git curl jq', desc: 'Track new packages' },
-    { label: 'macup brew track cask firefox', desc: 'Track a cask' },
-    { label: 'macup npm pin typescript 5.3.3', desc: 'Pin to max version' },
-    { label: 'macup brew skip legacy-dep', desc: 'Skip from future updates' },
-  ];
-  say(cols(exampleRows, s.dim));
+  say(cols(HELP_EXAMPLES, s.dim));
   return out.join('\n');
 }
 

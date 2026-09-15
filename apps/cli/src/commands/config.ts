@@ -10,6 +10,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { parse } from 'yaml';
+import { TOP_LEVEL_COMMANDS } from '../cli/commands';
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import type { PathResolution } from '../config/paths';
 import { ApplistSchema, SCHEMA_VERSION, formatApplistIssueLines } from '../config/schema';
@@ -142,17 +143,22 @@ export async function runConfig(_args: ParsedArgs, deps: CliDeps): Promise<void>
   console.log(formatConfigReport(report));
 }
 
+// The one description, held by the nouns registry (src/cli/commands.ts) so the
+// help screen, the shells, and citty's per-command help agree on it (#146). A
+// missing row is a wiring error, so it fails at import rather than rendering
+// an empty line. The trigger arg carries none: cli.ts drops it from the schema.
+function registryDescription(): string {
+  const entry = TOP_LEVEL_COMMANDS.find((c) => c.name === 'config');
+  if (!entry) throw new Error('`config` is missing from TOP_LEVEL_COMMANDS');
+  return entry.description;
+}
+
 /** `macup config`. */
 export class ConfigAction implements ActionCommand {
   readonly name = 'config';
-  readonly description =
-    'Show config location, schema status, pin/skip counts, backup dir, and migration hints.';
+  readonly description = registryDescription();
   readonly args = {
-    config: {
-      type: 'boolean' as const,
-      description:
-        'Show config location, schema status, pin/skip counts, backup dir, and migration hints.',
-    },
+    config: { type: 'boolean' as const },
   };
 
   run = runConfig;

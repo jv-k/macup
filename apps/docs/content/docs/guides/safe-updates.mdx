@@ -37,8 +37,7 @@ Each line is printed in the form `[dry-run] <cmd>`:
 [dry-run] softwareupdate --install macOS --verbose
 ```
 
-No subprocess executes: each plugin returns before reaching the runner. Pair
-`--dry-run` with `--verbose` / `-v` for more detail.
+No subprocess executes: each plugin returns before reaching the runner.
 
 `--all` (on `update` only) extends the preview to every outdated package, not
 just tracked ones:

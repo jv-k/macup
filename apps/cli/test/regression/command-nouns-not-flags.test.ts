@@ -18,6 +18,7 @@ import { TOP_LEVEL_COMMANDS } from '../../src/completions/shared';
 import { generateZshCompletions } from '../../src/completions/zsh';
 import { docsMetadata } from '../../src/meta';
 import { BUILTIN_PLUGINS } from '../../src/plugins/registry';
+import { getVersion } from '../../src/version';
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'cli.mjs');
 
@@ -133,6 +134,21 @@ describe('regression: the real modifiers survive', () => {
     expect(FLAG_COMMAND_ALIASES).toEqual(['version']);
     expect(run(['version']).status).toBe(0);
   });
+
+  it.each(['install', 'update'])(
+    'keeps `-v` after `brew %s` meaning the version (#146)',
+    (verb) => {
+      // The verb used to declare a `verbose` arg aliased to `v` that this
+      // intercept made unreachable. With the alias gone, the spelling keeps
+      // the one meaning it ever had.
+      const { status, stdout } = run(['brew', verb, '-v'], {
+        MACUP_CONFIG: join(mkdtempSync(join(tmpdir(), 'macup-v-')), 'applist.yaml'),
+      });
+
+      expect(status).toBe(0);
+      expect(stdout).toContain(getVersion());
+    },
+  );
 });
 
 describe('regression: nothing still advertises a flag the CLI rejects', () => {

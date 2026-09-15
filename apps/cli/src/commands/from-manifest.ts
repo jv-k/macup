@@ -376,11 +376,6 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
       meta: { name: 'install', description: 'Install packages via the plugin.' },
       args: {
         ...subtypeArg,
-        verbose: {
-          type: 'boolean',
-          alias: 'v',
-          description: 'After each package, print a one-line trace (kind, duration, or error).',
-        },
         'dry-run': {
           type: 'boolean',
           description: 'Print what would run without installing anything.',
@@ -392,10 +387,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       /**
-       * @throws whatever the plugin or store raised, after logging it under
-       * `--verbose`. A MacupError reaches the user as a single line; anything
-       * else — including the bare Error `mutateRefs` raises on a non-zero exit —
-       * keeps its stack trace, which #122 tracks.
+       * @throws whatever the plugin or store raised. A MacupError reaches the
+       * user as a single line; anything else — including the bare Error
+       * `mutateRefs` raises on a non-zero exit — keeps its stack trace, which
+       * #122 tracks.
        */
       async run({ args, rawArgs }) {
         // `all` is the composite: host-owned fan-out (ADR 0033), not a per-ref
@@ -440,29 +435,17 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         log.print('');
         log.print(log.header(`Installing ${manifest.displayName}`, refs.length));
         log.print('');
-        const verbose = Boolean(args.verbose);
         for (let i = 0; i < refs.length; i++) {
           const ref = refs[i] as PackageRef;
-          const started = Date.now();
-          try {
-            await withUserActionSpinner(
-              deps,
-              log.counter(i + 1, refs.length, 'Installing', ref.name),
-              async () => {
-                await plugin.install?.(makeCtx(deps), [ref], {
-                  dryRun: Boolean(args['dry-run']),
-                });
-              },
-            );
-            if (verbose) {
-              log.print(log.trace(`${ref.kind} · ${Date.now() - started}ms`));
-            }
-          } catch (err) {
-            if (verbose) {
-              log.print(log.traceError(err instanceof Error ? err.message : String(err)));
-            }
-            throw err;
-          }
+          await withUserActionSpinner(
+            deps,
+            log.counter(i + 1, refs.length, 'Installing', ref.name),
+            async () => {
+              await plugin.install?.(makeCtx(deps), [ref], {
+                dryRun: Boolean(args['dry-run']),
+              });
+            },
+          );
         }
         await runHealthCheck(deps, plugin, makeCtx(deps));
       },
@@ -474,11 +457,6 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
       meta: { name: 'update', description: 'Upgrade outdated packages to latest.' },
       args: {
         ...subtypeArg,
-        verbose: {
-          type: 'boolean',
-          alias: 'v',
-          description: 'After each package, print a one-line trace (kind, duration, or error).',
-        },
         'dry-run': {
           type: 'boolean',
           description: 'Print what would run without upgrading anything.',
@@ -494,10 +472,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         },
       },
       /**
-       * @throws whatever the plugin or store raised, after logging it under
-       * `--verbose`. A MacupError reaches the user as a single line; anything
-       * else — including the bare Error `mutateRefs` raises on a non-zero exit —
-       * keeps its stack trace, which #122 tracks.
+       * @throws whatever the plugin or store raised. A MacupError reaches the
+       * user as a single line; anything else — including the bare Error
+       * `mutateRefs` raises on a non-zero exit — keeps its stack trace, which
+       * #122 tracks.
        */
       async run({ args, rawArgs }) {
         // Only `all` is the composite (ADR 0033); system/xcode also have empty
@@ -598,27 +576,15 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         log.print(log.header(`Updating ${manifest.displayName}`, refs.length));
         log.print('');
         if (plugin.update) {
-          const verbose = Boolean(args.verbose);
           for (let i = 0; i < refs.length; i++) {
             const ref = refs[i] as PackageRef;
-            const started = Date.now();
-            try {
-              await withUserActionSpinner(
-                deps,
-                log.counter(i + 1, refs.length, 'Updating', ref.name),
-                async () => {
-                  await plugin.update?.(makeCtx(deps), [ref], { dryRun: Boolean(args['dry-run']) });
-                },
-              );
-              if (verbose) {
-                log.print(log.trace(`${ref.kind} · ${Date.now() - started}ms`));
-              }
-            } catch (err) {
-              if (verbose) {
-                log.print(log.traceError(err instanceof Error ? err.message : String(err)));
-              }
-              throw err;
-            }
+            await withUserActionSpinner(
+              deps,
+              log.counter(i + 1, refs.length, 'Updating', ref.name),
+              async () => {
+                await plugin.update?.(makeCtx(deps), [ref], { dryRun: Boolean(args['dry-run']) });
+              },
+            );
           }
         }
         await runHealthCheck(deps, plugin, makeCtx(deps));

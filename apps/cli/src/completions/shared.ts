@@ -48,14 +48,26 @@ export function commandsFor(plugin: Plugin): string[] {
 }
 
 /**
- * Flags a given subcommand accepts, for shell completion. Mirrors the citty
- * arg defs in src/commands/from-manifest.ts — keep in sync (that file is the
- * source of truth). Subtype shortcuts (--cask/--formula) are only offered for
- * plugins that declare more than one subtype (e.g. brew).
+ * The verbs that take a subtype, for shell completion. Mirrors the citty arg
+ * defs in src/commands/from-manifest.ts — keep in sync (that file is the
+ * source of truth). Every verb the factory spreads `subtypeArg` into is here,
+ * pin/unpin/skip/unskip included (ADR 0035). Subtype shortcuts (--cask/
+ * --formula) are only offered for plugins that declare more than one subtype
+ * (e.g. brew).
  * Exported for macup/meta: the docs flag matrix marks --subtype on these
  * commands (completions deliberately offer only the shortcut spellings).
  */
-export const SUBTYPE_COMMANDS = new Set(['list', 'install', 'update', 'track', 'untrack']);
+export const SUBTYPE_COMMANDS = new Set([
+  'list',
+  'install',
+  'update',
+  'track',
+  'untrack',
+  'pin',
+  'unpin',
+  'skip',
+  'unskip',
+]);
 
 /**
  * Flags on the stand-alone commands, for the shells. Kept beside the
@@ -74,8 +86,8 @@ export const TOP_LEVEL_COMMAND_FLAGS: Readonly<Record<string, readonly string[]>
 export function flagsForCommand(plugin: Plugin, command: string): string[] {
   const flags: string[] = [];
   if (command === 'list') flags.push('--only-outdated', '--all', '--json');
-  if (command === 'install') flags.push('--dry-run', '--verbose');
-  if (command === 'update') flags.push('--dry-run', '--all', '--verbose');
+  if (command === 'install') flags.push('--dry-run');
+  if (command === 'update') flags.push('--dry-run', '--all');
   if ((plugin.manifest.subtypes?.length ?? 0) > 1 && SUBTYPE_COMMANDS.has(command)) {
     for (const entry of plugin.manifest.subtypes ?? []) {
       if (entry.flag) flags.push(`--${entry.flag}`);

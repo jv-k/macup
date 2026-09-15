@@ -23,11 +23,19 @@
 import { ErrMutateFailed, type MutateFailure } from '../errors';
 import { boundFailureText } from '../plugins/helpers';
 import { errorMessage } from '../plugins/probe';
-import type { PackageRef, PackageStatus } from '../plugins/types';
+import type { PackageRef, PackageStatus, Plugin } from '../plugins/types';
 import * as log from '../ui/log';
 
 /** Which mutating verb the report describes. */
 export type MutationMode = 'install' | 'update';
+
+/** The signature `install()` and `update()` share. */
+export type MutateFn = NonNullable<Plugin['install']>;
+
+/** The verb a mode runs on a plugin, or undefined where the plugin lacks it. */
+export function mutateFor(mode: MutationMode, plugin: Plugin): MutateFn | undefined {
+  return mode === 'update' ? plugin.update : plugin.install;
+}
 
 /**
  * Install outcome (`CONTEXT.md`: `installed`, `already-present`, `failed`),

@@ -42,7 +42,6 @@ import {
   type ConstituentOutcome,
   type ConstituentPlan,
   applyComposite,
-  mutateFor,
   planComposite,
 } from './composite-mutate';
 import { type CommandDeps, makeCtx } from './from-manifest';
@@ -51,6 +50,7 @@ import {
   type PluginRun,
   buildMutationReport,
   exitCodeFor,
+  mutateFor,
   renderJson,
   renderText,
 } from './mutation-report';
@@ -340,7 +340,7 @@ export function buildCompositeCommand(
       };
 
       const statuses = await withSpinner(
-        showJson ? { ...deps, suppressBar: true } : deps,
+        routeOutput(deps, showJson).deps,
         `Fetching ${manifest.displayName} packages…`,
         () => listComposite(constituents, listCtx, { onlyOutdated }),
       );

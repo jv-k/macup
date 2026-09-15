@@ -34,13 +34,13 @@ import type {
 } from '../plugins/types';
 import { useColor } from '../runtime';
 import * as log from '../ui/log';
-import { mutateFor } from './composite-mutate';
 import {
   type MutationMode,
   type RanPlugin,
   buildMutationReport,
   exitCodeFor,
   failuresFor,
+  mutateFor,
   renderJson,
   renderText,
 } from './mutation-report';
@@ -141,16 +141,9 @@ interface MutationRun {
  * header, the per-ref loop, the dry-run early return, the after probe, the
  * health check, the render, and the exit code. Callers select the refs and
  * print their own pre-run lines; the invariant tail lived in both verbs before.
- *
- * Every ref is attempted whatever happened to the one before it (ADR 0052): a
- * failure is recorded for the report and the loop moves on. Two exceptions
- * rethrow as the loop always did. Cancellation, where the failure is what a
- * SIGINT-cancelled subprocess threw and the run must end there rather than
- * march through the remaining refs. And a dry run, which prints no report, so
- * a failure recorded for one would never be seen: the throw is the only way
- * it reaches the user.
- *
- * @throws whatever `list()` raised from either probe, or a ref's own
+ * @throws Error when the manifest advertises the verb without the method, which
+ * a capability must not (the conformance suite holds every built-in to it);
+ * otherwise whatever `list()` raised from either probe, or a ref's own
  * `install()`/`update()` under cancellation or `--dry-run`.
  */
 async function finishMutation(deps: CommandDeps, plugin: Plugin, run: MutationRun): Promise<void> {
@@ -158,6 +151,7 @@ async function finishMutation(deps: CommandDeps, plugin: Plugin, run: MutationRu
   const { mode, refs, dryRun, showJson } = run;
   const { deps: spinnerDeps, printHuman } = routeOutput(deps, showJson);
   const mutate = mutateFor(mode, plugin);
+  if (!mutate) throw new Error(`Plugin ${manifest.id} has no ${mode}()`);
   // The same listing at both ends, so an unavailable backend surfaces the same
   // way at each: full for install, since a present ref that is up to date
   // drops out of an outdated listing and would read as freshly installed;
@@ -165,11 +159,9 @@ async function finishMutation(deps: CommandDeps, plugin: Plugin, run: MutationRu
   const listOpts: ListOptions =
     mode === 'update' ? { subtype: run.subtype, onlyOutdated: true } : { subtype: run.subtype };
 
-  if (refs.length === 0 || !mutate) {
+  if (refs.length === 0) {
     // Nothing ran, so text mode has nothing to report; --json still owes its
-    // caller a document, and the empty report is that document. A manifest
-    // that advertises the verb without the method ran nothing either, the
-    // verdict the composite fan-out gives it.
+    // caller a document, and the empty report is that document.
     if (showJson) {
       const snapshot = run.before ?? [];
       const none: RanPlugin = {
@@ -198,6 +190,13 @@ async function finishMutation(deps: CommandDeps, plugin: Plugin, run: MutationRu
   printHuman('');
   printHuman(log.header(`${verb} ${manifest.displayName}`, refs.length));
   printHuman('');
+  // Every ref is attempted whatever happened to the one before it (ADR 0052):
+  // a failure is recorded for the report and the loop moves on. Two exceptions
+  // rethrow as the loop always did. Cancellation, where the failure is what a
+  // SIGINT-cancelled subprocess threw and the run must end there rather than
+  // march through the remaining refs. And a dry run, which prints no report,
+  // so a failure recorded for one would never be seen: the throw is the only
+  // way it reaches the user.
   const failures: MutateFailure[] = [];
   for (let i = 0; i < refs.length; i++) {
     const ref = refs[i] as PackageRef;

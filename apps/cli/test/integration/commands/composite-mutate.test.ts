@@ -5,6 +5,7 @@ import { type CommandDef, type SubCommandsDef, runCommand } from 'citty';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildCompositeCommand } from '../../../src/commands/composite';
 import { fanOutComposite, planComposite } from '../../../src/commands/composite-mutate';
+import type { MutationMode } from '../../../src/commands/mutation-report';
 import type { ApplistKey } from '../../../src/config/schema';
 import { ConfigStore } from '../../../src/config/store';
 import { ErrMutateFailed, ErrPluginUnavailable } from '../../../src/errors';
@@ -274,7 +275,7 @@ describe('fanOutComposite — install', () => {
     // present ref that is up to date drops out of an outdated listing and
     // would read as freshly installed.
     const store = await storeWith('brew:\n  formulas:\n    - jq\n');
-    const brew = installFake({ id: 'brew', present: ['jq'] });
+    const brew = mutateFake({ verb: 'install', id: 'brew', installed: ['jq'] });
     const plans = await planComposite('install', [brew], store, makeCtx);
 
     expect(brew.list).toHaveBeenCalledTimes(1);
@@ -286,8 +287,8 @@ describe('fanOutComposite — install', () => {
 
   it('takes no install listing where no report will read it: a dry run, or nothing tracked', async () => {
     const store = await storeWith('brew:\n  formulas:\n    - jq\n');
-    const brew = installFake({ id: 'brew', present: ['jq'] });
-    const npm = installFake({ id: 'npm' });
+    const brew = mutateFake({ verb: 'install', id: 'brew', installed: ['jq'] });
+    const npm = mutateFake({ verb: 'install', id: 'npm' });
     const plans = await planComposite('install', [brew, npm], store, makeCtx, { dryRun: true });
 
     expect(brew.list).not.toHaveBeenCalled();
@@ -311,19 +312,22 @@ describe('fanOutComposite — install', () => {
     const store = await storeWith(
       'brew:\n  formulas:\n    - jq\nnpm:\n  - left-pad\npip:\n  - black\n',
     );
-    const brew = installFake({
+    const brew = mutateFake({
+      verb: 'install',
       id: 'brew',
       check: async () => {
         throw new ErrPluginUnavailable('brew', 'brew not on PATH');
       },
     });
-    const npm = installFake({
+    const npm = mutateFake({
+      verb: 'install',
       id: 'npm',
       list: async () => {
         throw new Error('npm registry down');
       },
     });
-    const pip = installFake({
+    const pip = mutateFake({
+      verb: 'install',
       id: 'pip',
       check: async () => {
         throw new Error('pip: broken venv');
@@ -342,53 +346,17 @@ describe('fanOutComposite — install', () => {
   });
 });
 
-// `all update` through the command: after snapshot per constituent that ran,
-// one combined report, exit code from it, `--json` one document (#164).
-interface StatefulOptions {
+// A stateful constituent for the command blocks. Its `list()` enumerates what
+// is installed (like brew), so the before and after snapshots differ by
+// exactly what the verb's mutate managed to do: under update every installed
+// name starts outdated and `update()` marks it current, under install
+// `install()` adds to the installed set (#164, #165).
+interface MutateFakeOptions {
+  readonly verb: MutationMode;
   readonly id: string;
-  /** Names the backend reports outdated before the batch; an updated one drops out of the listing. */
-  readonly names: readonly string[];
-  /** What `update()` throws for a name, instead of marking it current. */
-  readonly failWith?: Readonly<Record<string, (ref: PackageRef) => unknown>>;
-  readonly check?: () => Promise<void>;
-  readonly list?: () => Promise<PackageStatus[]>;
-}
-
-function statefulPlugin(opts: StatefulOptions): Plugin {
-  const outdated = new Set(opts.names);
-  return {
-    ...fakePlugin(opts.id, [], {}),
-    check: opts.check ?? (async () => {}),
-    list:
-      opts.list ??
-      (async (_ctx, listOpts) =>
-        opts.names
-          .map((name) => ({
-            ref: { kind: opts.id, name },
-            installed: true,
-            installedVersion: '1',
-            latestVersion: '2',
-            updateStatus: outdated.has(name) ? ('outdated' as const) : ('current' as const),
-          }))
-          .filter((s) => !listOpts?.onlyOutdated || s.updateStatus === 'outdated')),
-    update: vi.fn(async (_ctx, refs: readonly PackageRef[]) => {
-      for (const ref of refs) {
-        const fail = opts.failWith?.[ref.name];
-        if (fail) throw fail(ref);
-        outdated.delete(ref.name);
-      }
-    }),
-  };
-}
-
-// `all install` through the command: a stateful fake per constituent whose
-// `list()` enumerates only what is installed (like brew), so the before and
-// after snapshots differ by exactly what `install()` managed to add (#165).
-interface InstallFakeOptions {
-  readonly id: string;
-  /** Names on the machine before the run, so the first snapshot already lists them. */
-  readonly present?: readonly string[];
-  /** What `install()` throws for a name, instead of adding it. */
+  /** Names installed before the run, so the first listing already reports them: outdated under update, current under install. */
+  readonly installed?: readonly string[];
+  /** What the verb's mutate throws for a name, instead of moving it. */
   readonly failWith?: Readonly<Record<string, (ref: PackageRef) => unknown>>;
   readonly check?: () => Promise<void>;
   readonly list?: () => Promise<PackageStatus[]>;
@@ -396,40 +364,50 @@ interface InstallFakeOptions {
   readonly configKeys?: readonly ApplistKey[];
 }
 
-function installFake(opts: InstallFakeOptions): Plugin {
-  const installed = new Set(opts.present);
-  const base = fakePlugin(opts.id, [], {});
-  const configKeys = opts.configKeys ?? (opts.id === 'brew' ? ['brew.formulas'] : [opts.id]);
+function mutateFake(opts: MutateFakeOptions): Plugin {
+  const { verb, id } = opts;
+  const installed = new Set(opts.installed);
+  const outdated = new Set(verb === 'update' ? opts.installed : []);
+  const base = fakePlugin(id, [], {});
+  const configKeys = opts.configKeys ?? (id === 'brew' ? ['brew.formulas'] : [id]);
+  const mutate = vi.fn(async (_ctx: PluginContext, refs: readonly PackageRef[]) => {
+    for (const ref of refs) {
+      const fail = opts.failWith?.[ref.name];
+      if (fail) throw fail(ref);
+      if (verb === 'update') outdated.delete(ref.name);
+      else installed.add(ref.name);
+    }
+  });
   return {
     ...base,
     manifest: { ...base.manifest, configKeys: configKeys as ApplistKey[] },
     check: opts.check ?? (async () => {}),
-    // Nothing here is ever outdated, so an `onlyOutdated` listing (the
+    // Nothing is outdated under install, so an `onlyOutdated` listing (the
     // update verb's snapshot, the wrong one for install) comes back empty
-    // and would misclassify a present ref as freshly installed.
-    list: vi.fn(
+    // and would misclassify an installed ref as freshly installed.
+    list: vi.fn<Plugin['list']>(
       opts.list ??
         (async (_ctx, listOpts) =>
-          listOpts?.onlyOutdated
-            ? []
-            : [...installed].map((name) => ({
-                ref: { kind: opts.id, name },
-                installed: true,
-                installedVersion: '1',
-                updateStatus: 'current' as const,
-              }))),
+          [...installed]
+            .map((name) => ({
+              ref: { kind: id, name },
+              installed: true,
+              installedVersion: '1',
+              ...(outdated.has(name)
+                ? { latestVersion: '2', updateStatus: 'outdated' as const }
+                : { updateStatus: 'current' as const }),
+            }))
+            .filter((s) => !listOpts?.onlyOutdated || s.updateStatus === 'outdated')),
     ),
-    install: vi.fn(async (_ctx, refs: readonly PackageRef[]) => {
-      for (const ref of refs) {
-        const fail = opts.failWith?.[ref.name];
-        if (fail) throw fail(ref);
-        installed.add(ref.name);
-      }
-    }),
+    [verb]: mutate,
   };
 }
 
-function allCommands(constituents: readonly Plugin[], store: ConfigStore): SubCommandsDef {
+function allCommand(
+  verb: MutationMode,
+  constituents: readonly Plugin[],
+  store: ConfigStore,
+): CommandDef {
   const cmd = buildCompositeCommand(constituents, {
     exec: new FixtureExecRunner({ fixtures: [], onPath: [] }),
     log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
@@ -437,24 +415,25 @@ function allCommands(constituents: readonly Plugin[], store: ConfigStore): SubCo
     suppressBar: true,
     signal: new AbortController().signal,
   });
-  return cmd.subCommands as SubCommandsDef;
+  return (cmd.subCommands as SubCommandsDef)[verb] as CommandDef;
 }
 
-function allUpdateCommand(constituents: readonly Plugin[], store: ConfigStore): CommandDef {
-  return allCommands(constituents, store).update as CommandDef;
+// The composite hands the verb's mutate one ref per call, so the first ref
+// of each call is the sequence it attempted.
+function mutatedNames(verb: MutationMode, plugin: Plugin): string[] {
+  return (plugin[verb] as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1][0].name);
 }
 
-function updatedNames(plugin: Plugin): string[] {
-  return (plugin.update as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1][0].name);
-}
+// The command blocks read the report off console and the exit code off
+// process, so each block calls this once to spy on both for its tests.
+let logSpy: ReturnType<typeof vi.spyOn>;
+let errSpy: ReturnType<typeof vi.spyOn>;
+const savedExitCode = process.exitCode;
+const stdout = () => logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+const stderr = () => errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
 
-describe('all update continues within and across backends, and reports (#164)', () => {
-  let logSpy: ReturnType<typeof vi.spyOn>;
-  let errSpy: ReturnType<typeof vi.spyOn>;
+function spyOnConsole(): void {
   let isTty: PropertyDescriptor | undefined;
-  const savedExitCode = process.exitCode;
-  const stdout = () => logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
-  const stderr = () => errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
 
   beforeEach(() => {
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -471,17 +450,23 @@ describe('all update continues within and across backends, and reports (#164)', 
     // A failed ref sets exitCode=1; restore so it cannot fail the vitest process.
     process.exitCode = savedExitCode;
   });
+}
+
+describe('all update continues within and across backends, and reports (#164)', () => {
+  const verb = 'update';
+  spyOnConsole();
 
   it('attempts the rest of a constituent batch after one ref fails, classifies each from the after listing, and exits 1', async () => {
     const store = await storeWith('');
-    const brew = statefulPlugin({
+    const brew = mutateFake({
+      verb,
       id: 'brew',
-      names: ['git', 'jq', 'fd'],
+      installed: ['git', 'jq', 'fd'],
       failWith: { jq: (ref) => new ErrMutateFailed([{ ref, message: 'jq: checksum mismatch' }]) },
     });
-    await runCommand(allUpdateCommand([brew], store), { rawArgs: [] });
+    await runCommand(allCommand(verb, [brew], store), { rawArgs: [] });
 
-    expect(updatedNames(brew)).toEqual(['git', 'jq', 'fd']);
+    expect(mutatedNames(verb, brew)).toEqual(['git', 'jq', 'fd']);
     const out = stdout();
     expect(out).toMatch(/git\s+updated/);
     expect(out).toMatch(/jq\s+failed/);
@@ -493,24 +478,25 @@ describe('all update continues within and across backends, and reports (#164)', 
 
   it('tells a backend that errored out from one that is unavailable, keeps attempting the others, and exits 1 for the error alone', async () => {
     const store = await storeWith('');
-    const npm = statefulPlugin({
+    const npm = mutateFake({
+      verb,
       id: 'npm',
-      names: ['x'],
+      installed: ['x'],
       list: async () => {
         throw new Error('npm registry down');
       },
     });
-    const mas = statefulPlugin({
+    const mas = mutateFake({
+      verb,
       id: 'mas',
-      names: [],
       check: async () => {
         throw new ErrPluginUnavailable('mas', 'mas not on PATH');
       },
     });
-    const brew = statefulPlugin({ id: 'brew', names: ['git'] });
-    await runCommand(allUpdateCommand([npm, mas, brew], store), { rawArgs: [] });
+    const brew = mutateFake({ verb, id: 'brew', installed: ['git'] });
+    await runCommand(allCommand(verb, [npm, mas, brew], store), { rawArgs: [] });
 
-    expect(updatedNames(brew)).toEqual(['git']);
+    expect(mutatedNames(verb, brew)).toEqual(['git']);
     expect(npm.update).not.toHaveBeenCalled();
     const out = stdout();
     expect(out).toMatch(/git\s+updated/);
@@ -522,15 +508,15 @@ describe('all update continues within and across backends, and reports (#164)', 
 
   it('leaves the exit code alone when the only shortfall is an unavailable backend', async () => {
     const store = await storeWith('');
-    const mas = statefulPlugin({
+    const mas = mutateFake({
+      verb,
       id: 'mas',
-      names: [],
       check: async () => {
         throw new ErrPluginUnavailable('mas', 'mas not on PATH');
       },
     });
-    const brew = statefulPlugin({ id: 'brew', names: ['git'] });
-    await runCommand(allUpdateCommand([mas, brew], store), { rawArgs: [] });
+    const brew = mutateFake({ verb, id: 'brew', installed: ['git'] });
+    await runCommand(allCommand(verb, [mas, brew], store), { rawArgs: [] });
 
     const out = stdout();
     expect(out).toMatch(/git\s+updated/);
@@ -541,11 +527,11 @@ describe('all update continues within and across backends, and reports (#164)', 
 
   it('prints the report on a fully successful run, keeps the skip.all line, and leaves the exit code alone', async () => {
     const store = await storeWith('skip:\n  all:\n    - system\n');
-    const brew = statefulPlugin({ id: 'brew', names: ['git', 'jq'] });
-    const system = statefulPlugin({ id: 'system', names: ['macos-15.6'] });
-    await runCommand(allUpdateCommand([brew, system], store), { rawArgs: [] });
+    const brew = mutateFake({ verb, id: 'brew', installed: ['git', 'jq'] });
+    const system = mutateFake({ verb, id: 'system', installed: ['macos-15.6'] });
+    await runCommand(allCommand(verb, [brew, system], store), { rawArgs: [] });
 
-    expect(updatedNames(brew)).toEqual(['git', 'jq']);
+    expect(mutatedNames(verb, brew)).toEqual(['git', 'jq']);
     expect(system.update).not.toHaveBeenCalled();
     const out = stdout();
     expect(out).toContain('system: excluded (skip.all)');
@@ -558,27 +544,29 @@ describe('all update continues within and across backends, and reports (#164)', 
 
   it('--json puts exactly one report document on stdout and the human lines on stderr', async () => {
     const store = await storeWith('skip:\n  all:\n    - system\n');
-    const brew = statefulPlugin({
+    const brew = mutateFake({
+      verb,
       id: 'brew',
-      names: ['git', 'jq'],
+      installed: ['git', 'jq'],
       failWith: { jq: () => new Error('jq: checksum mismatch') },
     });
-    const npm = statefulPlugin({
+    const npm = mutateFake({
+      verb,
       id: 'npm',
-      names: ['x'],
+      installed: ['x'],
       list: async () => {
         throw new Error('npm registry down');
       },
     });
-    const mas = statefulPlugin({
+    const mas = mutateFake({
+      verb,
       id: 'mas',
-      names: [],
       check: async () => {
         throw new ErrPluginUnavailable('mas', 'mas not on PATH');
       },
     });
-    const system = statefulPlugin({ id: 'system', names: ['macos-15.6'] });
-    await runCommand(allUpdateCommand([brew, npm, mas, system], store), { rawArgs: ['--json'] });
+    const system = mutateFake({ verb, id: 'system', installed: ['macos-15.6'] });
+    await runCommand(allCommand(verb, [brew, npm, mas, system], store), { rawArgs: ['--json'] });
 
     expect(logSpy).toHaveBeenCalledTimes(1);
     const report = JSON.parse(logSpy.mock.calls[0]?.[0] as string);
@@ -609,8 +597,8 @@ describe('all update continues within and across backends, and reports (#164)', 
 
   it('--json prints the empty report when nothing is outdated anywhere, so stdout is still a document', async () => {
     const store = await storeWith('');
-    const brew = statefulPlugin({ id: 'brew', names: [] });
-    await runCommand(allUpdateCommand([brew], store), { rawArgs: ['--json'] });
+    const brew = mutateFake({ verb, id: 'brew' });
+    await runCommand(allCommand(verb, [brew], store), { rawArgs: ['--json'] });
 
     expect(brew.update).not.toHaveBeenCalled();
     expect(logSpy).toHaveBeenCalledTimes(1);
@@ -626,20 +614,21 @@ describe('all update continues within and across backends, and reports (#164)', 
 
   it('says there was nothing to update in text mode, and still exits 1 when a backend errored out at planning', async () => {
     const store = await storeWith('');
-    const brew = statefulPlugin({ id: 'brew', names: [] });
-    await runCommand(allUpdateCommand([brew], store), { rawArgs: [] });
+    const brew = mutateFake({ verb, id: 'brew' });
+    await runCommand(allCommand(verb, [brew], store), { rawArgs: [] });
     expect(stdout()).toContain('Nothing to update.');
     expect(process.exitCode).toBe(savedExitCode);
 
     logSpy.mockClear();
-    const npm = statefulPlugin({
+    const npm = mutateFake({
+      verb,
       id: 'npm',
-      names: ['x'],
+      installed: ['x'],
       list: async () => {
         throw new Error('npm registry down');
       },
     });
-    await runCommand(allUpdateCommand([brew, npm], store), { rawArgs: [] });
+    await runCommand(allCommand(verb, [brew, npm], store), { rawArgs: [] });
     expect(stdout()).toMatch(/npm\s+failed: npm registry down/);
     expect(stdout()).toContain('1 backend failed');
     expect(process.exitCode).toBe(1);
@@ -647,14 +636,15 @@ describe('all update continues within and across backends, and reports (#164)', 
 
   it('names a ref that failed under --dry-run, where no report follows to name it', async () => {
     const store = await storeWith('');
-    const brew = statefulPlugin({
+    const brew = mutateFake({
+      verb,
       id: 'brew',
-      names: ['git', 'jq'],
+      installed: ['git', 'jq'],
       failWith: { jq: () => new Error('jq: checksum mismatch') },
     });
-    await runCommand(allUpdateCommand([brew], store), { rawArgs: ['--dry-run'] });
+    await runCommand(allCommand(verb, [brew], store), { rawArgs: ['--dry-run'] });
 
-    expect(updatedNames(brew)).toEqual(['git', 'jq']);
+    expect(mutatedNames(verb, brew)).toEqual(['git', 'jq']);
     expect(stdout()).toContain('brew: 1 of 2 package(s) failed');
     expect(stdout()).toContain('jq: jq: checksum mismatch');
     expect(stdout()).not.toContain('brew: 2 package(s)');
@@ -665,9 +655,10 @@ describe('all update continues within and across backends, and reports (#164)', 
     // backend itself named keeps that detail (ADR 0052 rule 2).
     const store = await storeWith('');
     let listed = 0;
-    const brew = statefulPlugin({
+    const brew = mutateFake({
+      verb,
       id: 'brew',
-      names: ['git', 'jq'],
+      installed: ['git', 'jq'],
       failWith: { jq: () => new Error('jq: checksum mismatch') },
       list: async () => {
         if (listed++ > 0) throw new Error('brew: database locked');
@@ -689,7 +680,7 @@ describe('all update continues within and across backends, and reports (#164)', 
         ];
       },
     });
-    await runCommand(allUpdateCommand([brew], store), { rawArgs: ['--json'] });
+    await runCommand(allCommand(verb, [brew], store), { rawArgs: ['--json'] });
 
     const report = JSON.parse(logSpy.mock.calls[0]?.[0] as string);
     expect(report.plugins).toEqual([
@@ -710,63 +701,35 @@ describe('all update continues within and across backends, and reports (#164)', 
 
   it('--dry-run threads dryRun, takes no after snapshot, prints no report, and exits 0', async () => {
     const store = await storeWith('');
-    const brew = statefulPlugin({ id: 'brew', names: ['git', 'jq'] });
+    const brew = mutateFake({ verb, id: 'brew', installed: ['git', 'jq'] });
     (brew.update as ReturnType<typeof vi.fn>).mockImplementation(async () => {});
-    const listSpy = vi.spyOn(brew, 'list');
-    await runCommand(allUpdateCommand([brew], store), { rawArgs: ['--dry-run'] });
+    await runCommand(allCommand(verb, [brew], store), { rawArgs: ['--dry-run'] });
 
-    expect(updatedNames(brew)).toEqual(['git', 'jq']);
+    expect(mutatedNames(verb, brew)).toEqual(['git', 'jq']);
     for (const call of (brew.update as ReturnType<typeof vi.fn>).mock.calls) {
       expect(call[2]).toEqual({ dryRun: true });
     }
-    expect(listSpy).toHaveBeenCalledTimes(1);
+    expect(brew.list).toHaveBeenCalledTimes(1);
     expect(stdout()).not.toMatch(/git\s+(updated|failed)/);
     expect(process.exitCode).toBe(savedExitCode);
   });
 });
 
-function allInstallCommand(constituents: readonly Plugin[], store: ConfigStore): CommandDef {
-  return allCommands(constituents, store).install as CommandDef;
-}
-
-function attemptedNames(plugin: Plugin): string[] {
-  return (plugin.install as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1][0].name);
-}
-
 describe('all install continues within and across backends, distinguishes already-present, and reports (#165)', () => {
-  let logSpy: ReturnType<typeof vi.spyOn>;
-  let errSpy: ReturnType<typeof vi.spyOn>;
-  let isTty: PropertyDescriptor | undefined;
-  const savedExitCode = process.exitCode;
-  const stdout = () => logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
-  const stderr = () => errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
-
-  beforeEach(() => {
-    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    // The composite confirms on a TTY; a piped run never prompts.
-    isTty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
-    Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
-  });
-
-  afterEach(() => {
-    logSpy.mockRestore();
-    errSpy.mockRestore();
-    if (isTty) Object.defineProperty(process.stdout, 'isTTY', isTty);
-    // A failed ref sets exitCode=1; restore so it cannot fail the vitest process.
-    process.exitCode = savedExitCode;
-  });
+  const verb = 'install';
+  spyOnConsole();
 
   it('attempts the rest of a constituent batch after one ref fails, tells already-present from installed by the listings, and exits 1', async () => {
     const store = await storeWith('brew:\n  formulas:\n    - git\n    - jq\n    - fd\n');
-    const brew = installFake({
+    const brew = mutateFake({
+      verb,
       id: 'brew',
-      present: ['git'],
+      installed: ['git'],
       failWith: { jq: (ref) => new ErrMutateFailed([{ ref, message: 'jq: no bottle available' }]) },
     });
-    await runCommand(allInstallCommand([brew], store), { rawArgs: [] });
+    await runCommand(allCommand(verb, [brew], store), { rawArgs: [] });
 
-    expect(attemptedNames(brew)).toEqual(['git', 'jq', 'fd']);
+    expect(mutatedNames(verb, brew)).toEqual(['git', 'jq', 'fd']);
     const out = stdout();
     expect(out).toMatch(/git\s+already present/);
     expect(out).toMatch(/jq\s+failed/);
@@ -783,22 +746,24 @@ describe('all install continues within and across backends, distinguishes alread
     const store = await storeWith(
       'brew:\n  formulas:\n    - git\nnpm:\n  - left-pad\n  - chalk\nappstore:\n  - "123"\n',
     );
-    const npm = installFake({
+    const npm = mutateFake({
+      verb,
       id: 'npm',
       list: async () => {
         throw new Error('npm registry down');
       },
     });
-    const appstore = installFake({
+    const appstore = mutateFake({
+      verb,
       id: 'appstore',
       check: async () => {
         throw new ErrPluginUnavailable('appstore', 'mas not on PATH');
       },
     });
-    const brew = installFake({ id: 'brew' });
-    await runCommand(allInstallCommand([npm, appstore, brew], store), { rawArgs: [] });
+    const brew = mutateFake({ verb, id: 'brew' });
+    await runCommand(allCommand(verb, [npm, appstore, brew], store), { rawArgs: [] });
 
-    expect(attemptedNames(brew)).toEqual(['git']);
+    expect(mutatedNames(verb, brew)).toEqual(['git']);
     expect(npm.install).not.toHaveBeenCalled();
     expect(appstore.install).not.toHaveBeenCalled();
     const out = stdout();
@@ -816,18 +781,19 @@ describe('all install continues within and across backends, distinguishes alread
     const store = await storeWith(
       'brew:\n  formulas:\n    - git\nnpm:\n  - left-pad\n  - chalk\nappstore:\n  - "123"\n',
     );
-    const appstore = installFake({
+    const appstore = mutateFake({
+      verb,
       id: 'appstore',
       check: async () => {
         throw new ErrPluginUnavailable('appstore', 'mas not on PATH');
       },
     });
-    const brew = installFake({ id: 'brew', present: ['git'] });
-    const npm = installFake({ id: 'npm', present: ['left-pad'] });
-    await runCommand(allInstallCommand([appstore, brew, npm], store), { rawArgs: [] });
+    const brew = mutateFake({ verb, id: 'brew', installed: ['git'] });
+    const npm = mutateFake({ verb, id: 'npm', installed: ['left-pad'] });
+    await runCommand(allCommand(verb, [appstore, brew, npm], store), { rawArgs: [] });
 
-    expect(attemptedNames(brew)).toEqual(['git']);
-    expect(attemptedNames(npm)).toEqual(['left-pad', 'chalk']);
+    expect(mutatedNames(verb, brew)).toEqual(['git']);
+    expect(mutatedNames(verb, npm)).toEqual(['left-pad', 'chalk']);
     const out = stdout();
     expect(out).toMatch(/brew\s+git\s+already present/);
     expect(out).toMatch(/npm\s+left-pad\s+already present/);
@@ -843,11 +809,11 @@ describe('all install continues within and across backends, distinguishes alread
     const store = await storeWith(
       'brew:\n  formulas:\n    - git\n    - jq\nnpm:\n  - left-pad\nskip:\n  all:\n    - npm\n',
     );
-    const brew = installFake({ id: 'brew' });
-    const npm = installFake({ id: 'npm' });
-    await runCommand(allInstallCommand([brew, npm], store), { rawArgs: [] });
+    const brew = mutateFake({ verb, id: 'brew' });
+    const npm = mutateFake({ verb, id: 'npm' });
+    await runCommand(allCommand(verb, [brew, npm], store), { rawArgs: [] });
 
-    expect(attemptedNames(brew)).toEqual(['git', 'jq']);
+    expect(mutatedNames(verb, brew)).toEqual(['git', 'jq']);
     expect(npm.install).not.toHaveBeenCalled();
     expect(npm.list).not.toHaveBeenCalled();
     const out = stdout();
@@ -861,20 +827,21 @@ describe('all install continues within and across backends, distinguishes alread
 
   it('says there was nothing to install in text mode, and still exits 1 when a backend errored out at planning', async () => {
     const store = await storeWith('npm:\n  - left-pad\n');
-    const brew = installFake({ id: 'brew' });
-    await runCommand(allInstallCommand([brew], store), { rawArgs: [] });
+    const brew = mutateFake({ verb, id: 'brew' });
+    await runCommand(allCommand(verb, [brew], store), { rawArgs: [] });
     expect(brew.list).not.toHaveBeenCalled();
     expect(stdout()).toContain('Nothing to install.');
     expect(process.exitCode).toBe(savedExitCode);
 
     logSpy.mockClear();
-    const npm = installFake({
+    const npm = mutateFake({
+      verb,
       id: 'npm',
       list: async () => {
         throw new Error('npm registry down');
       },
     });
-    await runCommand(allInstallCommand([brew, npm], store), { rawArgs: [] });
+    await runCommand(allCommand(verb, [brew, npm], store), { rawArgs: [] });
     expect(stdout()).toMatch(/left-pad\s+failed/);
     expect(stdout()).toMatch(/npm\s+failed: npm registry down/);
     expect(stdout()).toContain('1 failed, 1 backend failed');
@@ -885,25 +852,28 @@ describe('all install continues within and across backends, distinguishes alread
     const store = await storeWith(
       'brew:\n  formulas:\n    - git\n    - jq\n    - fd\nnpm:\n  - left-pad\nappstore:\n  - "123"\npip:\n  - black\nskip:\n  all:\n    - pip\n',
     );
-    const brew = installFake({
+    const brew = mutateFake({
+      verb,
       id: 'brew',
-      present: ['git'],
+      installed: ['git'],
       failWith: { jq: () => new Error('jq: no bottle available') },
     });
-    const npm = installFake({
+    const npm = mutateFake({
+      verb,
       id: 'npm',
       list: async () => {
         throw new Error('npm registry down');
       },
     });
-    const appstore = installFake({
+    const appstore = mutateFake({
+      verb,
       id: 'appstore',
       check: async () => {
         throw new ErrPluginUnavailable('appstore', 'mas not on PATH');
       },
     });
-    const pip = installFake({ id: 'pip' });
-    await runCommand(allInstallCommand([brew, npm, appstore, pip], store), {
+    const pip = mutateFake({ verb, id: 'pip' });
+    await runCommand(allCommand(verb, [brew, npm, appstore, pip], store), {
       rawArgs: ['--json'],
     });
 
@@ -949,8 +919,8 @@ describe('all install continues within and across backends, distinguishes alread
 
   it('--json prints the empty report when nothing is tracked anywhere, so stdout is still a document', async () => {
     const store = await storeWith('');
-    const brew = installFake({ id: 'brew' });
-    await runCommand(allInstallCommand([brew], store), { rawArgs: ['--json'] });
+    const brew = mutateFake({ verb, id: 'brew' });
+    await runCommand(allCommand(verb, [brew], store), { rawArgs: ['--json'] });
 
     expect(brew.install).not.toHaveBeenCalled();
     expect(logSpy).toHaveBeenCalledTimes(1);
@@ -966,14 +936,15 @@ describe('all install continues within and across backends, distinguishes alread
 
   it('--dry-run threads dryRun, takes no snapshot at either end, prints no report, and names a failed ref', async () => {
     const store = await storeWith('brew:\n  formulas:\n    - git\n    - jq\n');
-    const brew = installFake({
+    const brew = mutateFake({
+      verb,
       id: 'brew',
-      present: ['git'],
+      installed: ['git'],
       failWith: { jq: () => new Error('jq: no bottle available') },
     });
-    await runCommand(allInstallCommand([brew], store), { rawArgs: ['--dry-run'] });
+    await runCommand(allCommand(verb, [brew], store), { rawArgs: ['--dry-run'] });
 
-    expect(attemptedNames(brew)).toEqual(['git', 'jq']);
+    expect(mutatedNames(verb, brew)).toEqual(['git', 'jq']);
     for (const call of (brew.install as ReturnType<typeof vi.fn>).mock.calls) {
       expect(call[2]).toEqual({ dryRun: true });
     }
@@ -989,7 +960,8 @@ describe('all install continues within and across backends, distinguishes alread
     // backend itself named keeps that detail (ADR 0052 rule 2).
     const store = await storeWith('brew:\n  formulas:\n    - git\n    - jq\n');
     let listed = 0;
-    const brew = installFake({
+    const brew = mutateFake({
+      verb,
       id: 'brew',
       failWith: { jq: () => new Error('jq: no bottle available') },
       list: async () => {
@@ -997,7 +969,7 @@ describe('all install continues within and across backends, distinguishes alread
         return [];
       },
     });
-    await runCommand(allInstallCommand([brew], store), { rawArgs: ['--json'] });
+    await runCommand(allCommand(verb, [brew], store), { rawArgs: ['--json'] });
 
     expect(brew.list).toHaveBeenCalledTimes(2);
     const report = JSON.parse(logSpy.mock.calls[0]?.[0] as string);

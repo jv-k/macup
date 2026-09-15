@@ -48,9 +48,13 @@ one's failure, and never roll back, the same core ADR 0038 established for bundl
 3. Vocabulary extends Install outcome (`installed` / `already-present` / `failed`) rather than
    inventing a parallel report type, and adds a sibling Update outcome (`updated` / `failed`),
    since update has no already-present case. Both add `unavailable` for a backend that never ran.
-4. Exit code is non-zero iff the run produced at least one `failed` package. `unavailable` alone
-   does not force non-zero: ordinary `all` runs, unlike a bundle, name no targets, so a missing
-   backend stays the environmental fact ADR 0033 and ADR 0037 already treat it as, not a shortfall.
+4. Exit code is non-zero iff the run produced at least one `failed` package or a backend failed
+   as a whole. A backend fails as a whole when its planning probe failed or timed out before any
+   ref was attempted, or when the `list()` probe verifying after the batch could not run. A failed
+   backend forces non-zero even where it left no `failed` package entry to count, since the run
+   cannot vouch for its packages. `unavailable` alone does not force non-zero: ordinary `all`
+   runs, unlike a bundle, name no targets, so a missing backend stays the environmental fact
+   ADR 0033 and ADR 0037 already treat it as, not a shortfall.
 5. A single-plugin run whose one backend is unavailable is unaffected by any of this: `check()`
    still throws `ErrPluginUnavailable` before any ref is attempted, aborting the command outright,
    because there is nothing else to isolate against.

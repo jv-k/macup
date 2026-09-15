@@ -18,8 +18,14 @@ import type { MutateOptions, PackageRef, PackageStatus, PluginContext } from './
 // failed ref, per the "bounded/truncated, never raw unbounded output" contract.
 const MAX_FAILURE_MESSAGE_LENGTH = 200;
 
-function boundedFailureMessage(stderr: string, stdout: string): string {
-  const text = stderr.trim() || stdout.trim();
+/**
+ * Bound one failure message to the cap above, naming how much was cut.
+ * Exported so the command loop applies the same bound to a plugin that threw
+ * a bare Error rather than an `ErrMutateFailed` (#162): the report carries one
+ * truncation rule, not two.
+ */
+export function boundedFailureMessage(raw: string): string {
+  const text = raw.trim();
   if (text.length <= MAX_FAILURE_MESSAGE_LENGTH) return text;
   return `${text.slice(0, MAX_FAILURE_MESSAGE_LENGTH)}… (+${text.length - MAX_FAILURE_MESSAGE_LENGTH} chars)`;
 }
@@ -76,7 +82,7 @@ export async function mutateRefs(
     }
     const r = await ctx.exec.run(cmd, args, { signal: ctx.signal, kind: 'user-action' });
     if (r.exitCode !== 0) {
-      failures.push({ ref, message: boundedFailureMessage(r.stderr, r.stdout) });
+      failures.push({ ref, message: boundedFailureMessage(r.stderr.trim() || r.stdout.trim()) });
     }
   }
   if (failures.length > 0) {

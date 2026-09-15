@@ -160,6 +160,24 @@ describe('update continues past a failed ref and reports (#162)', () => {
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
     expect(io.stdout()).not.toMatch(/alpha\s+(updated|failed)/);
+    // Nothing was updated, so no line may say it was (#188).
+    expect(io.stdout()).not.toContain('Updated 2 packages');
+    expect(process.exitCode).toBe(io.savedExitCode);
+  });
+
+  it('--dry-run rethrows an update() failure, since no report would carry it (#188)', async () => {
+    const boom = new Error('plugin bug under dry-run');
+    const plugin = fakePlugin({
+      verb: 'update',
+      outdated: ['alpha', 'beta'],
+      failWith: { alpha: () => boom },
+    });
+    await expect(runCommand(commandFor(plugin), { rawArgs: ['--all', '--dry-run'] })).rejects.toBe(
+      boom,
+    );
+
+    expect(attemptedNames(plugin)).toEqual(['alpha']);
+    expect(io.stdout()).not.toMatch(/alpha\s+(updated|failed)/);
     expect(process.exitCode).toBe(io.savedExitCode);
   });
 

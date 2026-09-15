@@ -20,7 +20,7 @@ import type {
   Plugin,
   PluginContext,
 } from '../plugins/types';
-import { type MutationMode, failuresFor } from './mutation-report';
+import { type MutationMode, failuresFor, mutateFor } from './mutation-report';
 
 /** Why a constituent won't run, or the refs it will act on (status 'planned'). */
 export interface ConstituentPlan {
@@ -117,14 +117,6 @@ export async function planComposite(
     plans.push(planFromProbe(plugin, await probe(plugin, ctx, {}, { skipList }), refs));
   }
   return plans;
-}
-
-/** The signature `install()` and `update()` share. */
-type MutateFn = NonNullable<Plugin['install']>;
-
-/** The verb a mode runs on a plugin, or undefined where the plugin lacks it. */
-export function mutateFor(mode: MutationMode, plugin: Plugin): MutateFn | undefined {
-  return mode === 'update' ? plugin.update : plugin.install;
 }
 
 // `refs` is either already selected without the backend (install, from the

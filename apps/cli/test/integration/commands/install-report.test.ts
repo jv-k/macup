@@ -214,6 +214,7 @@ describe('install continues past a failed ref and reports (#163)', () => {
 
     expect(attemptedNames(plugin)).toEqual(['alpha']);
     expect(io.stdout()).not.toMatch(/alpha\s+(installed|failed)/);
+    expect(process.exitCode).toBe(io.savedExitCode);
   });
 
   it('still fails outright when the one backend is unavailable, before any ref is attempted', async () => {

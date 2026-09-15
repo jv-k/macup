@@ -123,6 +123,11 @@ jobs:
 
   compile-smoke:
     name: Compile smoke (bun --compile)
+    # Builds the single binary, then drives it as a child process against a
+    # PATH of stub backends (apps/cli/test/e2e). The vitest suites prove the
+    # sources; this is the only job that proves the packaged artifact boots,
+    # dispatches, and exits right. MACUP_E2E_BINARY makes the suite require
+    # the binary, so it can never pass here by skipping.
     runs-on: macos-latest
     needs: [lint, test]
     steps:
@@ -137,4 +142,7 @@ jobs:
           bun-version: 1.1.x
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter macup build:binary darwin-arm64
-      - run: ./apps/cli/dist/macup-darwin-arm64 --version
+      - run: pnpm --filter macup test:e2e
+        env:
+          # Relative to apps/cli, which is where the filtered script runs.
+          MACUP_E2E_BINARY: dist/macup-darwin-arm64

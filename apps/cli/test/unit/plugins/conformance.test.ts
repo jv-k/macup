@@ -104,6 +104,12 @@ describe('plugin conformance — every builtin obeys the contract', () => {
         expect(['function', 'undefined']).toContain(typeof plugin.healthCheck);
       });
 
+      it('leaves, when present, is a function (presence is the capability signal, ADR 0051)', () => {
+        // Same rule as healthCheck: an internal affordance with no user-facing
+        // verb, signalled by method presence. Only brew declares it today.
+        expect(['function', 'undefined']).toContain(typeof plugin.leaves);
+      });
+
       if (manifest.requires.length > 0) {
         it('check() throws ErrPluginUnavailable when a required binary is missing', async () => {
           // The composite `all` plugin's check delegates to its members,

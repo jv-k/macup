@@ -78,3 +78,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0048](0048-runjson-leaves-execrunner.md) | `runJson` leaves the `ExecRunner` interface | accepted |
 | [0049](0049-manifest-subtype-table.md) | The manifest declares a subtype table, not a bare id list | accepted |
 | [0050](0050-one-availability-probe.md) | One availability probe for every check-then-list site | accepted |
+| [0051](0051-leaves-is-an-optional-plugin-operation.md) | `leaves` is an optional plugin operation, and `init` scaffolds from it | accepted |

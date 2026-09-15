@@ -2,6 +2,7 @@ import { runJson } from '../src/exec/json';
 import { defaultCheck } from '../src/plugins/defaults';
 import { filterOutdated, mutateRefs } from '../src/plugins/helpers';
 import type {
+  LeavesOptions,
   ListOptions,
   MutateOptions,
   PackageRef,
@@ -114,6 +115,41 @@ async function fetchCasks(ctx: PluginContext, onlyOutdated: boolean): Promise<Pa
   return filterOutdated(result, onlyOutdated);
 }
 
+// One bare name per line, as `brew leaves` and `brew list --cask` print.
+function parseNames(stdout: string): string[] {
+  return stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+// `brew leaves`: installed formulas that no other installed formula or cask
+// depends on. Formula-only: casks answer through `fetchCaskLeaves`. A
+// non-zero exit is a returned result, not a throw, so it is turned into one
+// here: otherwise a broken tap would scaffold no formulas and report nothing.
+async function fetchFormulaLeaves(ctx: PluginContext): Promise<PackageRef[]> {
+  const result = await ctx.exec.run('brew', ['leaves'], { signal: ctx.signal });
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `brew leaves exited ${result.exitCode}: ${result.stderr.trim() || result.stdout.trim()}`,
+    );
+  }
+  return parseNames(result.stdout).map((name) => ({ kind: 'formula', name, subtype: 'formulas' }));
+}
+
+// Homebrew has no leaf notion for casks, so every installed cask is one. The
+// names-only listing is enough here, and unlike `--versions` it does not
+// abort on the first bad cask (see `fetchCasks`).
+async function fetchCaskLeaves(ctx: PluginContext): Promise<PackageRef[]> {
+  const result = await ctx.exec.run('brew', ['list', '--cask'], { signal: ctx.signal });
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `brew list --cask exited ${result.exitCode}: ${result.stderr.trim() || result.stdout.trim()}`,
+    );
+  }
+  return parseNames(result.stdout).map((name) => ({ kind: 'cask', name, subtype: 'casks' }));
+}
+
 // brew needs --cask for cask refs; formulas take the bare name.
 function brewArgs(action: string, ref: PackageRef): readonly [string, readonly string[]] {
   return ['brew', ref.kind === 'cask' ? [action, '--cask', ref.name] : [action, ref.name]];
@@ -197,6 +233,16 @@ const brew: Plugin = {
       results.push({ name });
     }
     return results;
+  },
+
+  async leaves(ctx: PluginContext, opts?: LeavesOptions): Promise<PackageRef[]> {
+    const subtype = opts?.subtype as 'formulas' | 'casks' | undefined;
+
+    if (subtype === 'formulas') return fetchFormulaLeaves(ctx);
+    if (subtype === 'casks') return fetchCaskLeaves(ctx);
+
+    const [formulas, casks] = await Promise.all([fetchFormulaLeaves(ctx), fetchCaskLeaves(ctx)]);
+    return [...formulas, ...casks];
   },
 
   async healthCheck(ctx: PluginContext): Promise<void> {

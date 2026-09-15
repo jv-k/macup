@@ -19,7 +19,7 @@ A plugin's self-declaration: id, display name, category, subtypes, supported OS,
 _Avoid_: spec, plugin config
 
 **Capability**:
-A user-facing verb a plugin declares it supports in its manifest: `list`, `install`, `update`, `track`, `untrack`, `outdated`. The set exists to be rendered: help, completions, and the actions the wizard offers all read it. An operation with no user-facing verb is signalled by method presence instead of a flag: `search` and `uninstall` (ADR 0039).
+A user-facing verb a plugin declares it supports in its manifest: `list`, `install`, `update`, `track`, `untrack`, `outdated`. The set exists to be rendered: help, completions, and the actions the wizard offers all read it. An operation with no user-facing verb is signalled by method presence instead of a flag: `search`, `uninstall`, `healthCheck`, and `leaves` (ADR 0039, ADR 0051).
 _Avoid_: feature, permission
 
 **Elevation**:
@@ -63,6 +63,10 @@ _Avoid_: managed, declared, listed
 **Installed**:
 A package is installed when it is present on the machine, as its backend reports. Orthogonal to tracked: a package can be tracked but not installed, or installed but not tracked.
 _Avoid_: present
+
+**Leaf**:
+An installed package a person chose, as against one its backend pulled in as a dependency of another. Only a backend with a dependency closure can tell the two apart (Homebrew formulas). Where there is no closure, every installed package is a leaf. Bare `init` tracks leaves, because a dependency is a consequence of intent rather than the intent itself (ADR 0051).
+_Avoid_: top-level, explicit install, on-request, root package
 
 **Outdated**:
 One of three update-status values (`updateStatus`, alongside `current` and `unknown`): the backend reports a newer version than the one installed. A fact about versions, independent of pin or skip policy. (Whether an outdated package will actually be upgraded is a separate question: see Pinned and Skipped.)

@@ -77,7 +77,8 @@ export interface PackageStatus {
  * help, completions, and the wizard's menus are all projections of it, which
  * is why `list` is required rather than optional — a backend that cannot be
  * listed has nothing to show. Operations with no user-facing verb (`search`,
- * `uninstall`) are signalled by method presence instead (ADR 0039).
+ * `uninstall`, `healthCheck`, `leaves`) are signalled by method presence
+ * instead (ADR 0039).
  */
 export interface PluginCapabilities {
   /** Always true: a backend that cannot be listed has nothing to show. */
@@ -278,6 +279,12 @@ export interface SearchOptions {
   readonly subtype?: string;
 }
 
+/** Scoping for {@link Plugin.leaves}. */
+export interface LeavesOptions {
+  /** Restrict to one subtype (e.g. 'formulas'). */
+  readonly subtype?: string;
+}
+
 /** One hit from a plugin's package search (the wizard's add flow). */
 export interface SearchResult {
   /** The name to pass back to `track` or `install`. */
@@ -315,6 +322,15 @@ export interface Plugin {
    * capability signal — there is no separate capabilities flag.
    */
   search?(ctx: PluginContext, query: string, opts?: SearchOptions): Promise<SearchResult[]>;
+  /**
+   * Optional: the installed packages a person chose, leaving out the ones the
+   * backend pulled in as dependencies of something else (`brew leaves`). Bare
+   * `macup init` files these instead of the whole closure when a plugin has
+   * them (ADR 0051). A subtype the backend has no leaf notion for (brew's
+   * casks) answers with everything installed under it. Presence of this method is
+   * the capability signal, the rule ADR 0039 sets for `search` and `uninstall`.
+   */
+  leaves?(ctx: PluginContext, opts?: LeavesOptions): Promise<PackageRef[]>;
   /**
    * Optional: run a post-mutation health check for this backend (e.g. `brew
    * doctor`). Called by the host after install and update when present.

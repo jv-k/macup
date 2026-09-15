@@ -169,6 +169,62 @@ describe('brew plugin — search', () => {
   });
 });
 
+// #128: bare `macup init` should track what a person chose, not the closure
+// Homebrew resolved for it. `brew leaves` is the formula set with no dependant.
+// It is formula-only, so every installed cask is filed as a leaf.
+describe('brew plugin — leaves', () => {
+  it('returns the formulas `brew leaves` names, as formula refs', async () => {
+    const ctx = await makeCtx();
+    const refs = await brewPlugin.leaves?.(ctx, { subtype: 'formulas' });
+    expect(refs).toEqual([
+      { kind: 'formula', name: 'git', subtype: 'formulas' },
+      { kind: 'formula', name: 'ripgrep', subtype: 'formulas' },
+    ]);
+  });
+
+  it('treats every installed cask as a leaf, since `brew leaves` is formula-only', async () => {
+    const ctx = await makeCtx();
+    const refs = await brewPlugin.leaves?.(ctx, { subtype: 'casks' });
+    expect(refs).toEqual([
+      { kind: 'cask', name: 'firefox', subtype: 'casks' },
+      { kind: 'cask', name: 'visual-studio-code', subtype: 'casks' },
+    ]);
+  });
+
+  it('returns formula leaves and every cask when subtype is unset', async () => {
+    const ctx = await makeCtx();
+    const refs = await brewPlugin.leaves?.(ctx);
+    expect(refs?.map((r) => r.name)).toEqual(['git', 'ripgrep', 'firefox', 'visual-studio-code']);
+  });
+
+  it('throws when `brew leaves` exits non-zero, so init records a failed backend rather than an empty formulas list', async () => {
+    // A non-zero exit is a returned result, not a throw (ExecRunner), so the
+    // plugin has to read it: a broken tap would otherwise scaffold no formulas
+    // and report nothing, which is the silent no-op ADR 0051 rules out.
+    const ctx: PluginContext = {
+      exec: new FixtureExecRunner({
+        fixtures: [
+          {
+            cmd: 'brew',
+            args: ['leaves'],
+            result: {
+              stdout: '',
+              stderr: 'Error: No available formula with the name "x"',
+              exitCode: 1,
+            },
+          },
+        ],
+        onPath: ['brew'],
+      }),
+      log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+      signal: new AbortController().signal,
+    };
+    await expect(brewPlugin.leaves?.(ctx, { subtype: 'formulas' })).rejects.toThrow(
+      /brew leaves exited 1: Error: No available formula/,
+    );
+  });
+});
+
 describe('brew plugin — healthCheck', () => {
   it('invokes `brew doctor`', async () => {
     const ctx: PluginContext = {

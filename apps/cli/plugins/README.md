@@ -122,3 +122,17 @@ after all refs for that command have been applied, whenever the plugin
 defines it (presence is the signal, same as `search`, with no separate
 capabilities flag). brew, npm, and pnpm implement it by running their
 backend's own `doctor` command (`brew doctor`, `npm doctor`, `pnpm doctor`).
+
+## Leaves
+
+A backend with a dependency closure, where listing installs also lists what
+was pulled in for them, implements the optional `leaves(ctx, opts?)` method:
+the installed packages a person chose, as `PackageRef[]`, scoped by
+`opts.subtype` the way `list` is. A subtype with no closure answers with
+everything installed under it. Bare `macup init` files leaves rather than the
+whole closure when the method exists and otherwise scans `list()`, so a plugin
+whose every install is a leaf already (npm, pnpm, pip) declares nothing.
+Presence is the signal, as with `search` and `healthCheck` (ADR 0051). brew
+implements it with `brew leaves` for formulas and the names-only cask listing
+for casks, and turns a non-zero exit into a throw so `init` records a failed
+backend rather than an empty list.

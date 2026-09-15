@@ -111,5 +111,5 @@ The paragraph above that kept the composite's `install` plan out of the probe re
 
 Alternatives considered for the amendment:
 
-- **Keep the bypass and share only the classification** (export a `classify(err)` from the probe). Removes the duplicate split but leaves two call paths into `check()`, one of them without the probe's abort chaining.
-- **Make `skipList` a narrower type** (an `ok` outcome without a `statuses` field). Truer to what ran, and a second outcome shape for every consumer to narrow over, for one caller that wants an empty `before` anyway.
+- Keep the bypass and share only the classification, exporting a `classify(err)` from the probe. Removes the duplicate split but leaves two call paths into `check()`, one of them without the probe's abort chaining.
+- Make `skipList` a narrower type, an `ok` outcome without a `statuses` field. Truer to what ran, and a second outcome shape for every consumer to narrow over, for one caller that wants an empty `before` anyway.

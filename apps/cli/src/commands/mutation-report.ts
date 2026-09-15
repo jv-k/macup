@@ -2,14 +2,16 @@
  * The end-of-run report for an install or update: which package ended up
  * where, the exit code that follows, and the text and JSON renders.
  *
- * Classification is host-side reconciliation against `list()` snapshots
- * (ADR 0038 rule 3, carried to ordinary install/update by ADR 0050), so it is
- * the same whichever plugin ran. Install compares a before and an after
- * snapshot, because an after-only snapshot cannot tell `installed` from
- * `already-present`. Update reads only the after snapshot: an already-current
- * package never reaches `update()`, so there is no already-present case. The
- * per-ref message from `ErrMutateFailed` is best-effort detail on top of that
- * classification, and becomes the verdict only where the snapshot has none.
+ * Classification is host-side reconciliation against `list()` snapshots, the
+ * rule ADR 0038 (rule 3) set for `bundle install` and #158 carries to ordinary
+ * install and update, so it is the same whichever plugin ran. Install compares
+ * a before and an after snapshot, because an after-only snapshot cannot tell
+ * `installed` from `already-present`. Update reads only the after snapshot: an
+ * already-current package never reaches `update()`, so there is no
+ * already-present case. Where a snapshot has evidence it is the verdict; where
+ * it has none, the backend's own exit decides: a clean batch is trusted and a
+ * ref caught in a thrown batch is failed, with the per-ref message from
+ * `ErrMutateFailed` attached as detail.
  *
  * Pure: no ExecRunner, no plugin calls. The caller takes the snapshots and
  * hands them in, which is what lets the unit tests drive every outcome
@@ -22,13 +24,19 @@ import type { MutateFailure } from '../errors';
 import type { PackageRef, PackageStatus } from '../plugins/types';
 import * as log from '../ui/log';
 
-/** Which mutating verb the report describes. The same pair `composite-mutate.ts` fans out. */
+/** Which mutating verb the report describes. */
 export type MutationMode = 'install' | 'update';
 
-/** Install outcome (`CONTEXT.md`): what one install run did to one package. */
+/**
+ * Install outcome (`CONTEXT.md`: `installed`, `already-present`, `failed`),
+ * plus `unavailable` for a package whose plugin never ran (#158).
+ */
 export type InstallOutcome = 'installed' | 'already-present' | 'failed' | 'unavailable';
 
-/** Update outcome (`CONTEXT.md`): no already-present case, since an already-current package never reaches `update()`. */
+/**
+ * The update-side sibling of {@link InstallOutcome} (#158): no already-present
+ * case, since an already-current package never reaches `update()`.
+ */
 export type UpdateOutcome = 'updated' | 'failed' | 'unavailable';
 
 /** Every outcome either verb can produce. */
@@ -43,22 +51,27 @@ export interface PackageOutcomeEntry<O extends PackageOutcome = PackageOutcome> 
   readonly detail?: string;
 }
 
-/** A backend that ran its batch: what it was asked, its `list()` before and after, and any per-ref failure detail. */
-export interface RanBackend {
+/** A plugin that ran its batch: what it was asked, its `list()` before and after, and any per-ref failure detail. */
+export interface RanPlugin {
   readonly kind: 'ran';
   readonly pluginId: string;
-  /** The refs the run asked the backend to act on; every one gets an entry. */
+  /** The refs the run asked the plugin to act on; every one gets an entry. */
   readonly refs: readonly PackageRef[];
   /** `list()` before the batch. Install reads it to split installed from already-present; update ignores it. */
   readonly before: readonly PackageStatus[];
-  /** `list()` after the batch. Authoritative for the outcome. */
+  /** `list()` after the batch. Where it has evidence, it is the verdict. */
   readonly after: readonly PackageStatus[];
-  /** `ErrMutateFailed.failures`, when the backend threw one. Detail on a failed entry, and the verdict only for a package the snapshot cannot check. */
+  /**
+   * `ErrMutateFailed.failures` when the batch threw one; absent for a clean
+   * batch. A batch that threw without per-ref detail (a bare Error) is handed
+   * in as one failure per requested ref, so every ref caught in it is
+   * reconciled rather than trusted (ADR 0038 rule 3).
+   */
   readonly failures?: readonly MutateFailure[];
 }
 
-/** A backend whose `check()` threw `ErrPluginUnavailable`, so none of its refs were attempted. */
-export interface UnavailableBackend {
+/** A plugin whose `check()` threw `ErrPluginUnavailable`, so none of its refs were attempted. */
+export interface UnavailablePlugin {
   readonly kind: 'unavailable';
   readonly pluginId: string;
   /** The refs that would have run. Empty when the run could not even select them (an update's outdated set needs the backend). */
@@ -66,15 +79,15 @@ export interface UnavailableBackend {
   readonly reason: string;
 }
 
-/** What the caller knows about one backend at the end of the run. */
-export type BackendRun = RanBackend | UnavailableBackend;
+/** What the caller knows about one plugin at the end of the run. */
+export type PluginRun = RanPlugin | UnavailablePlugin;
 
 /**
- * One backend's line in the report: ran, or unavailable and why. Kept apart
- * from the package entries so an unavailable backend whose refs could not
+ * One plugin's line in the report: ran, or unavailable and why. Kept apart
+ * from the package entries so an unavailable plugin whose refs could not
  * even be selected is still reported rather than omitted (ADR 0038 rule 4).
  */
-export interface BackendSummary {
+export interface PluginSummary {
   readonly pluginId: string;
   readonly status: 'ran' | 'unavailable';
   readonly reason?: string;
@@ -83,7 +96,7 @@ export interface BackendSummary {
 /** An install report: only install outcomes can appear in it. */
 export interface InstallReport {
   readonly mode: 'install';
-  readonly backends: readonly BackendSummary[];
+  readonly plugins: readonly PluginSummary[];
   readonly packages: readonly PackageOutcomeEntry<InstallOutcome>[];
   readonly summary: Readonly<Record<InstallOutcome, number>>;
 }
@@ -91,7 +104,7 @@ export interface InstallReport {
 /** An update report: only update outcomes can appear in it. */
 export interface UpdateReport {
   readonly mode: 'update';
-  readonly backends: readonly BackendSummary[];
+  readonly plugins: readonly PluginSummary[];
   readonly packages: readonly PackageOutcomeEntry<UpdateOutcome>[];
   readonly summary: Readonly<Record<UpdateOutcome, number>>;
 }
@@ -116,14 +129,14 @@ function isInstalledIn(index: ReadonlyMap<string, PackageStatus>, ref: PackageRe
   return index.get(refKey(ref))?.installed === true;
 }
 
-function failureFor(run: RanBackend, ref: PackageRef): MutateFailure | undefined {
+function failureFor(run: RanPlugin, ref: PackageRef): MutateFailure | undefined {
   return run.failures?.find((f) => refKey(f.ref) === refKey(ref));
 }
 
 // The backend's message only explains a failure; it is kept off the entry
 // entirely when absent so the JSON render carries no `detail: undefined` noise.
 function entry<O extends PackageOutcome>(
-  run: RanBackend,
+  run: RanPlugin,
   ref: PackageRef,
   outcome: O,
 ): PackageOutcomeEntry<O> {
@@ -133,15 +146,18 @@ function entry<O extends PackageOutcome>(
     : { pluginId: run.pluginId, ref, outcome };
 }
 
-// The snapshot is the verdict (ADR 0038 rule 3), whatever the backend's exit
-// code said: a package on disk after the batch is installed.
-function classifyInstall(run: RanBackend): PackageOutcomeEntry<InstallOutcome>[] {
+// A package on disk after the batch is installed whatever the exit code said.
+// One on disk in neither snapshot gets ADR 0038 rule 3: a self-updater's
+// `list()` never shows an applied update as installed (`softwareupdate` drops
+// it from the pending list), so absence is not evidence, and the backend's
+// own exit decides: trusted when clean, failed when it named the ref.
+function classifyInstall(run: RanPlugin): PackageOutcomeEntry<InstallOutcome>[] {
   const before = indexSnapshot(run.before);
   const after = indexSnapshot(run.after);
   return run.refs.map((ref) => {
     const outcome: InstallOutcome = isInstalledIn(before, ref)
       ? 'already-present'
-      : isInstalledIn(after, ref)
+      : isInstalledIn(after, ref) || failureFor(run, ref) === undefined
         ? 'installed'
         : 'failed';
     return entry(run, ref, outcome);
@@ -152,9 +168,8 @@ function classifyInstall(run: RanBackend): PackageOutcomeEntry<InstallOutcome>[]
 // question: is it still behind? Still `outdated` is a failure. `current`, or
 // gone from the listing (a system update that applied no longer appears in
 // `softwareupdate --list`), is updated. `unknown` is the one status with no
-// answer (ADR 0036), and there ADR 0038 rule 3 applies: a package caught in a
-// thrown batch is failed, a clean batch is trusted.
-function classifyUpdate(run: RanBackend): PackageOutcomeEntry<UpdateOutcome>[] {
+// answer (ADR 0036), so there the backend's exit decides, as for install.
+function classifyUpdate(run: RanPlugin): PackageOutcomeEntry<UpdateOutcome>[] {
   const after = indexSnapshot(run.after);
   return run.refs.map((ref) => {
     const status = after.get(refKey(ref))?.updateStatus;
@@ -164,17 +179,11 @@ function classifyUpdate(run: RanBackend): PackageOutcomeEntry<UpdateOutcome>[] {
   });
 }
 
-function unavailableEntries<O extends PackageOutcome>(
-  run: UnavailableBackend,
-): PackageOutcomeEntry<O>[] {
-  return run.refs.map((ref) => ({
-    pluginId: run.pluginId,
-    ref,
-    outcome: 'unavailable' as O,
-  }));
+function unavailableEntries(run: UnavailablePlugin): PackageOutcomeEntry<'unavailable'>[] {
+  return run.refs.map((ref) => ({ pluginId: run.pluginId, ref, outcome: 'unavailable' }));
 }
 
-function summarizeBackend(run: BackendRun): BackendSummary {
+function summarizePlugin(run: PluginRun): PluginSummary {
   return run.kind === 'ran'
     ? { pluginId: run.pluginId, status: 'ran' }
     : { pluginId: run.pluginId, status: 'unavailable', reason: run.reason };
@@ -192,32 +201,33 @@ function count<O extends PackageOutcome>(
 /**
  * Classify every requested package of the run from the snapshots and assemble
  * the report. Install splits `already-present` (installed before the batch)
- * from `installed` (installed only after) and calls the rest `failed`. Update
- * calls a package still `outdated` afterwards `failed` and the rest `updated`.
- * A backend that never ran contributes an `unavailable` entry per ref it would
- * have acted on, and its own line in `backends` either way.
+ * from `installed` (installed only after, or in neither snapshot after a
+ * clean batch) and calls a ref the backend named `failed`. Update calls a
+ * package still `outdated` afterwards `failed` and the rest `updated`. A
+ * plugin that never ran contributes an `unavailable` entry per ref it would
+ * have acted on, and its own line in `plugins` either way.
  */
 export function buildMutationReport(
   mode: MutationMode,
-  backends: readonly BackendRun[],
+  runs: readonly PluginRun[],
 ): MutationReport {
-  const summaries = backends.map(summarizeBackend);
+  const plugins = runs.map(summarizePlugin);
   if (mode === 'install') {
-    const packages = backends.flatMap((b) =>
-      b.kind === 'ran' ? classifyInstall(b) : unavailableEntries<InstallOutcome>(b),
+    const packages = runs.flatMap((r) =>
+      r.kind === 'ran' ? classifyInstall(r) : unavailableEntries(r),
     );
     const zero = { installed: 0, 'already-present': 0, failed: 0, unavailable: 0 };
-    return { mode, backends: summaries, packages, summary: count(packages, zero) };
+    return { mode, plugins, packages, summary: count(packages, zero) };
   }
-  const packages = backends.flatMap((b) =>
-    b.kind === 'ran' ? classifyUpdate(b) : unavailableEntries<UpdateOutcome>(b),
+  const packages = runs.flatMap((r) =>
+    r.kind === 'ran' ? classifyUpdate(r) : unavailableEntries(r),
   );
   const zero = { updated: 0, failed: 0, unavailable: 0 };
-  return { mode, backends: summaries, packages, summary: count(packages, zero) };
+  return { mode, plugins, packages, summary: count(packages, zero) };
 }
 
 /**
- * Non-zero exactly when a package failed. An unavailable backend costs
+ * Non-zero exactly when a package failed. An unavailable plugin costs
  * nothing: an ordinary install or update names no targets, so a missing
  * backend stays the environmental fact ADR 0033 and ADR 0037 treat it as. A
  * bundle's named targets are held to the stricter rule, in ADR 0038, not here.
@@ -232,71 +242,67 @@ export interface RenderOptions {
   color?: boolean;
 }
 
-// The prose form of each outcome token: the JSON keeps `already-present`, the
-// user reads "already present".
-const OUTCOME_WORDS: Readonly<Record<PackageOutcome, string>> = {
-  installed: 'installed',
-  updated: 'updated',
-  'already-present': 'already present',
-  failed: 'failed',
-  unavailable: 'unavailable',
-};
-
 // Summary order: what this run achieved first, then what it did not.
 const OUTCOME_ORDER: Readonly<Record<MutationMode, readonly PackageOutcome[]>> = {
   install: ['installed', 'already-present', 'failed', 'unavailable'],
   update: ['updated', 'failed', 'unavailable'],
 };
 
+interface OutcomeStyle {
+  /** The prose form: the JSON keeps `already-present`, the user reads "already present". */
+  readonly word: string;
+  readonly glyph: string;
+  readonly tone: keyof log.Painter;
+}
+
+const STYLE: Readonly<Record<PackageOutcome, OutcomeStyle>> = {
+  installed: { word: 'installed', glyph: log.GLYPHS.success, tone: 'green' },
+  updated: { word: 'updated', glyph: log.GLYPHS.success, tone: 'green' },
+  'already-present': { word: 'already present', glyph: log.GLYPHS.bullet, tone: 'dim' },
+  failed: { word: 'failed', glyph: log.GLYPHS.error, tone: 'red' },
+  unavailable: { word: 'unavailable', glyph: log.GLYPHS.question, tone: 'dim' },
+};
+
 /**
  * The human report. One line per package, the backend's message dimmed under
- * a failure, one line per unavailable backend, then the totals:
+ * a failure, one line per unavailable plugin, then the totals:
  *
  *     ✔ brew  jq       installed
  *     • brew  ripgrep  already present
  *     ✖ brew  fd       failed
- *       ↳ Error: fd: no bottle available
+ *       → Error: fd: no bottle available
  *     ? pnpm  turbo    unavailable
  *     ? pnpm  unavailable: pnpm not on PATH
  *
  *     1 installed, 1 already present, 1 failed, 1 unavailable
  */
 export function renderText(report: MutationReport, opts: RenderOptions = {}): string {
-  const { green, red, dim } = log.paint(opts.color ?? false);
-  const glyph: Readonly<Record<PackageOutcome, string>> = {
-    installed: green(log.GLYPHS.success),
-    updated: green(log.GLYPHS.success),
-    'already-present': dim(log.GLYPHS.bullet),
-    failed: red(log.GLYPHS.error),
-    unavailable: dim(log.GLYPHS.question),
-  };
-  const tone: Readonly<Record<PackageOutcome, (s: string) => string>> = {
-    installed: green,
-    updated: green,
-    'already-present': dim,
-    failed: red,
-    unavailable: dim,
-  };
+  const painter = log.paint(opts.color ?? false);
+  const { dim } = painter;
+  const paint = (outcome: PackageOutcome, text: string) => painter[STYLE[outcome].tone](text);
 
-  const idPad = Math.max(0, ...report.backends.map((b) => b.pluginId.length));
+  const idPad = Math.max(0, ...report.plugins.map((p) => p.pluginId.length));
   const namePad = Math.max(0, ...report.packages.map((p) => p.ref.name.length));
 
   const lines: string[] = [];
   for (const p of report.packages) {
+    const style = STYLE[p.outcome];
     const id = p.pluginId.padEnd(idPad);
     const name = p.ref.name.padEnd(namePad);
     lines.push(
-      `  ${glyph[p.outcome]} ${id}  ${name}  ${tone[p.outcome](OUTCOME_WORDS[p.outcome])}`,
+      `  ${paint(p.outcome, style.glyph)} ${id}  ${name}  ${paint(p.outcome, style.word)}`,
     );
     if (p.detail) {
-      for (const line of p.detail.split('\n'))
+      for (const line of p.detail.split('\n')) {
         lines.push(`    ${dim(`${log.GLYPHS.arrow} ${line}`)}`);
+      }
     }
   }
-  for (const b of report.backends) {
-    if (b.status !== 'unavailable') continue;
+  for (const plugin of report.plugins) {
+    if (plugin.status !== 'unavailable') continue;
+    const id = plugin.pluginId.padEnd(idPad);
     lines.push(
-      `  ${glyph.unavailable} ${b.pluginId.padEnd(idPad)}  ${dim(`unavailable: ${b.reason ?? 'unknown'}`)}`,
+      `  ${dim(STYLE.unavailable.glyph)} ${id}  ${dim(`unavailable: ${plugin.reason ?? 'unknown'}`)}`,
     );
   }
 
@@ -305,10 +311,10 @@ export function renderText(report: MutationReport, opts: RenderOptions = {}): st
     lines.push(`  ${dim(`Nothing to ${report.mode}.`)}`);
     return lines.join('\n');
   }
-  const counts = report.summary as Readonly<Partial<Record<PackageOutcome, number>>>;
+  const counts: Readonly<Partial<Record<PackageOutcome, number>>> = report.summary;
   const parts = OUTCOME_ORDER[report.mode]
     .filter((o) => (counts[o] ?? 0) > 0)
-    .map((o) => tone[o](`${counts[o]} ${OUTCOME_WORDS[o]}`));
+    .map((o) => paint(o, `${counts[o]} ${STYLE[o].word}`));
   lines.push(`  ${parts.join(', ')}`);
   return lines.join('\n');
 }

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  type BackendRun,
+  type PluginRun,
   buildMutationReport,
   exitCodeFor,
   renderJson,
@@ -22,6 +22,16 @@ function installed(name: string, kind = 'formula'): PackageStatus {
     installed: true,
     installedVersion: '1.0.0',
     updateStatus: 'current',
+  };
+}
+
+function outdated(name: string, kind = 'formula'): PackageStatus {
+  return {
+    ref: ref(name, kind),
+    installed: true,
+    installedVersion: '1.0.0',
+    latestVersion: '2.0.0',
+    updateStatus: 'outdated',
   };
 }
 
@@ -85,15 +95,47 @@ describe('buildMutationReport: snapshot is the verdict', () => {
   });
 });
 
-function outdated(name: string, kind = 'formula'): PackageStatus {
-  return {
-    ref: ref(name, kind),
-    installed: true,
-    installedVersion: '1.0.0',
-    latestVersion: '2.0.0',
-    updateStatus: 'outdated',
-  };
-}
+describe('buildMutationReport: install of a package list() never shows as installed', () => {
+  it('trusts a clean batch and reconciles a thrown one (ADR 0038 rule 3)', () => {
+    // `softwareupdate --list` reports pending updates as installed: false and
+    // drops one once it applies, so neither snapshot can show it installed.
+    const pending = (label: string): PackageStatus => ({
+      ref: ref(label, 'system'),
+      installed: false,
+      updateStatus: 'outdated',
+    });
+    const clean = buildMutationReport('install', [
+      {
+        kind: 'ran',
+        pluginId: 'system',
+        refs: [ref('macOS 15.1', 'system')],
+        before: [pending('macOS 15.1')],
+        after: [],
+      },
+    ]);
+    expect(clean.packages).toEqual([
+      { pluginId: 'system', ref: ref('macOS 15.1', 'system'), outcome: 'installed' },
+    ]);
+    const thrown = buildMutationReport('install', [
+      {
+        kind: 'ran',
+        pluginId: 'system',
+        refs: [ref('macOS 15.1', 'system')],
+        before: [pending('macOS 15.1')],
+        after: [pending('macOS 15.1')],
+        failures: [{ ref: ref('macOS 15.1', 'system'), message: 'softwareupdate exited 1' }],
+      },
+    ]);
+    expect(thrown.packages).toEqual([
+      {
+        pluginId: 'system',
+        ref: ref('macOS 15.1', 'system'),
+        outcome: 'failed',
+        detail: 'softwareupdate exited 1',
+      },
+    ]);
+  });
+});
 
 describe('buildMutationReport: update', () => {
   it('classifies a package the after snapshot no longer reports behind as updated and one still outdated as failed', () => {
@@ -212,7 +254,7 @@ describe('exitCodeFor', () => {
 
 // One run per mode that produces every outcome the mode has, so a renderer
 // test covers each combination without inventing a report by hand.
-const EVERY_INSTALL_OUTCOME: readonly BackendRun[] = [
+const EVERY_INSTALL_OUTCOME: readonly PluginRun[] = [
   {
     kind: 'ran',
     pluginId: 'brew',
@@ -229,7 +271,7 @@ const EVERY_INSTALL_OUTCOME: readonly BackendRun[] = [
   },
 ];
 
-const EVERY_UPDATE_OUTCOME: readonly BackendRun[] = [
+const EVERY_UPDATE_OUTCOME: readonly PluginRun[] = [
   {
     kind: 'ran',
     pluginId: 'npm',
@@ -239,6 +281,12 @@ const EVERY_UPDATE_OUTCOME: readonly BackendRun[] = [
     failures: [{ ref: ref('eslint', 'npm'), message: 'npm ERR! code EACCES' }],
   },
   { kind: 'unavailable', pluginId: 'appstore', refs: [], reason: 'mas not on PATH' },
+  {
+    kind: 'unavailable',
+    pluginId: 'system',
+    refs: [ref('macOS 15.1', 'system')],
+    reason: 'softwareupdate not on PATH',
+  },
 ];
 
 describe('renderJson', () => {
@@ -248,6 +296,9 @@ describe('renderJson', () => {
       ['update', EVERY_UPDATE_OUTCOME],
     ] as const) {
       const report = buildMutationReport(mode, backends);
+      // Strict, unlike the rest of the suite: `toEqual` ignores a key whose
+      // value is undefined, and a `detail: undefined` that JSON drops is
+      // exactly the round-trip drift this criterion exists to catch.
       expect(JSON.parse(renderJson(report))).toStrictEqual(report);
     }
   });
@@ -265,14 +316,15 @@ describe('renderText', () => {
     expect(text).toContain('1 installed, 1 already present, 1 failed, 1 unavailable');
   });
 
-  it('uses the update vocabulary for an update run and names a backend that could not even be asked', () => {
+  it('uses the update vocabulary for an update run and names a plugin that could not even be asked', () => {
     const text = renderText(buildMutationReport('update', EVERY_UPDATE_OUTCOME));
     expect(text).toMatch(/typescript\s+updated/);
     expect(text).toMatch(/eslint\s+failed/);
     expect(text).toContain('npm ERR! code EACCES');
     expect(text).toContain('mas not on PATH');
-    expect(text).toContain('1 updated, 1 failed');
-    expect(text).not.toContain('unavailable,');
+    expect(text).toMatch(/macOS 15\.1\s+unavailable/);
+    expect(text).toContain('1 updated, 1 failed, 1 unavailable');
+    expect(text).not.toContain('already present');
   });
 
   it('says there was nothing to do when no package reached the run', () => {

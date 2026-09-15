@@ -132,9 +132,10 @@ export async function detectInstalled(
     const subtypeIds =
       m.subtypes && m.subtypes.length > 0 ? m.subtypes.map((s) => s.id) : [undefined];
     for (const subtype of subtypeIds) {
-      // The key this subtype's tracked scope reads (#141): the same one the
-      // track verb writes to, so the scaffold files names where `list` will
-      // later look for them. A plugin without subtypes has one key.
+      // The key this subtype's tracked scope reads (#141), so the scaffold
+      // files names where `list` will later look for them. One key per pass:
+      // a subtype resolves to its own entry, and a plugin without subtypes
+      // declares exactly one key, which is also the one `track` writes to.
       const [key] = trackedKeys(m, subtype);
       if (!key) continue;
 

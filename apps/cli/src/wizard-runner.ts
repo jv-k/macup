@@ -128,6 +128,10 @@ async function promptTrackedSetPicker(
   const statuses = outcome.statuses;
 
   const store = await deps.getStore();
+  // Reads every key when `target.subtype` is unset, while applySyncTracked
+  // writes to the first. The two agree because pickTarget names a subtype
+  // for every plugin with more than one (wizard.ts, buildGroups), so an unset
+  // subtype here always means a single-key plugin.
   const tracked = trackedNames(plugin, store, target.subtype);
   const trackedSet = new Set(tracked);
 

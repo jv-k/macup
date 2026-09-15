@@ -17,11 +17,12 @@
 import type { ApplistKey } from '../config/schema';
 import { probeOrThrow } from './probe';
 import { configKeyForSubtype } from './subtype-table';
-import type { PackageStatus, Plugin, PluginContext, PluginManifest } from './types';
+import type { ListOptions, PackageStatus, Plugin, PluginContext, PluginManifest } from './types';
 
 /**
- * The applist reads an operation makes. `ConfigStore` satisfies it, and so
- * does any test double with a `list`; nothing here writes.
+ * The applist reads an operation makes: the `list(key)` slice of
+ * `ConfigStore`, which the init scaffold's `ScaffoldStore` and the list
+ * regression test's `{ list }` double also satisfy. Nothing here writes.
  */
 export interface TrackedStore {
   /** The names tracked under one key, in file order. */
@@ -34,7 +35,7 @@ export interface TrackedStore {
  * subtype table (ADR 0049) so brew's `casks` reaches `brew.casks` without
  * this module knowing brew exists.
  */
-export function trackedKeys(manifest: PluginManifest, subtype: string | undefined): ApplistKey[] {
+export function trackedKeys(manifest: PluginManifest, subtype?: string): ApplistKey[] {
   if (subtype === undefined) return [...manifest.configKeys];
   const key = configKeyForSubtype(manifest, subtype);
   return key === undefined ? [] : [key];
@@ -54,12 +55,8 @@ export function trackedNames(plugin: Plugin, store: TrackedStore, subtype?: stri
   return [...names];
 }
 
-/** How one {@link listPackages} call is scoped. */
-export interface ListScope {
-  /** Restrict to one subtype; omit for every subtype the plugin declares. */
-  readonly subtype?: string;
-  /** Restrict to packages the backend reports as behind. */
-  readonly onlyOutdated?: boolean;
+/** How one {@link listPackages} call is scoped: the plugin's own `ListOptions`, plus the host-side switch. */
+export interface ListScope extends ListOptions {
   /** Everything installed, with no tracked scoping and no applist read. */
   readonly showAll?: boolean;
 }
@@ -84,16 +81,11 @@ export interface ListResult {
 
 /**
  * List this plugin for this scope: one availability probe (ADR 0050), then
- * tracked scoping unless `showAll`, with the plugin's warnings gathered as
- * data alongside. The warnings are observed, not intercepted: each still
- * reaches `ctx.log.warn`, so where and whether they show stays the host
- * logger's decision, and this operation prints nothing itself.
- *
- * `openStore` is called only when scoping needs the applist: never under
- * `showAll`, and never for a plugin with no applist keys. Opening the store
- * is not side-effect free (`CliDeps.getStore` migrates a pre-1.x layout), so a
- * caller that never asked for tracked scoping never pays for it.
- *
+ * tracked scoping unless `showAll`, with every warning the plugin logs on the
+ * way recorded as data. Each warning still reaches `ctx.log.warn`, so where
+ * and whether it shows stays the host logger's decision. `openStore` runs only
+ * when scoping needs the applist, never under `showAll` and never for a plugin
+ * with no applist keys, because opening it is not a read (ADR 0053).
  * @throws whatever `check()` or `list()` threw: `ErrPluginUnavailable` for a
  * missing backend, or the plugin's own error. Unchanged from the direct calls
  * this replaces, so a consumer's error boundary sees the same thing.
@@ -116,12 +108,10 @@ export async function listPackages(
     },
   };
 
-  const statuses = await probeOrThrow(plugin, observed, {
-    subtype: scope.subtype,
-    onlyOutdated: Boolean(scope.onlyOutdated),
-  });
+  const { showAll, ...listOpts } = scope;
+  const statuses = await probeOrThrow(plugin, observed, listOpts);
 
-  if (scope.showAll || plugin.manifest.configKeys.length === 0) {
+  if (showAll || plugin.manifest.configKeys.length === 0) {
     return { statuses, fellBackToAll: false, warnings };
   }
 

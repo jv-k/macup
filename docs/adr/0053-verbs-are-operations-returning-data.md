@@ -39,8 +39,10 @@ verbs as functions that return data. Two land in this slice:
   beneath it, through the manifest's subtype table (ADR 0049).
 - `listPackages(plugin, ctx, openStore, scope)`: one probe (ADR 0050), then
   tracked scoping unless `showAll`, returning `{ statuses, fellBackToAll,
-  warnings }`. The warnings are observed as the plugin logs them and still
-  reach the host logger. The operation intercepts nothing and prints nothing.
+  warnings }`. The operation records each warning as the plugin logs it, by
+  handing the plugin a context whose `warn` records and then delegates, so
+  every warning still reaches the host logger. The wrap that the command used
+  to keep now lives here, once, and the command reads the result.
 
 An operation never prints, never reads the TTY, and never sets the process
 exit code. It takes a `TrackedStore`, the `list(key)` slice of `ConfigStore`,
@@ -96,6 +98,8 @@ command called the plugin itself.
 - The `list` spinner now wraps the applist read as well as the probe. On a
   TTY with a current-layout applist the output is byte-identical. When the
   applist is malformed the spinner line reads "failed." rather than "done."
-  before the error, which is the truer of the two.
+  before the error, which is the truer of the two, and the one-time "migrated
+  applist.yaml" notice a pre-1.x layout prints lands while the spinner is
+  running rather than after it.
 - The composite `all` is still a plugin with its own `list()`, and `install`
   and `update` are still command bodies. Each is a later slice of #134.

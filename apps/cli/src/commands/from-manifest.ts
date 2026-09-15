@@ -185,12 +185,14 @@ function requireNames(rawArgs: string[], pluginId: string, command: string): str
   return names;
 }
 
-// The one applist key a mutating verb (install, track, untrack) acts on: a
-// thin wrapper over the host helper (`plugins/subtype-table.ts`) that also
-// enforces the invariant every track-capable manifest must meet. The read
-// side (`list`, the wizard, the init scan) resolves its scope through
-// `plugins/operations.ts` instead, which may span every key.
-// @throws Error when the plugin declares no `configKeys`, which a track-capable manifest must.
+/**
+ * The one applist key a mutating verb (install, track, untrack) acts on: a
+ * thin wrapper over the host helper (`plugins/subtype-table.ts`) that also
+ * enforces the invariant every track-capable manifest must meet. The read
+ * side (`list`, the wizard, the init scan) resolves its scope through
+ * `plugins/operations.ts` instead, which may span every key.
+ * @throws Error when the plugin declares no `configKeys`, which a track-capable manifest must.
+ */
 function resolveConfigKey(plugin: Plugin, subtype: string | undefined): ApplistKey {
   const key = configKeyForSubtype(plugin.manifest, subtype);
   if (!key) throw new Error(`Plugin ${plugin.manifest.id} has no configKeys`);

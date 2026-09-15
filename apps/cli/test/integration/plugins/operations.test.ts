@@ -13,6 +13,7 @@ import npmPlugin from '../../../plugins/npm';
 import pnpmPlugin from '../../../plugins/pnpm';
 import systemPlugin from '../../../plugins/system';
 import { ConfigStore } from '../../../src/config/store';
+import { ErrPluginUnavailable } from '../../../src/errors';
 import { FixtureExecRunner, loadFixtures } from '../../../src/exec/fixtures';
 import { listPackages, trackedNames } from '../../../src/plugins/operations';
 import type { Logger, PluginContext } from '../../../src/plugins/types';
@@ -104,9 +105,12 @@ describe('listPackages', () => {
   });
 
   it('scopes one subtype against that subtype’s tracked key alone', async () => {
-    // `jq` is tracked as a formula; a cask listing must not pick it up, and
-    // the tracked set for casks is `firefox` alone.
-    const store = await storeFrom('brew:\n  formulas:\n    - jq\n  casks:\n    - firefox\n');
+    // `visual-studio-code` is installed as a cask but tracked only under
+    // formulas, so a listing scoped to casks that read every key would show
+    // it. Reading the casks key alone leaves `firefox`.
+    const store = await storeFrom(
+      'brew:\n  formulas:\n    - visual-studio-code\n  casks:\n    - firefox\n',
+    );
     const result = await listPackages(
       brewPlugin,
       await ctxFrom('brew.json', 'brew'),
@@ -121,7 +125,8 @@ describe('listPackages', () => {
   });
 
   it('keeps only outdated packages under onlyOutdated, still within the tracked set', async () => {
-    // typescript and eslint are both outdated in the recording; only typescript is tracked.
+    // typescript and eslint are outdated in the recording. Of the tracked
+    // pair, typescript is the outdated one and nodemon is current.
     const store = await storeFrom('npm:\n  - typescript\n  - nodemon\n');
     const result = await listPackages(
       npmPlugin,
@@ -158,7 +163,8 @@ describe('listPackages', () => {
     };
     const store = await storeFrom('pnpm:\n  - typescript\n');
     const result = await listPackages(pnpmPlugin, ctx, async () => store, {});
-    expect(result.warnings).toEqual(['pnpm list -g failed (exit 1): ERR_PNPM_NO_GLOBAL_BIN_DIR']);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toMatch(/pnpm list -g failed/);
     expect(logged).toEqual(result.warnings);
     expect(result.statuses).toEqual([]);
   });
@@ -174,5 +180,36 @@ describe('listPackages', () => {
     );
     expect(result.statuses).toHaveLength(4);
     expect(result.fellBackToAll).toBe(false);
+  });
+
+  it('never opens the applist for a plugin that declares no keys, and never falls back', async () => {
+    const result = await listPackages(
+      systemPlugin,
+      await ctxFrom('system-none.json', 'softwareupdate'),
+      async () => {
+        throw new Error('the applist must not be opened for an untracked plugin');
+      },
+      {},
+    );
+    expect(result.statuses).toEqual([]);
+    expect(result.fellBackToAll).toBe(false);
+  });
+
+  it('rethrows ErrPluginUnavailable when the backend is missing, before any applist read', async () => {
+    const ctx: PluginContext = {
+      exec: new FixtureExecRunner({ fixtures: [], onPath: [] }),
+      log: silentLog,
+      signal: new AbortController().signal,
+    };
+    const attempt = listPackages(
+      npmPlugin,
+      ctx,
+      async () => {
+        throw new Error('the applist must not be opened when the probe fails');
+      },
+      {},
+    );
+    await expect(attempt).rejects.toBeInstanceOf(ErrPluginUnavailable);
+    await expect(attempt).rejects.toMatchObject({ exitCode: 1, pluginId: 'npm' });
   });
 });

@@ -88,7 +88,7 @@ export async function mutateRefs(
   for (const ref of refs) {
     const [cmd, args] = command(ref);
     if (opts.dryRun) {
-      ctx.log.info(`[dry-run] ${cmd} ${args.join(' ')}`);
+      ctx.log.info(dryRunLine(cmd, args));
       continue;
     }
     const r = await ctx.exec.run(cmd, args, { signal: ctx.signal, kind: 'user-action' });
@@ -99,4 +99,29 @@ export async function mutateRefs(
   if (failures.length > 0) {
     throw new ErrMutateFailed(failures);
   }
+}
+
+/**
+ * Run one command, or under `dryRun` print it and run nothing: the gate
+ * `mutateRefs` applies per ref, for an operation that is a single command with
+ * no ref loop. The health checks (`brew doctor` and its siblings) are the
+ * callers (#152). Kept here so the gate is one rule rather than a copy per
+ * plugin, which is where a dropped `ctx.signal` crept in last time.
+ */
+export async function runUnlessDryRun(
+  ctx: PluginContext,
+  opts: MutateOptions,
+  cmd: string,
+  args: readonly string[],
+): Promise<void> {
+  if (opts.dryRun) {
+    ctx.log.info(dryRunLine(cmd, args));
+    return;
+  }
+  await ctx.exec.run(cmd, args, { signal: ctx.signal });
+}
+
+/** The one spelling of "would have run this", so every dry-run line reads the same. */
+function dryRunLine(cmd: string, args: readonly string[]): string {
+  return `[dry-run] ${cmd} ${args.join(' ')}`;
 }

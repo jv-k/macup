@@ -1,7 +1,8 @@
 // #139: one availability probe for every check-then-list site. Covers the
 // four outcomes (ok/unavailable/timeout/failed), that a timed-out probe
 // aborts the context signal it hands to the plugin, that skipCheck bypasses
-// check() (the doctor's deep-check contract), and probeOrThrow's rethrow.
+// check() (the doctor's deep-check contract), that skipList runs check()
+// alone (the dry-run install plan's contract, #194), and probeOrThrow's rethrow.
 
 import { describe, expect, it } from 'vitest';
 import { ErrPluginUnavailable } from '../../../src/errors';
@@ -125,6 +126,50 @@ describe('probe', () => {
     const outcome = await probe(plugin, makeDeps(), {}, { skipCheck: true });
     expect(checkCalled).toBe(false);
     expect(outcome).toEqual({ kind: 'ok', statuses: [status('a')] });
+  });
+
+  it('runs check() alone when skipList is set: ok with no statuses, list() never called (#194)', async () => {
+    let checkCalled = false;
+    let listCalled = false;
+    const plugin = mkPlugin({
+      check: async () => {
+        checkCalled = true;
+      },
+      list: async () => {
+        listCalled = true;
+        return [status('a')];
+      },
+    });
+    const outcome = await probe(plugin, makeDeps(), {}, { skipList: true });
+    expect(checkCalled).toBe(true);
+    expect(listCalled).toBe(false);
+    expect(outcome).toEqual({ kind: 'ok', statuses: [] });
+  });
+
+  it('classifies a check() throw under skipList the same as a full probe would: unavailable or failed (#194)', async () => {
+    const missing = new ErrPluginUnavailable('demo', 'not on PATH');
+    const unavailable = mkPlugin({
+      check: async () => {
+        throw missing;
+      },
+    });
+    await expect(probe(unavailable, makeDeps(), {}, { skipList: true })).resolves.toEqual({
+      kind: 'unavailable',
+      message: missing.message,
+      error: missing,
+    });
+
+    const broken = new Error('broken venv');
+    const failed = mkPlugin({
+      check: async () => {
+        throw broken;
+      },
+    });
+    await expect(probe(failed, makeDeps(), {}, { skipList: true })).resolves.toEqual({
+      kind: 'failed',
+      message: 'broken venv',
+      error: broken,
+    });
   });
 
   it('propagates an already-aborted caller signal into the plugin context', async () => {

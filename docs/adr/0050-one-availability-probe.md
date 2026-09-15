@@ -102,3 +102,14 @@ unrelated.
   silent behavior difference between the doctor and everyone else.
 - The composite's `install` plan stays check()-only, on purpose. Promotion
   did not grow the set of live calls a plan makes.
+
+## Amendment: `skipList` brings the install plan under the probe (2026-09-15, #194)
+
+The paragraph above that kept the composite's `install` plan out of the probe rested on one fact: routing it through `probe()` would add a `list()` call no install plan had ever made. ADR 0052 then gave the live install plan a listing of its own, the report's `before` snapshot, and the dry-run plan (and a constituent with nothing tracked, which feeds no report) stayed `check()`-only. That left `composite-mutate.ts` classifying a thrown `check()` itself, `ErrPluginUnavailable` versus anything else, a second copy of the split this ADR exists to own.
+
+**`probe()` takes a `skipList` option, the mirror of `skipCheck`.** Set, it runs `check()` alone and returns `ok` with no statuses, or the same `unavailable` / `failed` classification a full probe gives a thrown `check()`. The dry-run install plan passes it, so every constituent plan is now a projection of one `ProbeOutcome`, and the plan-from-a-thrown-check path is gone. The set of live calls a plan makes is unchanged: `skipList` is exactly the "no listing" the earlier paragraph was protecting, spelled as an option rather than as a bypass.
+
+Alternatives considered for the amendment:
+
+- **Keep the bypass and share only the classification** (export a `classify(err)` from the probe). Removes the duplicate split but leaves two call paths into `check()`, one of them without the probe's abort chaining.
+- **Make `skipList` a narrower type** (an `ok` outcome without a `statuses` field). Truer to what ran, and a second outcome shape for every consumer to narrow over, for one caller that wants an empty `before` anyway.

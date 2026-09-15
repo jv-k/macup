@@ -340,6 +340,35 @@ describe('fanOutComposite — install', () => {
     // names what it would have installed, for the report. Update cannot.
     expect(plans.map((p) => p.refs.map((r) => r.name))).toEqual([['jq'], ['left-pad'], ['black']]);
   });
+
+  it('classifies a dry-run install plan at check() alone, through the same probe split, and keeps the refs (#194)', async () => {
+    // A dry run takes no listing, so only check() can tell unavailable from
+    // error. That split lives in the probe (ADR 0050); the plan must read it
+    // from there rather than classify the thrown error a second time.
+    const store = await storeWith('brew:\n  formulas:\n    - jq\npip:\n  - black\n');
+    const brew = installFake({
+      id: 'brew',
+      check: vi.fn(async () => {
+        throw new ErrPluginUnavailable('brew', 'brew not on PATH');
+      }),
+    });
+    const pip = installFake({
+      id: 'pip',
+      check: vi.fn(async () => {
+        throw new Error('pip: broken venv');
+      }),
+    });
+    const plans = await planComposite('install', [brew, pip], store, makeCtx, { dryRun: true });
+
+    expect(brew.check).toHaveBeenCalledTimes(1);
+    expect(pip.check).toHaveBeenCalledTimes(1);
+    expect(brew.list).not.toHaveBeenCalled();
+    expect(pip.list).not.toHaveBeenCalled();
+    expect(plans.map((p) => [p.status, p.message, p.refs.map((r) => r.name), p.before])).toEqual([
+      ['unavailable', expect.stringContaining('brew not on PATH'), ['jq'], []],
+      ['error', 'pip: broken venv', ['black'], []],
+    ]);
+  });
 });
 
 // `all update` through the command: after snapshot per constituent that ran,

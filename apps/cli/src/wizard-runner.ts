@@ -19,6 +19,7 @@ import { isCancel, note, select, text } from '@clack/prompts';
 import { type CommandDef, runCommand } from 'citty';
 import type { CliDeps } from './cli/types';
 import { withSpinner } from './commands/spinner';
+import { trackedKeys, trackedNames } from './plugins/operations';
 import { probe } from './plugins/probe';
 import { configKeyForSubtype } from './plugins/subtype-table';
 import type { Plugin, PluginContext } from './plugins/types';
@@ -109,8 +110,7 @@ async function promptTrackedSetPicker(
     logui.printErr(`error: plugin "${target.pluginId}" is not registered`);
     return null;
   }
-  const configKey = configKeyForSubtype(plugin.manifest, target.subtype);
-  if (!configKey) {
+  if (trackedKeys(plugin.manifest, target.subtype).length === 0) {
     logui.printErr(`error: plugin "${target.pluginId}" has no tracked applist key`);
     return null;
   }
@@ -128,8 +128,12 @@ async function promptTrackedSetPicker(
   const statuses = outcome.statuses;
 
   const store = await deps.getStore();
-  const trackedNames = store.list(configKey);
-  const trackedSet = new Set(trackedNames);
+  // Reads every key when `target.subtype` is unset, while applySyncTracked
+  // writes to the first. The two agree because pickTarget names a subtype
+  // for every plugin with more than one (wizard.ts, buildGroups), so an unset
+  // subtype here always means a single-key plugin.
+  const tracked = trackedNames(plugin, store, target.subtype);
+  const trackedSet = new Set(tracked);
 
   type Entry = { name: string; installed: boolean; tracked: boolean };
   const union = new Map<string, Entry>();
@@ -142,7 +146,7 @@ async function promptTrackedSetPicker(
       });
     }
   }
-  for (const name of trackedNames) {
+  for (const name of tracked) {
     if (!union.has(name)) {
       union.set(name, { name, installed: false, tracked: true });
     }
@@ -173,12 +177,12 @@ async function promptTrackedSetPicker(
 
   const total = packages.length;
   const installedCount = packages.filter((p) => p.installed).length;
-  const trackedCount = trackedNames.length;
+  const trackedCount = tracked.length;
   const summary = `${total} ${total === 1 ? 'package' : 'packages'} · ${trackedCount} tracked · ${installedCount} installed`;
   const choice = await pageableAutocompleteMultiselect<string>({
     message: pickerMessage(`Tracked packages for ${label}`, summary, deps.color),
     options,
-    initialValues: [...trackedNames],
+    initialValues: [...tracked],
     maxItems: pickerMaxItems(total),
     required: false,
   });
@@ -227,8 +231,7 @@ async function promptSearchAndPick(
   }
 
   const store = await deps.getStore();
-  const configKey = configKeyForSubtype(plugin.manifest, target.subtype);
-  const tracked = new Set(configKey ? store.list(configKey) : []);
+  const tracked = new Set(trackedNames(plugin, store, target.subtype));
 
   const total = results.length;
   const choice = await pageableAutocompleteMultiselect<string>({
@@ -507,10 +510,7 @@ async function wizardLoop(
           currentTracked: async (t) => {
             const plugin = deps.registry.find((p) => p.manifest.id === t.pluginId);
             if (!plugin) return [];
-            const key = configKeyForSubtype(plugin.manifest, t.subtype);
-            if (!key) return [];
-            const store = await deps.getStore();
-            return store.list(key);
+            return trackedNames(plugin, await deps.getStore(), t.subtype);
           },
           pickTrackedSet: async (t) => promptTrackedSetPicker(t, deps),
           searchAndPick: async (t) => promptSearchAndPick(t, deps),

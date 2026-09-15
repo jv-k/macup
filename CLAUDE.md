@@ -43,7 +43,7 @@ Issues live in `jv-k/macup`'s GitHub Issues, via the `gh` CLI. See `docs/agents/
 
 ### Triage labels
 
-The five canonical roles, four of them `status:`-prefixed (`status:needs-triage`), `wontfix` bare. See `docs/agents/triage-labels.md`.
+The mattpocock/skills defaults, unprefixed (`needs-triage`, `ready-for-agent`). See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 

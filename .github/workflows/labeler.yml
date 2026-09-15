@@ -5,7 +5,8 @@ name: Labeler
 #   title-body: github/issue-labeler -> type/area from title and body regex
 #                                       on both PRs and issues          (.github/issue-labeler.yml)
 # Labels are additive: nothing added by hand or by the other job is stripped.
-# Human-only triage labels (status:*, milestone:*, epic, priority:*) are never
+# Human-only triage labels (needs-triage, needs-info, ready-for-agent,
+# ready-for-human, wontfix, milestone:*, epic, priority:*) are never
 # touched by either job.
 
 on:

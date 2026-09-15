@@ -280,10 +280,10 @@ Pick **exactly one type** + any applicable area and triage labels.
 
 **Status / triage:**
 
-- `status:needs-triage`: maintainer needs to evaluate this.
-- `status:needs-info`: waiting on the reporter.
-- `status:ready-for-agent`: fully specified, ready for an AFK agent.
-- `status:ready-for-human`: requires human implementation.
+- `needs-triage`: maintainer needs to evaluate this.
+- `needs-info`: waiting on the reporter.
+- `ready-for-agent`: fully specified, ready for an AFK agent.
+- `ready-for-human`: requires human implementation.
 - `epic`: tracking issue. The work happens in its children, not here.
 
 ### Issue title

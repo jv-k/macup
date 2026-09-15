@@ -13,9 +13,8 @@ import { confirm, isCancel } from '@clack/prompts';
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ApplistKey } from '../config/schema';
 import type { ConfigStore, SaveResult } from '../config/store';
-import { ErrMutateFailed, type MutateFailure } from '../errors';
-import { boundFailureText } from '../plugins/helpers';
-import { errorMessage, probeOrThrow } from '../plugins/probe';
+import type { MutateFailure } from '../errors';
+import { probe, probeOrThrow, probeOutcomeReason } from '../plugins/probe';
 import { resolveSelection } from '../plugins/selection';
 import {
   configKeyForSubtype,
@@ -33,11 +32,20 @@ import type {
 } from '../plugins/types';
 import { useColor } from '../runtime';
 import * as log from '../ui/log';
-import { type CompositeMode, applyComposite, planComposite } from './composite-mutate';
 import {
+  type ConstituentOutcome,
+  type ConstituentPlan,
+  applyComposite,
+  mutateFor,
+  planComposite,
+} from './composite-mutate';
+import {
+  type MutationMode,
+  type PluginRun,
   type RanPlugin,
   buildMutationReport,
   exitCodeFor,
+  failuresFor,
   renderJson,
   renderText,
 } from './mutation-report';
@@ -72,63 +80,158 @@ export function makeCtx(deps: CommandDeps): PluginContext {
   return deps.pluginContext ?? { exec: deps.exec, log: deps.log, signal: deps.signal };
 }
 
-// One line for a constituent that did not act. 'planned'/'nothing' say nothing.
-function reportConstituentSkip(
-  pluginId: string,
-  status: 'planned' | 'nothing' | 'excluded' | 'unavailable' | 'error',
-  message?: string,
-): void {
-  if (status === 'excluded') {
-    log.print(log.info(`${pluginId}: excluded (skip.all)`));
-  } else if (status === 'unavailable') {
-    log.print(log.info(`${pluginId}: unavailable`));
-  } else if (status === 'error') {
-    log.print(log.warning(`${pluginId}: skipped: ${message}`));
+// One line per constituent, for the one path that prints no report: a dry
+// run. A ref failure the per-ref loop recorded is named here, since no report
+// follows to name it. 'planned' and 'nothing' say nothing.
+function reportConstituentLine(print: (line: string) => void, o: ConstituentOutcome): void {
+  if (o.status === 'acted') {
+    const failed = o.failures ?? [];
+    if (failed.length === 0) {
+      print(log.success(`${o.pluginId}: ${o.refs.length} package(s)`));
+      return;
+    }
+    print(log.warning(`${o.pluginId}: ${failed.length} of ${o.refs.length} package(s) failed`));
+    for (const f of failed) print(log.warning(`  ${f.ref.name}: ${f.message}`));
+  } else if (o.status === 'excluded') {
+    print(log.info(`${o.pluginId}: excluded (skip.all)`));
+  } else if (o.status === 'unavailable') {
+    print(log.info(`${o.pluginId}: unavailable`));
+  } else if (o.status === 'error') {
+    print(log.warning(`${o.pluginId}: failed: ${o.message}`));
   }
+}
+
+// What one constituent of `all install` or `all update` contributes to the
+// combined report, or nothing for one that is not a run at all: excluded by
+// skip.all, or with no verb to run. A backend that ran gets its after
+// snapshot here, through the same probe that planned it (ADR 0052 rule 2),
+// so the verdict is its own listing rather than its exit code: the outdated
+// listing for update, the full listing for install, the same shape its
+// before snapshot has, so a ref present at both ends reads as
+// `already-present` rather than dropping out of one of them. A probe that
+// fails afterwards is a whole-backend failure with the refs known, not a run
+// the report could classify: it must not read as `updated` or `installed` on
+// an empty listing. `nothing` is a backend that ran and had no work, so its
+// planning listing stands in for both snapshots, and it is not probed a
+// second time for a report that has nothing to reconcile.
+async function compositeRunFor(
+  deps: CommandDeps,
+  mode: MutationMode,
+  plan: ConstituentPlan,
+  o: ConstituentOutcome,
+): Promise<PluginRun | undefined> {
+  const pluginId = plan.plugin.manifest.id;
+  switch (o.status) {
+    case 'excluded':
+      return undefined;
+    case 'unavailable':
+      return { kind: 'unavailable', pluginId, refs: plan.refs, reason: o.message ?? 'unavailable' };
+    case 'error':
+      return { kind: 'failed', pluginId, refs: plan.refs, reason: o.message ?? 'error' };
+    case 'nothing':
+      if (!mutateFor(mode, plan.plugin)) return undefined;
+      return { kind: 'ran', pluginId, refs: [], before: plan.before, after: plan.before };
+    case 'acted':
+      break;
+  }
+  const after = await withSpinner(
+    deps,
+    `Verifying ${plan.plugin.manifest.displayName} packages…`,
+    () => probe(plan.plugin, makeCtx(deps), mode === 'update' ? { onlyOutdated: true } : {}),
+  );
+  const failures = o.failures ? { failures: o.failures } : {};
+  if (after.kind !== 'ok') {
+    const reason = `verifying after the batch: ${probeOutcomeReason(after)}`;
+    return { kind: 'failed', pluginId, refs: o.refs, reason, ...failures };
+  }
+  return {
+    kind: 'ran',
+    pluginId,
+    refs: o.refs,
+    before: plan.before,
+    after: after.statuses,
+    ...failures,
+  };
+}
+
+/** The flags the composite reads off `all install` / `all update`. */
+interface CompositeFlags {
+  readonly dryRun: boolean;
+  /** Render the end-of-run report as one JSON document on stdout. */
+  readonly json: boolean;
 }
 
 // The composite `all` install/update: the host fans out over the constituents
 // (ADR 0033), honoring per-plugin skip/pin and skip.all backend exclusion (ADR
-// 0037), and isolates each backend's failure as a skip. Planning first (no
-// mutation) lets us prompt with a count and skip the prompt on a no-op.
+// 0037), attempts every ref of every backend, and isolates each failure (ADR
+// 0052). Planning first (no mutation) lets us prompt with a count and skip the
+// prompt on a no-op. Both verbs end in one combined report, always printed,
+// whose exit code a whole-backend error forces non-zero and an unavailable
+// backend never does (#164, #165). An excluded backend is not a run at all,
+// so it keeps its own info line rather than a report status.
 async function runCompositeMutation(
   deps: CommandDeps,
   displayName: string,
-  mode: CompositeMode,
-  dryRun: boolean,
+  mode: MutationMode,
+  flags: CompositeFlags,
 ): Promise<void> {
+  const { dryRun } = flags;
+  const showJson = flags.json;
+  // --json owns stdout, the same seam the single-plugin path uses: spinners
+  // suppressed, every human line to stderr, so stdout holds one document.
+  const runDeps: CommandDeps = showJson ? { ...deps, suppressBar: true } : deps;
+  const printHuman = showJson ? log.printErr : log.print;
   const verb = mode === 'update' ? 'Updating' : 'Installing';
   const store = await deps.getStore();
-  const plans = await planComposite(mode, deps.constituents ?? [], store, () => makeCtx(deps));
-  const total = plans.reduce((n, p) => n + p.refs.length, 0);
+  const plans = await planComposite(mode, deps.constituents ?? [], store, () => makeCtx(deps), {
+    dryRun,
+  });
+  // Only what will run counts toward the prompt: a backend that never runs
+  // may still name its refs, for the report.
+  const total = plans.reduce((n, p) => n + (p.status === 'planned' ? p.refs.length : 0), 0);
 
-  if (total === 0) {
-    for (const p of plans) reportConstituentSkip(p.plugin.manifest.id, p.status, p.message);
-    log.print(log.info(`Nothing to ${mode}.`));
+  if (total > 0) {
+    if (process.stdout.isTTY) {
+      const ans = await confirm({
+        message: `This ${mode}s ${total} package(s) across all managers. Continue?`,
+        initialValue: true,
+      });
+      if (isCancel(ans) || !ans) {
+        printHuman(log.warning(`${verb} cancelled.`));
+        return;
+      }
+    }
+    printHuman('');
+    printHuman(log.header(`${verb} ${displayName}`));
+    printHuman('');
+  }
+  const outcomes = await applyComposite(mode, plans, () => makeCtx(deps), { dryRun });
+
+  // A dry run mutates nothing, so there is no after snapshot to reconcile and
+  // no report to build. The pre-report lines and the zero exit stand.
+  if (dryRun) {
+    for (const o of outcomes) reportConstituentLine(printHuman, o);
+    if (total === 0) printHuman(log.info(`Nothing to ${mode}.`));
     return;
   }
 
-  if (process.stdout.isTTY) {
-    const ans = await confirm({
-      message: `This ${mode}s ${total} package(s) across all managers. Continue?`,
-      initialValue: true,
-    });
-    if (isCancel(ans) || !ans) {
-      log.print(log.warning(`${verb} cancelled.`));
-      return;
-    }
-  }
-  log.print('');
-  log.print(log.header(`${verb} ${displayName}`));
-  log.print('');
-  const outcomes = await applyComposite(mode, plans, () => makeCtx(deps), { dryRun });
+  const planFor = new Map(plans.map((p) => [p.plugin.manifest.id, p]));
+  const runs: PluginRun[] = [];
   for (const o of outcomes) {
-    if (o.status === 'acted') {
-      log.print(log.success(`${o.pluginId}: ${o.refs.length} package(s)`));
-    } else {
-      reportConstituentSkip(o.pluginId, o.status, o.message);
-    }
+    if (o.status === 'excluded') reportConstituentLine(printHuman, o);
+    const plan = planFor.get(o.pluginId);
+    const run = plan && (await compositeRunFor(runDeps, mode, plan, o));
+    if (run) runs.push(run);
   }
+  const report = buildMutationReport(mode, runs);
+  if (showJson) {
+    console.log(renderJson(report));
+  } else {
+    log.print('');
+    log.print(renderText(report, { color: useColor() }));
+  }
+  // Never write 0 over a non-zero code an earlier step already set.
+  if (exitCodeFor(report) === 1) process.exitCode = 1;
 }
 
 // Wrapper around store.save() that turns disk/permissions failures into
@@ -181,16 +284,6 @@ async function runHealthCheck(
   await withSpinner(deps, `Checking ${plugin.manifest.id} health…`, async () => {
     await plugin.healthCheck?.(ctx);
   });
-}
-
-// What one ref's thrown `update()` contributes to the report. An
-// `ErrMutateFailed` already names its refs with bounded messages, so it is
-// taken as-is; anything else is one failure for the ref that was being
-// attempted, bounded the same way `mutateRefs` bounds subprocess output, so
-// the report carries one truncation rule whichever path the error took.
-function failuresFor(ref: PackageRef, err: unknown): readonly MutateFailure[] {
-  if (err instanceof ErrMutateFailed) return err.failures;
-  return [{ ref, message: boundFailureText(errorMessage(err)) }];
 }
 
 /** Extracts non-flag positional args, or prints usage + sets exit 1 and returns null. */
@@ -405,29 +498,46 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           required: false,
           description: 'Packages to install (empty = install all tracked).',
         },
+        json: {
+          type: 'boolean',
+          description: 'Emit the end-of-run report as JSON instead of text.',
+        },
       },
       /**
-       * @throws whatever the plugin or store raised. A MacupError reaches the
-       * user as a single line; anything else — including the bare Error
-       * `mutateRefs` raises on a non-zero exit — keeps its stack trace, which
-       * #122 tracks.
+       * @throws whatever `check()`, `list()` or the store raised: an
+       * unavailable backend still aborts the command before any ref is
+       * attempted (ADR 0052 rule 5). A ref's own `install()` failure is
+       * caught and reported rather than thrown, unless the run was cancelled
+       * (`deps.signal`), when the failure is rethrown so Ctrl-C ends the run.
        */
       async run({ args, rawArgs }) {
         // `all` is the composite: host-owned fan-out (ADR 0033), not a per-ref
         // loop. Only `all` is composite — system/xcode also have empty
         // configKeys but are real plugins that run their own install below.
         if (manifest.id === 'all') {
-          await runCompositeMutation(
-            deps,
-            manifest.displayName,
-            'install',
-            Boolean(args['dry-run']),
-          );
+          await runCompositeMutation(deps, manifest.displayName, 'install', {
+            dryRun: Boolean(args['dry-run']),
+            json: Boolean(args.json),
+          });
           return;
         }
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
         const subtype = resolved.subtype;
+        const dryRun = Boolean(args['dry-run']);
+        const showJson = Boolean(args.json);
+
+        // --json owns stdout, the same seam `list` and `update` use: the
+        // spinners' "done." lines are suppressed and every human line goes
+        // to stderr, so a piped stdout holds only the report document.
+        const spinnerDeps: SpinnerDeps = showJson ? { ...deps, suppressBar: true } : deps;
+        const printHuman = showJson ? log.printErr : log.print;
+
+        // Availability first, before the applist is read or a snapshot taken,
+        // so an unavailable backend fails outright exactly as it did before
+        // the report existed (ADR 0052 rule 5). The snapshots below run
+        // `check()` again inside the probe; it is a PATH lookup, so the
+        // repeat costs nothing and keeps both probes the shape `update` uses.
         await plugin.check(makeCtx(deps));
         const packages = rawArgs.filter((a) => !a.startsWith('-'));
         let refs: PackageRef[];
@@ -445,29 +555,98 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (refs.length === 0) {
           if (manifest.configKeys.length > 0) {
             const emptyKey = resolveConfigKey(plugin, subtype);
-            log.print(log.info(`No packages tracked in ${emptyKey}.`));
-            log.print(
+            printHuman(log.info(`No packages tracked in ${emptyKey}.`));
+            printHuman(
               log.trace(`macup ${manifest.id} track ${subtypeCliFlag(manifest, subtype)}<name>`),
             );
           }
+          // Nothing ran, so text mode has nothing to report; --json still owes
+          // its caller a document, and the empty report is that document.
+          if (showJson) {
+            const none: RanPlugin = {
+              kind: 'ran',
+              pluginId: manifest.id,
+              refs: [],
+              before: [],
+              after: [],
+            };
+            console.log(renderJson(buildMutationReport('install', [none])));
+          }
           return;
         }
-        log.print('');
-        log.print(log.header(`Installing ${manifest.displayName}`, refs.length));
-        log.print('');
+
+        // The before snapshot is what tells `already-present` from
+        // `installed` (ADR 0052 rule 2). A full listing, never `onlyOutdated`:
+        // a present ref that is up to date drops out of an outdated listing
+        // and would read as freshly installed. A dry run prints no report,
+        // and the report is the snapshot's only reader, so it takes none.
+        const before = dryRun
+          ? []
+          : await withSpinner(spinnerDeps, `Checking ${manifest.displayName} packages…`, () =>
+              probeOrThrow(plugin, makeCtx(deps), { subtype }),
+            );
+
+        printHuman('');
+        printHuman(log.header(`Installing ${manifest.displayName}`, refs.length));
+        printHuman('');
+        // Every ref is attempted whatever happened to the one before it (ADR
+        // 0052): a failure is recorded for the report and the loop moves on.
+        // Two exceptions rethrow as the loop always did. Cancellation, where
+        // the failure is what a SIGINT-cancelled subprocess threw and the run
+        // must end there rather than march through the remaining refs. And a
+        // dry run, which prints no report, so a failure recorded for one
+        // would never be seen: the throw is the only way it reaches the user.
+        const failures: MutateFailure[] = [];
         for (let i = 0; i < refs.length; i++) {
           const ref = refs[i] as PackageRef;
-          await withUserActionSpinner(
-            deps,
-            log.counter(i + 1, refs.length, 'Installing', ref.name),
-            async () => {
-              await plugin.install?.(makeCtx(deps), [ref], {
-                dryRun: Boolean(args['dry-run']),
-              });
-            },
-          );
+          try {
+            await withUserActionSpinner(
+              spinnerDeps,
+              log.counter(i + 1, refs.length, 'Installing', ref.name),
+              async () => {
+                await plugin.install?.(makeCtx(deps), [ref], { dryRun });
+              },
+            );
+          } catch (err) {
+            if (dryRun || deps.signal.aborted) throw err;
+            failures.push(...failuresFor(ref, err));
+          }
         }
-        await runHealthCheck(deps, plugin, makeCtx(deps));
+
+        // A dry run mutates nothing and took no snapshot, so there is no
+        // report to build. Keep the pre-report output and the zero exit.
+        if (dryRun) {
+          await runHealthCheck(spinnerDeps, plugin, makeCtx(deps));
+          return;
+        }
+
+        // The verdict is the backend's own listing, not the exit code (ADR
+        // 0052 rule 2): a ref on disk afterwards is installed whatever
+        // `install()` said. Same probe as the before snapshot, so an
+        // unavailable backend surfaces the same way at both ends.
+        const after = await withSpinner(
+          spinnerDeps,
+          `Verifying ${manifest.displayName} packages…`,
+          () => probeOrThrow(plugin, makeCtx(deps), { subtype }),
+        );
+        const ran: RanPlugin = {
+          kind: 'ran',
+          pluginId: manifest.id,
+          refs,
+          before,
+          after,
+          ...(failures.length > 0 ? { failures } : {}),
+        };
+        const report = buildMutationReport('install', [ran]);
+        await runHealthCheck(spinnerDeps, plugin, makeCtx(deps));
+        if (showJson) {
+          console.log(renderJson(report));
+        } else {
+          log.print('');
+          log.print(renderText(report, { color: useColor() }));
+        }
+        // Never write 0 over a non-zero code an earlier step already set.
+        if (exitCodeFor(report) === 1) process.exitCode = 1;
       },
     });
   }
@@ -507,12 +686,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         // configKeys but update via the generic outdated→update path below.
         if (manifest.id === 'all') {
           // Host-owned fan-out honoring skip/pin and skip.all (ADR 0033/0037).
-          await runCompositeMutation(
-            deps,
-            manifest.displayName,
-            'update',
-            Boolean(args['dry-run']),
-          );
+          await runCompositeMutation(deps, manifest.displayName, 'update', {
+            dryRun: Boolean(args['dry-run']),
+            json: Boolean(args.json),
+          });
           return;
         }
         const resolved = resolveSubtypeOrExit(plugin, args);

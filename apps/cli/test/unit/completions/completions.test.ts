@@ -317,21 +317,21 @@ describe('per-verb flags match the command tree (#146)', () => {
     expect(fish).not.toMatch(/__fish_seen_subcommand_from update" -l verbose/);
   });
 
-  // #162: `update` ends with a report that `--json` renders as a document,
-  // so the shells offer it there. `install` gets its own under #163.
-  it('zsh offers --json on update and not on install', () => {
+  // #162/#163: `update` and `install` end with a report that `--json` renders
+  // as a document, so the shells offer it on both.
+  it('zsh offers --json on update and install', () => {
     expect(zsh).toMatch(/brew:update\)[^\n]*--json/);
-    expect(zsh).not.toMatch(/brew:install\)[^\n]*--json/);
+    expect(zsh).toMatch(/brew:install\)[^\n]*--json/);
   });
 
-  it('bash offers --json on update and not on install', () => {
+  it('bash offers --json on update and install', () => {
     expect(bash).toMatch(/brew\/update\)[^\n]*--json/);
-    expect(bash).not.toMatch(/brew\/install\)[^\n]*--json/);
+    expect(bash).toMatch(/brew\/install\)[^\n]*--json/);
   });
 
-  it('fish gates json on update and not on install', () => {
+  it('fish gates json on update and install', () => {
     expect(fish).toMatch(/__fish_seen_subcommand_from update" -l json/);
-    expect(fish).not.toMatch(/__fish_seen_subcommand_from install" -l json/);
+    expect(fish).toMatch(/__fish_seen_subcommand_from install" -l json/);
   });
 
   it('the global --verbose is still offered in the first position', () => {

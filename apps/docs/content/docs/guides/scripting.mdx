@@ -5,15 +5,16 @@ description: JSON output, exit codes, and non-TTY behavior for automation.
 
 # Scripting macup
 
-macup is built to run unattended. Two commands emit structured JSON, exit
+macup is built to run unattended. Five commands emit structured JSON, exit
 codes are stable at the coarse level, and the interactive UI steps aside when
 stdout or stdin is not a terminal. See [Verbosity](/docs/guides/verbosity) for
 the output modes.
 
 ## JSON output
 
-Exactly two commands take `--json`: the cross-plugin `outdated` command and the
-per-plugin `list` subcommand. No other command emits JSON.
+Five commands take `--json`: the cross-plugin `outdated` and `doctor` commands,
+and the per-plugin `list`, `install` and `update` subcommands. No other command
+emits JSON.
 
 ```bash
 # Cross-plugin outdated report as JSON
@@ -21,6 +22,12 @@ macup outdated --json
 
 # Tracked packages for one plugin as JSON
 macup brew list --json
+
+# Install tracked brew packages and emit the end-of-run report as JSON
+macup brew install --json
+
+# Upgrade outdated brew packages and emit the end-of-run report as JSON
+macup brew update --json
 ```
 
 With `--json`, `outdated` skips the pill header and the spinner, so nothing
@@ -72,6 +79,83 @@ macup outdated --json | jq -r '.plugins[] | select(.outdated | length > 0) | .pl
 # Names of outdated tracked brew packages
 macup brew list --json --only-outdated | jq -r '.[].ref.name'
 ```
+
+`<plugin> update --json` emits the end-of-run report: one entry per package the
+run attempted, its outcome (`updated` or `failed`, with the backend's message as
+`detail` on a failure), and a `summary` of counts. Every outdated package in
+scope is attempted even when one fails, and the exit code is `1` iff at least
+one package `failed`. Progress lines and notices go to stderr, so a piped stdout
+holds only the document. `--dry-run` prints what would run, and no report.
+
+```json
+{
+  "mode": "update",
+  "plugins": [{ "pluginId": "brew", "status": "ran" }],
+  "packages": [
+    { "pluginId": "brew", "ref": { "kind": "formula", "name": "jq" }, "outcome": "updated" },
+    {
+      "pluginId": "brew",
+      "ref": { "kind": "formula", "name": "fd" },
+      "outcome": "failed",
+      "detail": "Error: fd: no bottle available"
+    }
+  ],
+  "summary": { "updated": 1, "failed": 1, "unavailable": 0 }
+}
+```
+
+```bash
+# Names of the packages that failed to update
+macup brew update --json | jq -r '.packages[] | select(.outcome == "failed") | .ref.name'
+```
+
+`macup all update --json` emits the same document across every backend, with
+one line per backend in `plugins`: `ran`, `unavailable` with the reason (not on
+this machine), or `failed` with the reason (it errored out as a whole). Every
+backend and every package is attempted even when one fails, and the exit code
+is `1` iff a package or a backend `failed`. An unavailable backend never forces
+it on its own.
+
+`<plugin> install --json` emits the same shape for an install. Each package's
+outcome is `installed` (this run put it on the machine), `already-present` (it
+was there before the run started, as the backend's own listing showed) or
+`failed`, with the backend's message as `detail`. Every package in scope is
+attempted even when one fails, and the exit code is `1` iff at least one
+package `failed`. An already-present package is not a failure. With no package
+named and nothing tracked, the report is empty and the exit code `0`.
+`--dry-run` prints what would run, and no report.
+
+```json
+{
+  "mode": "install",
+  "plugins": [{ "pluginId": "brew", "status": "ran" }],
+  "packages": [
+    { "pluginId": "brew", "ref": { "kind": "formula", "name": "jq" }, "outcome": "installed" },
+    { "pluginId": "brew", "ref": { "kind": "formula", "name": "ripgrep" }, "outcome": "already-present" },
+    {
+      "pluginId": "brew",
+      "ref": { "kind": "formula", "name": "fd" },
+      "outcome": "failed",
+      "detail": "Error: fd: no bottle available"
+    }
+  ],
+  "summary": { "installed": 1, "already-present": 1, "failed": 1, "unavailable": 0 }
+}
+```
+
+```bash
+# Names of the packages this run actually put on the machine
+macup brew install --json | jq -r '.packages[] | select(.outcome == "installed") | .ref.name'
+```
+
+`macup all install --json` emits the same document across every backend, one
+line per backend in `plugins` as for `all update`. A backend that is not on
+this machine still names each tracked package it would have installed, with
+the outcome `unavailable`. One that errored out as a whole names each as
+`failed` with its reason. Every backend is attempted even when one fails, and
+so is every package of a backend that could be listed. The exit code is `1`
+iff a package or a backend `failed`. An unavailable backend or an
+already-present package never forces it.
 
 Flag spellings are exact: `--json`, `--all`, `--only-outdated` (hyphenated, not
 `--onlyOutdated`).

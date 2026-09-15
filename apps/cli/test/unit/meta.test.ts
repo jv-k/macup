@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import { COMPOSITE_DECLARATION } from '../../src/commands/composite';
 import { docsMetadata } from '../../src/meta';
 import { BUILTIN_PLUGINS } from '../../src/plugins/registry';
 
 describe('docsMetadata', () => {
-  it('includes every builtin plugin', () => {
+  it('includes every builtin plugin, plus the composite `all` from its own declaration', () => {
     const ids = docsMetadata()
       .plugins.map((p) => p.id)
       .sort();
-    const expected = BUILTIN_PLUGINS.map((p) => p.manifest.id).sort();
+    // BUILTIN_PLUGINS holds only real backends (ADR 0033, ADR 0053); the
+    // composite is not one of them, but the docs reference still lists it.
+    const expected = [
+      ...BUILTIN_PLUGINS.map((p) => p.manifest.id),
+      COMPOSITE_DECLARATION.manifest.id,
+    ].sort();
     expect(ids).toEqual(expected);
   });
 

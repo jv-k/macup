@@ -138,33 +138,6 @@ describe('pickTarget', () => {
     expect(errSpy.mock.calls.map((c) => c.join(' ')).join('\n')).toContain('printAbout');
     errSpy.mockRestore();
   });
-
-  it('excludes the composite `all` plugin from the target groups', async () => {
-    const all = mkPlugin('all', {
-      configKeys: [],
-      capabilities: {
-        list: true,
-        install: true,
-        update: true,
-        track: false,
-        untrack: false,
-        outdated: true,
-      },
-    });
-    let groupsSeen: ReadonlyArray<{
-      readonly category: string;
-      readonly items: ReadonlyArray<{ readonly label: string; readonly value: Target }>;
-    }> = [];
-    await pickTarget({
-      plugins: [brew, all, npm],
-      selectTarget: async (groups) => {
-        groupsSeen = groups;
-        return null;
-      },
-    });
-    const allValues = groupsSeen.flatMap((g) => g.items.map((i) => i.value.pluginId));
-    expect(allValues).not.toContain('all');
-  });
 });
 
 describe('pickAction — option gating', () => {

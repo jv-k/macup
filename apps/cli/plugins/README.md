@@ -5,9 +5,10 @@ Each file in this directory is one package-manager plugin. The plugin
 only implementations. Adding a new plugin is typically:
 
 1. Create `plugins/<id>.ts` exporting a `Plugin` as default.
-2. Import and append it to `INDIVIDUAL_PLUGINS` in
-   [`src/plugins/registry.ts`](../src/plugins/registry.ts). `BUILTIN_PLUGINS`
-   and the composite `all` plugin derive from that list.
+2. Import and append it to `BUILTIN_PLUGINS` in
+   [`src/plugins/registry.ts`](../src/plugins/registry.ts), real backends
+   only. The composite `all` is a host surface built over that list, not a
+   member of it (`src/commands/composite.ts`, ADR 0033, ADR 0053).
 3. Write an integration test at `test/integration/plugins/<id>.test.ts` that
    exercises `list` / `install` / `update` against recorded fixtures.
 
@@ -94,9 +95,9 @@ running host.
 
 Plugins should throw `ErrPluginUnavailable` (from `src/errors.ts`) from
 `check()` when their required state isn't met (binary missing, not
-authenticated, etc.). The composite `all` plugin catches this and
-continues with the remaining plugins, so one missing backend doesn't
-abort a bulk operation.
+authenticated, etc.). The host's `all` fan-out (`src/commands/composite.ts`)
+catches this and continues with the remaining plugins, so one missing
+backend doesn't abort a bulk operation.
 
 Any other errors propagate and abort the current command with exit 1.
 

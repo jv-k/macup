@@ -85,9 +85,9 @@ describe('plugin conformance — every builtin obeys the contract', () => {
 
       it('declared install/update capabilities have matching methods', () => {
         // Methods are optional on the interface; conformance is "if you claim
-        // the capability, you implement the method" (except the composite
-        // `all`, whose install/update are host-owned per ADR 0033, not methods).
-        if (manifest.id === 'all') return;
+        // the capability, you implement the method". BUILTIN_PLUGINS holds
+        // only real backends — the composite `all`, whose install/update are
+        // host-owned (ADR 0033, ADR 0053), is not one of them.
         if (manifest.capabilities.install) {
           expect(typeof plugin.install).toBe('function');
         }
@@ -112,8 +112,6 @@ describe('plugin conformance — every builtin obeys the contract', () => {
 
       if (manifest.requires.length > 0) {
         it('check() throws ErrPluginUnavailable when a required binary is missing', async () => {
-          // The composite `all` plugin's check delegates to its members,
-          // so its own `requires` is empty — guarded by the outer if.
           await expect(plugin.check(ctxWithEmptyPath())).rejects.toBeInstanceOf(
             ErrPluginUnavailable,
           );

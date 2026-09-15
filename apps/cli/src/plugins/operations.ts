@@ -85,7 +85,7 @@ export interface ListResult {
  * way recorded as data. Each warning still reaches `ctx.log.warn`, so where
  * and whether it shows stays the host logger's decision. `openStore` runs only
  * when scoping needs the applist, never under `showAll` and never for a plugin
- * with no applist keys, because opening it is not a read (ADR 0053).
+ * with no applist keys, because opening it is not a read (ADR 0054).
  * @throws whatever `check()` or `list()` threw: `ErrPluginUnavailable` for a
  * missing backend, or the plugin's own error. Unchanged from the direct calls
  * this replaces, so a consumer's error boundary sees the same thing.

@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { TOP_LEVEL_COMMANDS } from '../../../src/cli/commands';
 import { HELP_EXAMPLES, buildHelp } from '../../../src/cli/help';
 import type { CliDeps } from '../../../src/cli/types';
+import { COMPOSITE_DECLARATION, buildCompositeCommand } from '../../../src/commands/composite';
 import { commandsFromManifest } from '../../../src/commands/from-manifest';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
 import { BUILTIN_PLUGINS } from '../../../src/plugins/registry';
@@ -17,14 +18,21 @@ import type { Plugin } from '../../../src/plugins/types';
 
 const silentLog = { info() {}, warn() {}, error() {}, debug() {} };
 
+// The composite `all` is a host surface, not a plugin (ADR 0033, ADR 0053) —
+// BUILTIN_PLUGINS never carries it, so its subcommand tree comes from
+// buildCompositeCommand rather than the generic commandsFromManifest.
 function treeFor(plugin: Plugin): Record<string, CommandDef> {
-  const tree = commandsFromManifest(plugin, {
+  const deps = {
     exec: new FixtureExecRunner({ fixtures: [], onPath: [plugin.manifest.id] }),
     log: silentLog,
     getStore: async () => ({}) as never,
     suppressBar: true,
     signal: new AbortController().signal,
-  });
+  };
+  const tree =
+    plugin.manifest.id === COMPOSITE_DECLARATION.manifest.id
+      ? buildCompositeCommand([], deps)
+      : commandsFromManifest(plugin, deps);
   return tree.subCommands as Record<string, CommandDef>;
 }
 
@@ -46,7 +54,9 @@ describe('help examples are commands the CLI accepts (#146)', () => {
     const words = wordsOf(label);
     const [first, verb, ...rest] = words;
     if (first === undefined) continue; // bare `macup`: the wizard
-    const plugin = BUILTIN_PLUGINS.find((p) => p.manifest.id === first);
+    const plugin =
+      BUILTIN_PLUGINS.find((p) => p.manifest.id === first) ??
+      (first === COMPOSITE_DECLARATION.manifest.id ? COMPOSITE_DECLARATION : undefined);
 
     if (!plugin) {
       it(`\`${label}\` names a stand-alone command`, () => {

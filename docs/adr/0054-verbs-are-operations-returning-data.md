@@ -1,4 +1,4 @@
-# ADR 0053: The verbs are an operations module, with the CLI tree and the wizard as consumers
+# ADR 0054: The verbs are an operations module, with the CLI tree and the wizard as consumers
 
 > Status: accepted · Date: 2026-09-15 · Deciders: John Valai
 

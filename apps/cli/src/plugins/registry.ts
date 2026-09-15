@@ -8,7 +8,6 @@
  * @module
  */
 
-import { createAllPlugin } from '../../plugins/all';
 import appstorePlugin from '../../plugins/appstore';
 import brewPlugin from '../../plugins/brew';
 import cargoPlugin from '../../plugins/cargo';
@@ -48,10 +47,16 @@ export function buildRegistry(plugins: readonly Plugin[], deps: RegistryDeps): P
 export { isOnPath, pathTo };
 
 /**
- * The closed set of built-in plugins. Adding a new plugin = one import
- * here + one entry below.
+ * Every plugin macup ships, in the order they appear in help, completions, and
+ * the wizard. Closed by design: this list plus one file under `plugins/` is the
+ * entire cost of adding a package manager, and the only chokepoint between the
+ * backends and the rest of the app (`CLAUDE.md`).
+ *
+ * Real backends only — the composite `all` is a host surface built over this
+ * list, not a member of it (ADR 0033, ADR 0053, issue #140). Its own
+ * declaration lives in `commands/composite.ts`.
  */
-const INDIVIDUAL_PLUGINS: readonly Plugin[] = [
+export const BUILTIN_PLUGINS: readonly Plugin[] = [
   brewPlugin,
   npmPlugin,
   pnpmPlugin,
@@ -61,17 +66,6 @@ const INDIVIDUAL_PLUGINS: readonly Plugin[] = [
   appstorePlugin,
   xcodePlugin,
   systemPlugin,
-];
-
-/**
- * Every plugin macup ships, in the order they appear in help, completions, and
- * the wizard. Closed by design: this list plus one file under `plugins/` is the
- * entire cost of adding a package manager, and the only chokepoint between the
- * backends and the rest of the app (`CLAUDE.md`).
- */
-export const BUILTIN_PLUGINS: readonly Plugin[] = [
-  ...INDIVIDUAL_PLUGINS,
-  createAllPlugin(INDIVIDUAL_PLUGINS),
 ];
 
 /** Convenience: registry computed from BUILTIN_PLUGINS against the current process. */

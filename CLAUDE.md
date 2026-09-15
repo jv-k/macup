@@ -53,7 +53,7 @@ Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/
 
 - Don't bypass `ExecRunner` (`apps/cli/src/exec/run.ts`) with direct `execa` or `child_process`. It carries dry-run, logging, and redaction, and the hermetic tests depend on it.
 - Don't hand-edit `apps/cli/dist/` or generated shell completions. Rebuild them.
-- Plugins throw `ErrPluginUnavailable` from `check()`, not a bare `Error`. The composite `all` plugin catches that to skip a missing backend.
+- Plugins throw `ErrPluginUnavailable` from `check()`, not a bare `Error`. The host's `all` fan-out (`apps/cli/src/commands/composite.ts`) catches that to skip a missing backend.
 - Don't add a doc that restates `apps/cli/plugins/README.md` or `docs/CODING_STANDARDS.md`. Point at it.
 - darwin-only. The 1.0 built-ins are `supportedOS: ['darwin']`.
 

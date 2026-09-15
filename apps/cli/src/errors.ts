@@ -108,7 +108,7 @@ export interface MutateFailure {
    * plugin recognises as one (system's `No such update`).
    */
   readonly ref: PackageRef;
-  /** Bounded/truncated text drawn from stderr, falling back to stdout — never the raw unbounded output. */
+  /** Bounded/truncated text: a subprocess's stderr (falling back to stdout) from `mutateRefs`, or the message of an error the command loop caught (#162). Never the raw unbounded output. */
   readonly message: string;
 }
 

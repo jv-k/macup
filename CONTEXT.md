@@ -27,8 +27,8 @@ An operation a plugin declares needs root, named per operation in its manifest. 
 _Avoid_: sudo, privilege escalation, admin rights
 
 **Composite**:
-The `all` surface: the single "do it across every backend" view for list/install/update. Each backend's failure is isolated as unavailable, so one missing backend never aborts the run. The write fan-out is host-owned (ADR 0033) rather than performed by a backend-less plugin.
-_Avoid_: aggregate, meta-plugin
+The `all` surface: the single "do it across every backend" view for list/install/update. Each backend's failure is isolated as unavailable, so one missing backend never aborts the run. `all` is a host surface, not a plugin: the registry holds real backends only, and the host builds `all`'s list/install/update fan-out directly over them (ADR 0033, ADR 0053).
+_Avoid_: aggregate, meta-plugin, the `all` plugin
 
 **Unavailable**:
 A plugin whose backend is missing on this machine: a required binary is not on PATH, so `check()` throws `ErrPluginUnavailable`. A runtime fact about the machine, never a user choice. That distinction is why it is not called a skip. The Composite and `bundle install` isolate an unavailable target and carry on; `doctor` and `plugins` report it. In an install or update report it is the outcome of every package whose plugin never ran, and on an ordinary `all` run it never forces a non-zero exit on its own (ADR 0052). Only `bundle install` counts a package stranded under an unavailable target as a shortfall (ADR 0038).
@@ -99,7 +99,7 @@ The per-run classification of one package by an install: `installed` (macup put 
 _Avoid_: install status, result, skipped (for already-present)
 
 **Update outcome**:
-The per-run classification of one package by an update: `updated`, `failed`, or `unavailable`. The sibling of Install outcome with no `already-present` case, because an already-current package is filtered out before `update()` is ever called. Classified host-side from the `list()` snapshot after the batch (ADR 0052). A run exits non-zero iff at least one package `failed`, and `unavailable` alone never does.
+The per-run classification of one package by an update: `updated`, `failed`, or `unavailable`. The sibling of Install outcome with no `already-present` case, because an already-current package is filtered out before `update()` is ever called. Classified host-side from the `list()` snapshot after the batch (ADR 0052). A run exits non-zero iff at least one package `failed` or a backend errored out entirely before it could name one, and `unavailable` alone never does.
 _Avoid_: update status, result, skipped, up-to-date (for a package the run never touched)
 
 ### Bundles

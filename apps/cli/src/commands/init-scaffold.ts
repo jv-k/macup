@@ -56,10 +56,6 @@ export interface DetectionPlan {
   readonly failed: SkippedBackend[];
 }
 
-// The composite fans out over the other plugins (ADR 0033), so asking it would
-// double-count everything it covers. It also has no applist key of its own.
-const COMPOSITE_ID = 'all';
-
 /**
  * The names one subtype of a plugin would have the scaffold track: its leaves
  * when it can tell a chosen install from a dependency (#128), otherwise
@@ -102,9 +98,10 @@ export async function detectInstalled(
 
   for (const plugin of registry) {
     const m = plugin.manifest;
-    if (m.id === COMPOSITE_ID) continue;
     // Nothing about an untrackable plugin belongs in an applist: `system` and
-    // `xcode` are update-only and declare no config keys.
+    // `xcode` are update-only and declare no config keys. The composite `all`
+    // is a host surface, not a plugin (ADR 0033, ADR 0053), so `registry`
+    // never carries it — no separate exclusion needed here any more.
     if (!m.capabilities.track || m.configKeys.length === 0) continue;
 
     // check() once per plugin, same as before this scan routed through the

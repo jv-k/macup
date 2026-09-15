@@ -5,7 +5,8 @@
 # The ^type(...) anchors catch conventional PR titles; the word-boundary
 # keywords catch free-text issues. Best-effort, correct by hand when off.
 # Only area:* and type:* (plus bug/enhancement) labels are routed here.
-# Human-only triage labels (status:*, milestone:*, epic, priority:*) are
+# Human-only triage labels (needs-triage, needs-info, ready-for-agent,
+# ready-for-human, wontfix, milestone:*, epic, priority:*) are
 # never applied by this automation.
 
 # --- type (conventional title prefix, or issue keywords) ---

@@ -82,3 +82,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0052](0052-install-update-continue-past-failure.md) | Install and update continue past a package failure, classify host-side, and report | accepted |
 | [0053](0053-composite-is-a-host-surface.md) | The composite `all` is a host surface, closed to real backends | accepted |
 | [0054](0054-verbs-are-operations-returning-data.md) | The verbs are an operations module, with the CLI tree and the wizard as consumers | accepted |
+| [0055](0055-triage-labels-are-bare.md) | Triage labels are bare, matching the mattpocock/skills defaults | accepted |

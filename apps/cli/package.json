@@ -15,7 +15,7 @@
       "default": "./dist/meta.mjs"
     }
   },
-  "files": ["dist", "README.md", "LICENSE.md"],
+  "files": ["dist", "README.md", "LICENSE.md", "CHANGELOG.md"],
   "engines": {
     "node": ">=20"
   },

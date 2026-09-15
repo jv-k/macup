@@ -101,11 +101,11 @@ export class ErrBackupNotFound extends MacupError {
   }
 }
 
-/** One ref's mutate attempt inside a `mutateRefs` batch, and its bounded failure text. */
+/** One ref's failed install or update attempt, and its bounded failure text. */
 export interface MutateFailure {
-  /** The package ref whose install/update call exited non-zero. */
+  /** The package ref whose install/update attempt failed. */
   readonly ref: PackageRef;
-  /** Bounded/truncated text drawn from stderr, falling back to stdout — never the raw unbounded output. */
+  /** Bounded/truncated text: a subprocess's stderr (falling back to stdout) from `mutateRefs`, or the message of an error the command loop caught (#162). Never the raw unbounded output. */
   readonly message: string;
 }
 

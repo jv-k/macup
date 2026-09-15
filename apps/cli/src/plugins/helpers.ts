@@ -12,7 +12,7 @@
 import { ErrMutateFailed, type MutateFailure } from '../errors';
 import type { MutateOptions, PackageRef, PackageStatus, PluginContext } from './types';
 
-// Cap on a per-ref failure message inside the aggregate ErrMutateFailed.
+// Cap on a per-ref failure message, in ErrMutateFailed and in the run report.
 // Backend stderr can run to thousands of characters (a brew build log, say);
 // this keeps the thrown error's message readable while still naming every
 // failed ref, per the "bounded/truncated, never raw unbounded output" contract.

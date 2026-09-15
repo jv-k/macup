@@ -524,10 +524,11 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
 
         // --json owns stdout, the same seam `list` uses: the spinners' "done."
         // lines are suppressed, and every human line (header, notices, the
-        // empty-run hints) goes to stderr so stdout holds exactly the one
-        // report document.
+        // empty-run hints) goes to stderr, so a piped stdout holds only the
+        // report document. On a terminal the backend's own streamed output
+        // still lands on stdout, as it does for `list`.
         const spinnerDeps: SpinnerDeps = showJson ? { ...deps, suppressBar: true } : deps;
-        const say = showJson ? log.printErr : log.print;
+        const printHuman = showJson ? log.printErr : log.print;
 
         const statuses = await withSpinner(
           spinnerDeps,
@@ -552,19 +553,19 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         // say so first instead of applying them silently (ADR 0034).
         let filtered = [...upgradable, ...pinUnenforceable];
         if (pinnedBlocked.length > 0) {
-          say(
+          printHuman(
             `Pinned (skipping): ${pinnedBlocked.map((s) => `${s.ref.name}@${s.pinnedAt}`).join(', ')}`,
           );
         }
         if (pinUnenforceable.length > 0) {
-          say(
+          printHuman(
             `Pin not enforceable (upgrading anyway): ${pinUnenforceable
               .map((s) => `${s.ref.name}@${s.pinnedAt}`)
               .join(', ')}`,
           );
         }
         if (skipped.length > 0) {
-          say(`Skipped: ${skipped.map((s) => s.ref.name).join(', ')}`);
+          printHuman(`Skipped: ${skipped.map((s) => s.ref.name).join(', ')}`);
         }
 
         const explicitNames = rawArgs.filter((a) => !a.startsWith('-'));
@@ -595,13 +596,13 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const refs: PackageRef[] = filtered.map((s) => ({ ...s.ref, kind }));
         if (refs.length === 0) {
           if (explicitNames.length > 0) {
-            say(
+            printHuman(
               log.info(
                 `No matching outdated packages for: ${explicitNames.join(', ')}. (Use \`${manifest.id} list --only-outdated\` to see what's outdated.)`,
               ),
             );
           } else {
-            say(log.success(`All ${manifest.displayName} packages are up-to-date!`));
+            printHuman(log.success(`All ${manifest.displayName} packages are up-to-date!`));
           }
           // Nothing ran, so text mode has nothing to report; --json still owes
           // its caller a document, and the empty report is that document.
@@ -618,9 +619,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           return;
         }
 
-        say('');
-        say(log.header(`Updating ${manifest.displayName}`, refs.length));
-        say('');
+        printHuman('');
+        printHuman(log.header(`Updating ${manifest.displayName}`, refs.length));
+        printHuman('');
         // Every ref is attempted whatever happened to the one before it (ADR
         // 0052): a failure is recorded for the report and the loop moves on.
         // The one exception is cancellation, where the failure is what a
@@ -649,7 +650,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         // ref failed. Keep the pre-report output and the zero exit instead.
         if (dryRun) {
           await runHealthCheck(spinnerDeps, plugin, makeCtx(deps));
-          say(log.success(`Updated ${refs.length} ${refs.length === 1 ? 'package' : 'packages'}.`));
+          printHuman(
+            log.success(`Updated ${refs.length} ${refs.length === 1 ? 'package' : 'packages'}.`),
+          );
           return;
         }
 

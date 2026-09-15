@@ -47,7 +47,7 @@ export interface PackageOutcomeEntry<O extends PackageOutcome = PackageOutcome> 
   readonly pluginId: string;
   readonly ref: PackageRef;
   readonly outcome: O;
-  /** The bounded per-ref message from `ErrMutateFailed`, present only on a `failed` entry the backend reported. */
+  /** The bounded per-ref message the run recorded (from `ErrMutateFailed`, or a bare Error the command loop bounded), present only on a `failed` entry. */
   readonly detail?: string;
 }
 

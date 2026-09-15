@@ -350,13 +350,15 @@ describe('fanOutComposite — install', () => {
     // error. That split lives in the probe (ADR 0050); the plan must read it
     // from there rather than classify the thrown error a second time.
     const store = await storeWith('brew:\n  formulas:\n    - jq\npip:\n  - black\n');
-    const brew = installFake({
+    const brew = mutateFake({
+      verb: 'install',
       id: 'brew',
       check: vi.fn(async () => {
         throw new ErrPluginUnavailable('brew', 'brew not on PATH');
       }),
     });
-    const pip = installFake({
+    const pip = mutateFake({
+      verb: 'install',
       id: 'pip',
       check: vi.fn(async () => {
         throw new Error('pip: broken venv');

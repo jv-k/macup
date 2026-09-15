@@ -178,8 +178,13 @@ describe('runPlugins (wiring)', () => {
       spy.mockRestore();
     }
     const out = lines.join('\n');
-    expect(out).toContain('plugins: 1 / 2 available');
+    // `deps.registry` holds only real backends; the composite `all` is
+    // appended from its own declaration (ADR 0033, ADR 0052), always
+    // available (no requires of its own), which is why the denominator and
+    // available count are one more than the injected registry's length.
+    expect(out).toContain('plugins: 2 / 3 available');
     expect(out).toContain('brew');
     expect(out).toContain('missing: npm');
+    expect(out).toMatch(/✔\s+all\s+All package managers/);
   });
 });

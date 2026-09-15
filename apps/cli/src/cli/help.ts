@@ -12,6 +12,7 @@
  */
 
 import pc from 'picocolors';
+import { COMPOSITE_DECLARATION } from '../commands/composite';
 import * as logui from '../ui/log';
 import { page } from '../ui/pager';
 import { getVersion } from '../version';
@@ -98,7 +99,10 @@ export function buildHelp(deps: CliDeps): string {
   say(
     ` ${logui.header('PLUGINS')} ${s.dim('Package and App managers + their available commands')}`,
   );
-  const pluginRows: logui.ColumnRow[] = deps.registry.map((plugin) => {
+  // `deps.registry` holds only real backends (ADR 0033, ADR 0052); the
+  // composite `all` is appended from its own declaration so it keeps
+  // appearing here exactly as it did when it lived in the registry.
+  const pluginRows: logui.ColumnRow[] = [...deps.registry, COMPOSITE_DECLARATION].map((plugin) => {
     const m = plugin.manifest;
     const cmds = [];
     if (m.capabilities.list) cmds.push('list');

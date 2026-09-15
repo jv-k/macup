@@ -84,11 +84,13 @@ describe('--dry-run threads MutateOptions.dryRun to the plugin', () => {
 // composite-mutate.test.ts, since the composite no longer routes through its
 // own plugin.install (the host fans out — ADR 0033).
 
-describe('only `all` is the composite (configKeys-empty is not enough)', () => {
-  it('a system/xcode-like plugin (empty configKeys, id !== all) updates via its own update()', async () => {
-    // Regression: the composite gate is id === 'all', NOT configKeys.length ===
-    // 0. system and xcode also have empty configKeys but must invoke their own
-    // backend, not the (empty) host fan-out (ADR 0037: "stays fully available").
+describe('a plugin with empty configKeys still updates via its own update()', () => {
+  it('a system/xcode-like plugin (empty configKeys) updates via its own update()', async () => {
+    // Regression: commandsFromManifest never special-cases the composite by id
+    // any more — `all` is a host surface built elsewhere (commands/composite.ts,
+    // ADR 0033, ADR 0052) and never reaches this factory. system and xcode have
+    // empty configKeys too, but always invoke their own backend directly
+    // (ADR 0037: "stays fully available").
     const plugin: Plugin = {
       manifest: {
         id: 'fakesys',

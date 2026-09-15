@@ -27,8 +27,8 @@ An operation a plugin declares needs root, named per operation in its manifest. 
 _Avoid_: sudo, privilege escalation, admin rights
 
 **Composite**:
-The `all` surface: the single "do it across every backend" view for list/install/update. Each backend's failure is isolated as unavailable, so one missing backend never aborts the run. The write fan-out is host-owned (ADR 0033) rather than performed by a backend-less plugin.
-_Avoid_: aggregate, meta-plugin
+The `all` surface: the single "do it across every backend" view for list/install/update. Each backend's failure is isolated as unavailable, so one missing backend never aborts the run. `all` is a host surface, not a plugin: the registry holds real backends only, and the host builds `all`'s list/install/update fan-out directly over them (ADR 0033, ADR 0052).
+_Avoid_: aggregate, meta-plugin, the `all` plugin
 
 **Unavailable**:
 A plugin whose backend is missing on this machine: a required binary is not on PATH, so `check()` throws `ErrPluginUnavailable`. A runtime fact about the machine, never a user choice. That distinction is why it is not called a skip. The Composite and `bundle install` isolate an unavailable target and carry on; `doctor` and `plugins` report it.

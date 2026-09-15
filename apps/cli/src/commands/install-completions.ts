@@ -16,6 +16,7 @@ import { generateBashCompletions } from '../completions/bash';
 import { generateFishCompletions } from '../completions/fish';
 import { generateZshCompletions } from '../completions/zsh';
 import type { Plugin } from '../plugins/types';
+import { COMPOSITE_DECLARATION } from './composite';
 import { SUPPORTED_SHELLS, type Shell, detectShellFromEnv, isShell } from './shell';
 
 export type { Shell };
@@ -161,7 +162,10 @@ export async function runInstallCompletions(args: ParsedArgs, deps: CliDeps): Pr
   const shell = resolveShellArg(value, deps.env);
   if (!shell) return;
 
-  const report = await installCompletions(shell, deps.registry, {
+  // `deps.registry` holds only real backends (ADR 0033, ADR 0052); the
+  // composite `all` is appended from its own declaration so completions keep
+  // offering it exactly as they did when it lived in the registry.
+  const report = await installCompletions(shell, [...deps.registry, COMPOSITE_DECLARATION], {
     home: deps.home,
     env: deps.env,
   });

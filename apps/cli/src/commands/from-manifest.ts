@@ -9,7 +9,6 @@
  * @module
  */
 
-import { confirm, isCancel } from '@clack/prompts';
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ApplistKey } from '../config/schema';
 import type { ConfigStore, SaveResult } from '../config/store';
@@ -30,7 +29,6 @@ import type {
   PluginManifest,
 } from '../plugins/types';
 import * as log from '../ui/log';
-import { type CompositeMode, applyComposite, planComposite } from './composite-mutate';
 import { renderList } from './render-list';
 import { type SpinnerDeps, withSpinner, withUserActionSpinner } from './spinner';
 import { pluginHasSubtypes, resolveSubtypeOrExit } from './subtype';
@@ -43,12 +41,6 @@ export interface CommandDeps extends SpinnerDeps {
   /** Process-wide cancellation signal — aborted on SIGINT by the caller. */
   readonly signal: AbortSignal;
   /**
-   * The individual plugins the composite `all` command fans out over. Set only
-   * for the `all` command; the host owns this fan-out (ADR 0033), not the
-   * composite plugin.
-   */
-  readonly constituents?: readonly Plugin[];
-  /**
    * The shared plugin context built once at bootstrap (`CliDeps.pluginContext`,
    * #136). Optional so a test can hand this factory a hand-rolled
    * `CommandDeps` with no outer bootstrap in the loop — {@link makeCtx} falls
@@ -60,65 +52,6 @@ export interface CommandDeps extends SpinnerDeps {
 /** Exported for the unit test proving the shared-vs-fallback behaviour (#136). */
 export function makeCtx(deps: CommandDeps): PluginContext {
   return deps.pluginContext ?? { exec: deps.exec, log: deps.log, signal: deps.signal };
-}
-
-// One line for a constituent that did not act. 'planned'/'nothing' say nothing.
-function reportConstituentSkip(
-  pluginId: string,
-  status: 'planned' | 'nothing' | 'excluded' | 'unavailable' | 'error',
-  message?: string,
-): void {
-  if (status === 'excluded') {
-    log.print(log.info(`${pluginId}: excluded (skip.all)`));
-  } else if (status === 'unavailable') {
-    log.print(log.info(`${pluginId}: unavailable`));
-  } else if (status === 'error') {
-    log.print(log.warning(`${pluginId}: skipped: ${message}`));
-  }
-}
-
-// The composite `all` install/update: the host fans out over the constituents
-// (ADR 0033), honoring per-plugin skip/pin and skip.all backend exclusion (ADR
-// 0037), and isolates each backend's failure as a skip. Planning first (no
-// mutation) lets us prompt with a count and skip the prompt on a no-op.
-async function runCompositeMutation(
-  deps: CommandDeps,
-  displayName: string,
-  mode: CompositeMode,
-  dryRun: boolean,
-): Promise<void> {
-  const verb = mode === 'update' ? 'Updating' : 'Installing';
-  const store = await deps.getStore();
-  const plans = await planComposite(mode, deps.constituents ?? [], store, () => makeCtx(deps));
-  const total = plans.reduce((n, p) => n + p.refs.length, 0);
-
-  if (total === 0) {
-    for (const p of plans) reportConstituentSkip(p.plugin.manifest.id, p.status, p.message);
-    log.print(log.info(`Nothing to ${mode}.`));
-    return;
-  }
-
-  if (process.stdout.isTTY) {
-    const ans = await confirm({
-      message: `This ${mode}s ${total} package(s) across all managers. Continue?`,
-      initialValue: true,
-    });
-    if (isCancel(ans) || !ans) {
-      log.print(log.warning(`${verb} cancelled.`));
-      return;
-    }
-  }
-  log.print('');
-  log.print(log.header(`${verb} ${displayName}`));
-  log.print('');
-  const outcomes = await applyComposite(mode, plans, () => makeCtx(deps), { dryRun });
-  for (const o of outcomes) {
-    if (o.status === 'acted') {
-      log.print(log.success(`${o.pluginId}: ${o.refs.length} package(s)`));
-    } else {
-      reportConstituentSkip(o.pluginId, o.status, o.message);
-    }
-  }
 }
 
 // Wrapper around store.save() that turns disk/permissions failures into
@@ -393,18 +326,6 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
        * #122 tracks.
        */
       async run({ args, rawArgs }) {
-        // `all` is the composite: host-owned fan-out (ADR 0033), not a per-ref
-        // loop. Only `all` is composite — system/xcode also have empty
-        // configKeys but are real plugins that run their own install below.
-        if (manifest.id === 'all') {
-          await runCompositeMutation(
-            deps,
-            manifest.displayName,
-            'install',
-            Boolean(args['dry-run']),
-          );
-          return;
-        }
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
         const subtype = resolved.subtype;
@@ -478,18 +399,6 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
        * #122 tracks.
        */
       async run({ args, rawArgs }) {
-        // Only `all` is the composite (ADR 0033); system/xcode also have empty
-        // configKeys but update via the generic outdated→update path below.
-        if (manifest.id === 'all') {
-          // Host-owned fan-out honoring skip/pin and skip.all (ADR 0033/0037).
-          await runCompositeMutation(
-            deps,
-            manifest.displayName,
-            'update',
-            Boolean(args['dry-run']),
-          );
-          return;
-        }
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
         const subtype = resolved.subtype;

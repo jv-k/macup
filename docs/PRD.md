@@ -297,7 +297,7 @@ export const BundleSchema = z.object({
 - **Versioning of bundles themselves**: bundles don't have semver; users rely on git for bundle repos
 - **Signing / verification**: remote bundles are trust-on-first-use; signing is a v1.2+ consideration
 - **Package manager lockfiles**: bundles specify *what* to install, not exact resolved trees. That's the job of each plugin's pin mechanism.
-- **Dependency resolution across plugins**: e.g., "install node via brew before running npm"; the existing plugin ordering in `all.ts` handles this implicitly
+- **Dependency resolution across plugins**: e.g., "install node via brew before running npm"; the existing plugin ordering in the `all` host fan-out (`src/commands/composite.ts`) handles this implicitly
 
 ### 5.8.9 Open questions
 
@@ -325,7 +325,9 @@ apps/cli/plugins/pnpm.ts
 apps/cli/plugins/appstore.ts
 apps/cli/plugins/xcode.ts
 apps/cli/plugins/system.ts
-apps/cli/plugins/all.ts            — Composite with per-plugin error isolation
+apps/cli/src/commands/composite.ts — `all` host surface: fan-out with per-plugin
+                                      error isolation over the real backends
+                                      above, not a plugin of its own (ADR 0052)
 
 apps/cli/src/exec/run.ts           — ExecaExecRunner (default subprocess runner)
 apps/cli/src/exec/streaming.ts     — StreamingExecRunner decorator → UiSink (TTY default)

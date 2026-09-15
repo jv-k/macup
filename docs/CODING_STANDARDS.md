@@ -160,7 +160,9 @@ src/plugins/         plugin contract + registry (backends live in plugins/)
 plugins/             one file per backend (sibling of src/, not under it)
   brew.ts / npm.ts / pnpm.ts / pip.ts / appstore.ts / mas.ts / xcode.ts /
   system.ts
-  all.ts             composite with per-plugin error isolation
+src/commands/composite.ts  the `all` host surface: fan-out with per-plugin
+                            error isolation, built over the real backends
+                            rather than a plugin of its own (ADR 0052)
 src/config/          applist.yaml schema, XDG paths, backup/restore
 src/exec/            subprocess wrapper (run.ts) — central shell-out path
 src/ui/              output helpers, prompt wrappers, log / section / pill

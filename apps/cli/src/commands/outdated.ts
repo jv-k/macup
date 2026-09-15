@@ -46,7 +46,7 @@ export interface OutdatedReport {
   totalOutdated: number;
   /** Sum of `uncheckable.length` across all available plugins. */
   totalUncheckable: number;
-  /** One row per plugin in registry order; the composite `all` is excluded. */
+  /** One row per plugin in registry order. */
   plugins: readonly OutdatedPluginSummary[];
 }
 
@@ -54,7 +54,7 @@ export interface OutdatedReport {
 export interface OutdatedProgress {
   readonly pluginId: string;
   readonly displayName: string;
-  /** Total constituent plugins being queried (excludes the `all` aggregator). */
+  /** Total plugins being queried. */
   readonly total: number;
   /** 1-based count of plugins that have settled (success or failure) so far. */
   readonly completed: number;
@@ -80,16 +80,16 @@ export interface OutdatedReportDeps {
  * outdated and uncheckable, isolating per-plugin failures so one missing
  * binary doesn't kill the whole report. Listing fully (not `onlyOutdated`) is
  * what lets `check` see uncheckable packages, which `onlyOutdated` filters out.
- * The composite `all` plugin is filtered out — it would double-count by
- * aggregating its constituents.
+ * `deps.plugins` is expected to be real backends only — the composite `all`
+ * is a host surface, not a plugin (ADR 0033, ADR 0052), so it is never in
+ * that list and this no longer needs to filter it out itself.
  */
 export async function buildOutdatedReport(deps: OutdatedReportDeps): Promise<OutdatedReport> {
-  const constituents = deps.plugins.filter((p) => p.manifest.id !== 'all');
-  const total = constituents.length;
+  const total = deps.plugins.length;
   let completed = 0;
 
   const summaries = await Promise.all(
-    constituents.map(async (plugin): Promise<OutdatedPluginSummary> => {
+    deps.plugins.map(async (plugin): Promise<OutdatedPluginSummary> => {
       const ctx = deps.makeCtx();
       try {
         const outcome = await probe(plugin, ctx, {});

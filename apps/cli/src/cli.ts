@@ -40,6 +40,7 @@ import type { ActionCommand } from './cli/types';
 import { buildCheckCommand } from './commands/check';
 import { CleanupAction } from './commands/cleanup';
 import { CompletionsAction } from './commands/completions';
+import { buildCompositeCommand } from './commands/composite';
 import { ConfigAction } from './commands/config';
 import { DoctorAction } from './commands/doctor';
 import { commandsFromManifest } from './commands/from-manifest';
@@ -188,9 +189,6 @@ function subCommandFromAction(action: ActionCommand): CommandDef {
 }
 
 const pluginSubCommands: Record<string, ReturnType<typeof commandsFromManifest>> = {};
-// The composite `all` command fans out over the individual plugins in the host
-// (ADR 0033); hand it the constituents (everything but itself).
-const constituents = deps.registry.filter((p) => p.manifest.id !== 'all');
 for (const plugin of deps.registry) {
   pluginSubCommands[plugin.manifest.id] = commandsFromManifest(plugin, {
     exec: deps.exec,
@@ -199,9 +197,19 @@ for (const plugin of deps.registry) {
     suppressBar: deps.suppressBar,
     signal: deps.signal,
     pluginContext: deps.pluginContext,
-    constituents: plugin.manifest.id === 'all' ? constituents : undefined,
   });
 }
+// The composite `all` is a host surface, not a plugin (ADR 0033, ADR 0052,
+// issue #140): `deps.registry` holds only the real backends, so it doubles as
+// the constituent list the host fans `all` out over.
+pluginSubCommands.all = buildCompositeCommand(deps.registry, {
+  exec: deps.exec,
+  log: deps.log,
+  getStore: deps.getStore,
+  suppressBar: deps.suppressBar,
+  signal: deps.signal,
+  pluginContext: deps.pluginContext,
+});
 
 // Only the tree citty dispatches gets the boundary. The wizard runs these
 // same commands via its own runCommand() call and reports failures inline

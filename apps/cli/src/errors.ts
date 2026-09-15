@@ -110,12 +110,13 @@ export interface MutateFailure {
 }
 
 /**
- * `mutateRefs` (the shared per-ref loop in `src/plugins/helpers.ts`, used by
- * brew/npm/cargo/pip/go/pnpm) attempts every ref in a batch rather than
- * aborting at the first failure, then throws this once after the batch
- * finishes, naming every ref that failed and its message. Replaces the bare
- * `Error` `mutateRefs` used to throw on a non-zero exit, which escaped the
- * CLI's error boundary as a raw stack trace instead of a one-line message (#122).
+ * An install or update batch attempts every ref rather than aborting at the
+ * first failure, then throws this once after the batch finishes, naming every
+ * ref that failed and its message. `mutateRefs` (the shared per-ref loop in
+ * `src/plugins/helpers.ts`, used by brew/npm/cargo/pip/go/pnpm) throws it, and
+ * so do the loops mas, system and xcode keep for themselves (#160). Replaces
+ * the bare `Error` those loops used to throw on a non-zero exit, which escaped
+ * the CLI's error boundary as a raw stack trace instead of a one-line message (#122).
  */
 export class ErrMutateFailed extends MacupError {
   /** @see {@link MacupError.kind} */

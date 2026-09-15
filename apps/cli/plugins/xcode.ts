@@ -1,4 +1,6 @@
+import { ErrMutateFailed, type MutateFailure } from '../src/errors';
 import { defaultCheck } from '../src/plugins/defaults';
+import { boundedFailureMessage } from '../src/plugins/helpers';
 import type {
   ListOptions,
   MutateOptions,
@@ -116,11 +118,16 @@ const xcode: Plugin = {
       : result;
   },
 
+  // The mas-backed refs are attempted to the end of the batch and their
+  // failures thrown together as one ErrMutateFailed (#160). The `xcode-clt`
+  // branch keeps its pre-#160 behaviour: `xcode-select --install` hands off
+  // to Apple's installer and its exit code is not checked.
   async install(
     ctx: PluginContext,
     refs: readonly PackageRef[],
     opts: MutateOptions,
   ): Promise<void> {
+    const failures: MutateFailure[] = [];
     for (const ref of refs) {
       if (opts.dryRun) {
         ctx.log.info(
@@ -141,17 +148,23 @@ const xcode: Plugin = {
           kind: 'user-action',
         });
         if (r.exitCode !== 0) {
-          throw new Error(`mas install ${ref.id ?? XCODE_ID} exited ${r.exitCode}`);
+          failures.push({ ref, message: boundedFailureMessage(r.stderr, r.stdout) });
         }
       }
     }
+    if (failures.length > 0) {
+      throw new ErrMutateFailed(failures);
+    }
   },
 
+  // Same continue-and-collect loop as install (#160); a `xcode-clt` ref is
+  // logged and skipped as before, never a failure.
   async update(
     ctx: PluginContext,
     refs: readonly PackageRef[],
     opts: MutateOptions,
   ): Promise<void> {
+    const failures: MutateFailure[] = [];
     for (const ref of refs) {
       if (ref.kind === 'xcode-clt') {
         // CLT updates come from softwareupdate; handled by the `system` plugin.
@@ -167,8 +180,11 @@ const xcode: Plugin = {
         kind: 'user-action',
       });
       if (r.exitCode !== 0) {
-        throw new Error(`mas upgrade ${ref.id ?? XCODE_ID} exited ${r.exitCode}`);
+        failures.push({ ref, message: boundedFailureMessage(r.stderr, r.stdout) });
       }
+    }
+    if (failures.length > 0) {
+      throw new ErrMutateFailed(failures);
     }
   },
 };

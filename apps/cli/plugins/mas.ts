@@ -2,6 +2,8 @@
 // plugin itself — consumed by /plugins/appstore.ts (all App Store apps)
 // and /plugins/xcode.ts (Xcode.app specifically).
 
+import { ErrMutateFailed, type MutateFailure } from '../src/errors';
+import { boundedFailureMessage } from '../src/plugins/helpers';
 import type { ExecResult, MutateOptions, PackageRef, PluginContext } from '../src/plugins/types';
 
 // Suppress mas v6's auto-indexing hook: it walks `_MASReceipt`-bearing
@@ -126,12 +128,20 @@ export async function discoverInstalledMasApps(
   return result;
 }
 
+/**
+ * Run `mas install|upgrade` once per ref. Not folded onto `mutateRefs` because
+ * that helper cannot pass `MAS_ENV`; the loop is otherwise the same contract:
+ * every ref is attempted, and the batch reports its failures together.
+ * @throws {@link ErrMutateFailed} once, after every ref has been attempted,
+ * when one or more exited non-zero (#160).
+ */
 export async function runMasAction(
   ctx: PluginContext,
   refs: readonly PackageRef[],
   action: 'install' | 'upgrade',
   opts: MutateOptions,
 ): Promise<void> {
+  const failures: MutateFailure[] = [];
   for (const ref of refs) {
     const target = ref.id ?? ref.name;
     if (opts.dryRun) {
@@ -144,9 +154,10 @@ export async function runMasAction(
       kind: 'user-action',
     });
     if (r.exitCode !== 0) {
-      throw new Error(
-        `mas ${action} ${target} exited ${r.exitCode}: ${r.stderr.trim() || r.stdout.trim()}`,
-      );
+      failures.push({ ref, message: boundedFailureMessage(r.stderr, r.stdout) });
     }
+  }
+  if (failures.length > 0) {
+    throw new ErrMutateFailed(failures);
   }
 }

@@ -18,7 +18,13 @@ import type { MutateOptions, PackageRef, PackageStatus, PluginContext } from './
 // failed ref, per the "bounded/truncated, never raw unbounded output" contract.
 const MAX_FAILURE_MESSAGE_LENGTH = 200;
 
-function boundedFailureMessage(stderr: string, stdout: string): string {
+/**
+ * The per-ref failure text inside an {@link ErrMutateFailed}: stderr, falling
+ * back to stdout, cut to the cap above. Exported so the plugins that keep a
+ * hand-rolled loop (mas, system, xcode — #160) bound their failures the same
+ * way `mutateRefs` does, with one cap rather than a copy in each.
+ */
+export function boundedFailureMessage(stderr: string, stdout: string): string {
   const text = stderr.trim() || stdout.trim();
   if (text.length <= MAX_FAILURE_MESSAGE_LENGTH) return text;
   return `${text.slice(0, MAX_FAILURE_MESSAGE_LENGTH)}… (+${text.length - MAX_FAILURE_MESSAGE_LENGTH} chars)`;

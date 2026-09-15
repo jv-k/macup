@@ -29,6 +29,27 @@ export interface SpinnerDeps {
   readonly suppressBar: boolean;
 }
 
+/** Where a verb's output goes: the deps its spinners run under, and the printer for lines meant for a person. */
+export interface OutputRoute<D extends SpinnerDeps> {
+  readonly deps: D;
+  readonly printHuman: (text: string) => void;
+}
+
+/**
+ * The `--json` seam every verb that renders a document shares (#188). JSON
+ * owns stdout, so the spinners' "done." lines are suppressed and every human
+ * line (headers, notices, the empty-run hints) goes to stderr: a piped stdout
+ * holds only the document and the hints still reach a watching terminal.
+ * Without `--json` both go to stdout as ever. Spelled once, here, so a new
+ * verb cannot spell it another way. On a terminal the backend's own streamed
+ * output still lands on stdout, as it does for `list`.
+ */
+export function routeOutput<D extends SpinnerDeps>(deps: D, showJson: boolean): OutputRoute<D> {
+  return showJson
+    ? { deps: { ...deps, suppressBar: true }, printHuman: log.printErr }
+    : { deps, printHuman: log.print };
+}
+
 /**
  * The wrapped unit of work. `update` re-titles a live spinner or prints a
  * progress line depending on the mode; it's a no-op when feedback is

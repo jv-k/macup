@@ -24,15 +24,19 @@ import {
 } from '../plugins/subtype-table';
 import type {
   ExecRunner,
+  ListOptions,
   Logger,
   PackageRef,
+  PackageStatus,
   Plugin,
   PluginContext,
   PluginManifest,
 } from '../plugins/types';
 import { useColor } from '../runtime';
 import * as log from '../ui/log';
+import { mutateFor } from './composite-mutate';
 import {
+  type MutationMode,
   type RanPlugin,
   buildMutationReport,
   exitCodeFor,
@@ -41,7 +45,7 @@ import {
   renderText,
 } from './mutation-report';
 import { renderList } from './render-list';
-import { type SpinnerDeps, withSpinner, withUserActionSpinner } from './spinner';
+import { type SpinnerDeps, routeOutput, withSpinner, withUserActionSpinner } from './spinner';
 import { pluginHasSubtypes, resolveSubtypeOrExit } from './subtype';
 
 /** What the generated per-plugin commands need. @see {@link commandsFromManifest} */
@@ -115,6 +119,133 @@ async function runHealthCheck(
   await withSpinner(deps, `Checking ${plugin.manifest.id} health…`, async () => {
     await plugin.healthCheck?.(ctx);
   });
+}
+
+/** What {@link finishMutation} needs to know about the run beyond the plugin. */
+interface MutationRun {
+  readonly mode: MutationMode;
+  readonly refs: readonly PackageRef[];
+  /**
+   * The listing the verb already took to select its refs (`update`'s outdated
+   * set). Absent, the tail takes a full listing before the batch, the snapshot
+   * that tells `already-present` from `installed` (`install`, ADR 0052 rule 2).
+   */
+  readonly before?: readonly PackageStatus[];
+  readonly subtype: string | undefined;
+  readonly dryRun: boolean;
+  readonly showJson: boolean;
+}
+
+/**
+ * The mutate → verify → report tail `install` and `update` share (#188): the
+ * header, the per-ref loop, the dry-run early return, the after probe, the
+ * health check, the render, and the exit code. Callers select the refs and
+ * print their own pre-run lines; the invariant tail lived in both verbs before.
+ *
+ * Every ref is attempted whatever happened to the one before it (ADR 0052): a
+ * failure is recorded for the report and the loop moves on. Two exceptions
+ * rethrow as the loop always did. Cancellation, where the failure is what a
+ * SIGINT-cancelled subprocess threw and the run must end there rather than
+ * march through the remaining refs. And a dry run, which prints no report, so
+ * a failure recorded for one would never be seen: the throw is the only way
+ * it reaches the user.
+ *
+ * @throws whatever `list()` raised from either probe, or a ref's own
+ * `install()`/`update()` under cancellation or `--dry-run`.
+ */
+async function finishMutation(deps: CommandDeps, plugin: Plugin, run: MutationRun): Promise<void> {
+  const { manifest } = plugin;
+  const { mode, refs, dryRun, showJson } = run;
+  const { deps: spinnerDeps, printHuman } = routeOutput(deps, showJson);
+  const mutate = mutateFor(mode, plugin);
+  // The same listing at both ends, so an unavailable backend surfaces the same
+  // way at each: full for install, since a present ref that is up to date
+  // drops out of an outdated listing and would read as freshly installed;
+  // outdated-only for update, whose verdict is "still behind afterwards".
+  const listOpts: ListOptions =
+    mode === 'update' ? { subtype: run.subtype, onlyOutdated: true } : { subtype: run.subtype };
+
+  if (refs.length === 0 || !mutate) {
+    // Nothing ran, so text mode has nothing to report; --json still owes its
+    // caller a document, and the empty report is that document. A manifest
+    // that advertises the verb without the method ran nothing either, the
+    // verdict the composite fan-out gives it.
+    if (showJson) {
+      const snapshot = run.before ?? [];
+      const none: RanPlugin = {
+        kind: 'ran',
+        pluginId: manifest.id,
+        refs: [],
+        before: snapshot,
+        after: snapshot,
+      };
+      console.log(renderJson(buildMutationReport(mode, [none])));
+    }
+    return;
+  }
+
+  // A dry run prints no report, and the report is the before snapshot's only
+  // reader, so a dry run takes none.
+  const before =
+    run.before ??
+    (dryRun
+      ? []
+      : await withSpinner(spinnerDeps, `Checking ${manifest.displayName} packages…`, () =>
+          probeOrThrow(plugin, makeCtx(deps), listOpts),
+        ));
+
+  const verb = mode === 'update' ? 'Updating' : 'Installing';
+  printHuman('');
+  printHuman(log.header(`${verb} ${manifest.displayName}`, refs.length));
+  printHuman('');
+  const failures: MutateFailure[] = [];
+  for (let i = 0; i < refs.length; i++) {
+    const ref = refs[i] as PackageRef;
+    try {
+      await withUserActionSpinner(
+        spinnerDeps,
+        log.counter(i + 1, refs.length, verb, ref.name),
+        async () => {
+          await mutate(makeCtx(deps), [ref], { dryRun });
+        },
+      );
+    } catch (err) {
+      if (dryRun || deps.signal.aborted) throw err;
+      failures.push(...failuresFor(ref, err));
+    }
+  }
+
+  // A dry run mutates nothing, so the after snapshot would call every ref
+  // failed. Keep the pre-report output and the zero exit instead.
+  if (dryRun) {
+    await runHealthCheck(spinnerDeps, plugin, makeCtx(deps));
+    return;
+  }
+
+  // The verdict is the backend's own listing, not the exit code (ADR 0052
+  // rule 2): a ref on disk, or no longer behind, afterwards succeeded whatever
+  // `install()` or `update()` said.
+  const after = await withSpinner(spinnerDeps, `Verifying ${manifest.displayName} packages…`, () =>
+    probeOrThrow(plugin, makeCtx(deps), listOpts),
+  );
+  const ran: RanPlugin = {
+    kind: 'ran',
+    pluginId: manifest.id,
+    refs,
+    before,
+    after,
+    ...(failures.length > 0 ? { failures } : {}),
+  };
+  const report = buildMutationReport(mode, [ran]);
+  await runHealthCheck(spinnerDeps, plugin, makeCtx(deps));
+  if (showJson) {
+    console.log(renderJson(report));
+  } else {
+    log.print('');
+    log.print(renderText(report, { color: useColor() }));
+  }
+  // Never write 0 over a non-zero code an earlier step already set.
+  if (exitCodeFor(report) === 1) process.exitCode = 1;
 }
 
 /** Extracts non-flag positional args, or prints usage + sets exit 1 and returns null. */
@@ -229,10 +360,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const showJson = Boolean(args.json);
         const onlyOutdated = Boolean(args['only-outdated']);
 
-        // --json owns stdout, and the spinner's "... done." lands there on a
-        // TTY, so a piped-to-jq run would break on an interactive terminal but
-        // pass in CI. suppressBar is the existing seam for exactly this.
-        //
+        const { deps: spinnerDeps, printHuman } = routeOutput(deps, showJson);
+
         // Tracked scoping, the fell-back verdict, and the plugin's warnings
         // all come back as data from the operation (#141). ConfigStore.load()
         // handles "no file" by starting with an empty doc, so anything the
@@ -240,7 +369,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         // and propagates rather than silently dropping the user into "show
         // all" mode.
         const result = await withSpinner(
-          showJson ? { ...deps, suppressBar: true } : deps,
+          spinnerDeps,
           `Fetching ${manifest.displayName} packages…`,
           () =>
             listPackages(plugin, makeCtx(deps), deps.getStore, {
@@ -251,15 +380,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         );
 
         if (result.fellBackToAll) {
-          // Advice for a human, not part of the payload. On stdout it would
-          // precede the JSON and break the parse, so --json routes it to
-          // stderr rather than dropping it: piped output stays valid and the
-          // hint still reaches a watching terminal.
-          const notice = log.warning(
-            `No tracked packages. Showing all installed. Track with: macup ${manifest.id} track <name...>`,
+          // Advice for a human, not part of the payload.
+          printHuman(
+            log.warning(
+              `No tracked packages. Showing all installed. Track with: macup ${manifest.id} track <name...>`,
+            ),
           );
-          if (showJson) console.error(notice);
-          else log.print(notice);
         }
 
         if (showJson) {
@@ -302,7 +428,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
        * unavailable backend still aborts the command before any ref is
        * attempted (ADR 0052 rule 5). A ref's own `install()` failure is
        * caught and reported rather than thrown, unless the run was cancelled
-       * (`deps.signal`), when the failure is rethrown so Ctrl-C ends the run.
+       * (`deps.signal`) or is a dry run, when {@link finishMutation} rethrows
+       * it: Ctrl-C ends the run, and no report would carry the failure.
        */
       async run({ args, rawArgs }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
@@ -310,17 +437,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const subtype = resolved.subtype;
         const dryRun = Boolean(args['dry-run']);
         const showJson = Boolean(args.json);
-
-        // --json owns stdout, the same seam `list` and `update` use: the
-        // spinners' "done." lines are suppressed and every human line goes
-        // to stderr, so a piped stdout holds only the report document.
-        const spinnerDeps: SpinnerDeps = showJson ? { ...deps, suppressBar: true } : deps;
-        const printHuman = showJson ? log.printErr : log.print;
+        const { printHuman } = routeOutput(deps, showJson);
 
         // Availability first, before the applist is read or a snapshot taken,
         // so an unavailable backend fails outright exactly as it did before
-        // the report existed (ADR 0052 rule 5). The snapshots below run
-        // `check()` again inside the probe; it is a PATH lookup, so the
+        // the report existed (ADR 0052 rule 5). The snapshots the tail takes
+        // run `check()` again inside the probe; it is a PATH lookup, so the
         // repeat costs nothing and keeps both probes the shape `update` uses.
         await plugin.check(makeCtx(deps));
         const packages = rawArgs.filter((a) => !a.startsWith('-'));
@@ -336,101 +458,14 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           const key = resolveConfigKey(plugin, subtype);
           refs = [...store.list(key)].map((name) => packageRefForSubtype(manifest, name, subtype));
         }
-        if (refs.length === 0) {
-          if (manifest.configKeys.length > 0) {
-            const emptyKey = resolveConfigKey(plugin, subtype);
-            printHuman(log.info(`No packages tracked in ${emptyKey}.`));
-            printHuman(
-              log.trace(`macup ${manifest.id} track ${subtypeCliFlag(manifest, subtype)}<name>`),
-            );
-          }
-          // Nothing ran, so text mode has nothing to report; --json still owes
-          // its caller a document, and the empty report is that document.
-          if (showJson) {
-            const none: RanPlugin = {
-              kind: 'ran',
-              pluginId: manifest.id,
-              refs: [],
-              before: [],
-              after: [],
-            };
-            console.log(renderJson(buildMutationReport('install', [none])));
-          }
-          return;
+        if (refs.length === 0 && manifest.configKeys.length > 0) {
+          const emptyKey = resolveConfigKey(plugin, subtype);
+          printHuman(log.info(`No packages tracked in ${emptyKey}.`));
+          printHuman(
+            log.trace(`macup ${manifest.id} track ${subtypeCliFlag(manifest, subtype)}<name>`),
+          );
         }
-
-        // The before snapshot is what tells `already-present` from
-        // `installed` (ADR 0052 rule 2). A full listing, never `onlyOutdated`:
-        // a present ref that is up to date drops out of an outdated listing
-        // and would read as freshly installed. A dry run prints no report,
-        // and the report is the snapshot's only reader, so it takes none.
-        const before = dryRun
-          ? []
-          : await withSpinner(spinnerDeps, `Checking ${manifest.displayName} packages…`, () =>
-              probeOrThrow(plugin, makeCtx(deps), { subtype }),
-            );
-
-        printHuman('');
-        printHuman(log.header(`Installing ${manifest.displayName}`, refs.length));
-        printHuman('');
-        // Every ref is attempted whatever happened to the one before it (ADR
-        // 0052): a failure is recorded for the report and the loop moves on.
-        // Two exceptions rethrow as the loop always did. Cancellation, where
-        // the failure is what a SIGINT-cancelled subprocess threw and the run
-        // must end there rather than march through the remaining refs. And a
-        // dry run, which prints no report, so a failure recorded for one
-        // would never be seen: the throw is the only way it reaches the user.
-        const failures: MutateFailure[] = [];
-        for (let i = 0; i < refs.length; i++) {
-          const ref = refs[i] as PackageRef;
-          try {
-            await withUserActionSpinner(
-              spinnerDeps,
-              log.counter(i + 1, refs.length, 'Installing', ref.name),
-              async () => {
-                await plugin.install?.(makeCtx(deps), [ref], { dryRun });
-              },
-            );
-          } catch (err) {
-            if (dryRun || deps.signal.aborted) throw err;
-            failures.push(...failuresFor(ref, err));
-          }
-        }
-
-        // A dry run mutates nothing and took no snapshot, so there is no
-        // report to build. Keep the pre-report output and the zero exit.
-        if (dryRun) {
-          await runHealthCheck(spinnerDeps, plugin, makeCtx(deps));
-          return;
-        }
-
-        // The verdict is the backend's own listing, not the exit code (ADR
-        // 0052 rule 2): a ref on disk afterwards is installed whatever
-        // `install()` said. Same probe as the before snapshot, so an
-        // unavailable backend surfaces the same way at both ends.
-        const after = await withSpinner(
-          spinnerDeps,
-          `Verifying ${manifest.displayName} packages…`,
-          () => probeOrThrow(plugin, makeCtx(deps), { subtype }),
-        );
-        const ran: RanPlugin = {
-          kind: 'ran',
-          pluginId: manifest.id,
-          refs,
-          before,
-          after,
-          ...(failures.length > 0 ? { failures } : {}),
-        };
-        const report = buildMutationReport('install', [ran]);
-        await runHealthCheck(spinnerDeps, plugin, makeCtx(deps));
-        if (showJson) {
-          console.log(renderJson(report));
-        } else {
-          log.print('');
-          log.print(renderText(report, { color: useColor() }));
-        }
-        // Never write 0 over a non-zero code an earlier step already set.
-        if (exitCodeFor(report) === 1) process.exitCode = 1;
+        await finishMutation(deps, plugin, { mode: 'install', refs, subtype, dryRun, showJson });
       },
     });
   }
@@ -463,7 +498,8 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
        * unavailable backend still aborts the command before any ref is
        * attempted (ADR 0052 rule 5). A ref's own `update()` failure is caught
        * and reported rather than thrown, unless the run was cancelled
-       * (`deps.signal`), when the failure is rethrown so Ctrl-C ends the run.
+       * (`deps.signal`) or is a dry run, when {@link finishMutation} rethrows
+       * it: Ctrl-C ends the run, and no report would carry the failure.
        */
       async run({ args, rawArgs }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
@@ -472,14 +508,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const kind = kindForSubtype(manifest, subtype);
         const dryRun = Boolean(args['dry-run']);
         const showJson = Boolean(args.json);
-
-        // --json owns stdout, the same seam `list` uses: the spinners' "done."
-        // lines are suppressed, and every human line (header, notices, the
-        // empty-run hints) goes to stderr, so a piped stdout holds only the
-        // report document. On a terminal the backend's own streamed output
-        // still lands on stdout, as it does for `list`.
-        const spinnerDeps: SpinnerDeps = showJson ? { ...deps, suppressBar: true } : deps;
-        const printHuman = showJson ? log.printErr : log.print;
+        const { deps: spinnerDeps, printHuman } = routeOutput(deps, showJson);
 
         const statuses = await withSpinner(
           spinnerDeps,
@@ -546,85 +575,15 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           } else {
             printHuman(log.success(`All ${manifest.displayName} packages are up-to-date!`));
           }
-          // Nothing ran, so text mode has nothing to report; --json still owes
-          // its caller a document, and the empty report is that document.
-          if (showJson) {
-            const none: RanPlugin = {
-              kind: 'ran',
-              pluginId: manifest.id,
-              refs: [],
-              before: statuses,
-              after: statuses,
-            };
-            console.log(renderJson(buildMutationReport('update', [none])));
-          }
-          return;
         }
-
-        printHuman('');
-        printHuman(log.header(`Updating ${manifest.displayName}`, refs.length));
-        printHuman('');
-        // Every ref is attempted whatever happened to the one before it (ADR
-        // 0052): a failure is recorded for the report and the loop moves on.
-        // The one exception is cancellation, where the failure is what a
-        // SIGINT-cancelled subprocess threw, and the run must end as it did
-        // before rather than march through the remaining refs.
-        const failures: MutateFailure[] = [];
-        if (plugin.update) {
-          for (let i = 0; i < refs.length; i++) {
-            const ref = refs[i] as PackageRef;
-            try {
-              await withUserActionSpinner(
-                spinnerDeps,
-                log.counter(i + 1, refs.length, 'Updating', ref.name),
-                async () => {
-                  await plugin.update?.(makeCtx(deps), [ref], { dryRun });
-                },
-              );
-            } catch (err) {
-              failures.push(...failuresFor(ref, err));
-              if (deps.signal.aborted) throw err;
-            }
-          }
-        }
-
-        // A dry run mutates nothing, so the after snapshot would call every
-        // ref failed. Keep the pre-report output and the zero exit instead.
-        if (dryRun) {
-          await runHealthCheck(spinnerDeps, plugin, makeCtx(deps));
-          printHuman(
-            log.success(`Updated ${refs.length} ${refs.length === 1 ? 'package' : 'packages'}.`),
-          );
-          return;
-        }
-
-        // The verdict is the backend's own listing, not the exit code (ADR
-        // 0052 rule 2): a ref still outdated afterwards failed, whatever
-        // `update()` said. Same probe as the before snapshot, so an
-        // unavailable backend surfaces the same way at both ends.
-        const after = await withSpinner(
-          spinnerDeps,
-          `Verifying ${manifest.displayName} packages…`,
-          () => probeOrThrow(plugin, makeCtx(deps), { subtype, onlyOutdated: true }),
-        );
-        const ran: RanPlugin = {
-          kind: 'ran',
-          pluginId: manifest.id,
+        await finishMutation(deps, plugin, {
+          mode: 'update',
           refs,
           before: statuses,
-          after,
-          ...(failures.length > 0 ? { failures } : {}),
-        };
-        const report = buildMutationReport('update', [ran]);
-        await runHealthCheck(spinnerDeps, plugin, makeCtx(deps));
-        if (showJson) {
-          console.log(renderJson(report));
-        } else {
-          log.print('');
-          log.print(renderText(report, { color: useColor() }));
-        }
-        // Never write 0 over a non-zero code an earlier step already set.
-        if (exitCodeFor(report) === 1) process.exitCode = 1;
+          subtype,
+          dryRun,
+          showJson,
+        });
       },
     });
   }

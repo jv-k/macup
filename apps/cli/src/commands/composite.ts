@@ -55,7 +55,7 @@ import {
   renderText,
 } from './mutation-report';
 import { renderList } from './render-list';
-import { withSpinner } from './spinner';
+import { routeOutput, withSpinner } from './spinner';
 
 /**
  * The composite's self-declaration. Not a plugin — held here rather than in
@@ -237,10 +237,7 @@ async function runCompositeMutation(
 ): Promise<void> {
   const { dryRun } = flags;
   const showJson = flags.json;
-  // --json owns stdout, the same seam the single-plugin path uses: spinners
-  // suppressed, every human line to stderr, so stdout holds one document.
-  const runDeps: CommandDeps = showJson ? { ...deps, suppressBar: true } : deps;
-  const printHuman = showJson ? log.printErr : log.print;
+  const { deps: runDeps, printHuman } = routeOutput(deps, showJson);
   const verb = mode === 'update' ? 'Updating' : 'Installing';
   const store = await deps.getStore();
   const plans = await planComposite(mode, constituents, store, () => makeCtx(deps), { dryRun });

@@ -20,7 +20,9 @@
  * @module
  */
 
-import type { MutateFailure } from '../errors';
+import { ErrMutateFailed, type MutateFailure } from '../errors';
+import { boundFailureText } from '../plugins/helpers';
+import { errorMessage } from '../plugins/probe';
 import type { PackageRef, PackageStatus } from '../plugins/types';
 import * as log from '../ui/log';
 
@@ -79,17 +81,32 @@ export interface UnavailablePlugin {
   readonly reason: string;
 }
 
+/**
+ * A plugin that errored out entirely: its probe threw a real error (not
+ * `ErrPluginUnavailable`) or timed out, or its listing after the batch could
+ * not be taken. A real failure rather than a fact about the machine, so
+ * unlike {@link UnavailablePlugin} it forces a non-zero exit even when it
+ * left no per-package entry to count (#164, the gap ADR 0052 names).
+ */
+export interface FailedPlugin {
+  readonly kind: 'failed';
+  readonly pluginId: string;
+  /** The refs it was asked to act on, each reported `failed` with the reason. Empty when the error came before they could be selected. */
+  readonly refs: readonly PackageRef[];
+  readonly reason: string;
+}
+
 /** What the caller knows about one plugin at the end of the run. */
-export type PluginRun = RanPlugin | UnavailablePlugin;
+export type PluginRun = RanPlugin | UnavailablePlugin | FailedPlugin;
 
 /**
- * One plugin's line in the report: ran, or unavailable and why. Kept apart
- * from the package entries so an unavailable plugin whose refs could not
+ * One plugin's line in the report: ran, unavailable and why, or failed and
+ * why. Kept apart from the package entries so a plugin whose refs could not
  * even be selected is still reported rather than omitted (ADR 0038 rule 4).
  */
 export interface PluginSummary {
   readonly pluginId: string;
-  readonly status: 'ran' | 'unavailable';
+  readonly status: 'ran' | 'unavailable' | 'failed';
   readonly reason?: string;
 }
 
@@ -111,6 +128,20 @@ export interface UpdateReport {
 
 /** The whole report, shared by the exit-code predicate and both renderers so they cannot diverge. */
 export type MutationReport = InstallReport | UpdateReport;
+
+/**
+ * What one ref's thrown `install()` or `update()` contributes to
+ * {@link RanPlugin.failures}. An `ErrMutateFailed` already names its refs
+ * with bounded messages, so it is taken as-is; anything else is one failure
+ * for the ref that was being attempted, bounded the same way `mutateRefs`
+ * bounds subprocess output, so the report carries one truncation rule
+ * whichever path the error took. Shared by the single-plugin loop and the
+ * composite fan-out so the two cannot bound differently.
+ */
+export function failuresFor(ref: PackageRef, err: unknown): readonly MutateFailure[] {
+  if (err instanceof ErrMutateFailed) return err.failures;
+  return [{ ref, message: boundFailureText(errorMessage(err)) }];
+}
 
 // A formula and a cask sharing a name are different packages (ADR 0035), and
 // `kind` is what separates them in a ref, so the snapshot index keys on both.
@@ -183,10 +214,30 @@ function unavailableEntries(run: UnavailablePlugin): PackageOutcomeEntry<'unavai
   return run.refs.map((ref) => ({ pluginId: run.pluginId, ref, outcome: 'unavailable' }));
 }
 
+// The plugin's one reason is every ref's detail: the backend never got as
+// far as saying anything about a particular package.
+function failedEntries(run: FailedPlugin): PackageOutcomeEntry<'failed'>[] {
+  return run.refs.map((ref) => ({
+    pluginId: run.pluginId,
+    ref,
+    outcome: 'failed',
+    detail: run.reason,
+  }));
+}
+
 function summarizePlugin(run: PluginRun): PluginSummary {
   return run.kind === 'ran'
     ? { pluginId: run.pluginId, status: 'ran' }
-    : { pluginId: run.pluginId, status: 'unavailable', reason: run.reason };
+    : { pluginId: run.pluginId, status: run.kind, reason: run.reason };
+}
+
+// Both modes share the two never-ran cases; only the ran classifier differs.
+function entriesFor<O extends InstallOutcome | UpdateOutcome>(
+  run: PluginRun,
+  classify: (r: RanPlugin) => PackageOutcomeEntry<O>[],
+): PackageOutcomeEntry<O | 'failed' | 'unavailable'>[] {
+  if (run.kind === 'ran') return classify(run);
+  return run.kind === 'unavailable' ? unavailableEntries(run) : failedEntries(run);
 }
 
 function count<O extends PackageOutcome>(
@@ -213,27 +264,28 @@ export function buildMutationReport(
 ): MutationReport {
   const plugins = runs.map(summarizePlugin);
   if (mode === 'install') {
-    const packages = runs.flatMap((r) =>
-      r.kind === 'ran' ? classifyInstall(r) : unavailableEntries(r),
-    );
+    const packages = runs.flatMap((r) => entriesFor(r, classifyInstall));
     const zero = { installed: 0, 'already-present': 0, failed: 0, unavailable: 0 };
     return { mode, plugins, packages, summary: count(packages, zero) };
   }
-  const packages = runs.flatMap((r) =>
-    r.kind === 'ran' ? classifyUpdate(r) : unavailableEntries(r),
-  );
+  const packages = runs.flatMap((r) => entriesFor(r, classifyUpdate));
   const zero = { updated: 0, failed: 0, unavailable: 0 };
   return { mode, plugins, packages, summary: count(packages, zero) };
 }
 
+function failedPlugins(report: MutationReport): number {
+  return report.plugins.filter((p) => p.status === 'failed').length;
+}
+
 /**
- * Non-zero exactly when a package failed. An unavailable plugin costs
- * nothing: an ordinary install or update names no targets, so a missing
- * backend stays the environmental fact ADR 0033 and ADR 0037 treat it as. A
- * bundle's named targets are held to the stricter rule, in ADR 0038, not here.
+ * Non-zero exactly when a package failed, or a plugin errored out entirely
+ * before it could name one (#164). An unavailable plugin costs nothing: an
+ * ordinary install or update names no targets, so a missing backend stays
+ * the environmental fact ADR 0033 and ADR 0037 treat it as. A bundle's named
+ * targets are held to the stricter rule, in ADR 0038, not here.
  */
 export function exitCodeFor(report: MutationReport): 0 | 1 {
-  return report.summary.failed > 0 ? 1 : 0;
+  return report.summary.failed > 0 || failedPlugins(report) > 0 ? 1 : 0;
 }
 
 /** Rendering choices for the text report. */
@@ -273,8 +325,9 @@ const STYLE: Readonly<Record<PackageOutcome, OutcomeStyle>> = {
  *       → Error: fd: no bottle available
  *     ? pnpm  turbo    unavailable
  *     ? pnpm  unavailable: pnpm not on PATH
+ *     ✖ npm   failed: npm registry down
  *
- *     1 installed, 1 already present, 1 failed, 1 unavailable
+ *     1 installed, 1 already present, 1 failed, 1 unavailable, 1 backend failed
  */
 export function renderText(report: MutationReport, opts: RenderOptions = {}): string {
   const painter = log.paint(opts.color ?? false);
@@ -298,16 +351,20 @@ export function renderText(report: MutationReport, opts: RenderOptions = {}): st
       }
     }
   }
+  // A plugin-level line reads in the same tone as a package with that
+  // outcome, so a failed backend is as loud as a failed package.
   for (const plugin of report.plugins) {
-    if (plugin.status !== 'unavailable') continue;
+    if (plugin.status === 'ran') continue;
     const id = plugin.pluginId.padEnd(idPad);
+    const style = STYLE[plugin.status];
     lines.push(
-      `  ${dim(STYLE.unavailable.glyph)} ${id}  ${dim(`unavailable: ${plugin.reason ?? 'unknown'}`)}`,
+      `  ${paint(plugin.status, style.glyph)} ${id}  ${paint(plugin.status, `${style.word}: ${plugin.reason ?? 'unknown'}`)}`,
     );
   }
 
   if (lines.length > 0) lines.push('');
-  if (report.packages.length === 0) {
+  const backendsFailed = failedPlugins(report);
+  if (report.packages.length === 0 && backendsFailed === 0) {
     lines.push(`  ${dim(`Nothing to ${report.mode}.`)}`);
     return lines.join('\n');
   }
@@ -315,6 +372,11 @@ export function renderText(report: MutationReport, opts: RenderOptions = {}): st
   const parts = OUTCOME_ORDER[report.mode]
     .filter((o) => (counts[o] ?? 0) > 0)
     .map((o) => paint(o, `${counts[o]} ${STYLE[o].word}`));
+  if (backendsFailed > 0) {
+    parts.push(
+      paint('failed', `${backendsFailed} ${backendsFailed === 1 ? 'backend' : 'backends'} failed`),
+    );
+  }
   lines.push(`  ${parts.join(', ')}`);
   return lines.join('\n');
 }

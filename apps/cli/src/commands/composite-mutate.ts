@@ -9,8 +9,8 @@
  */
 
 import type { ConfigStore } from '../config/store';
-import { ErrPluginUnavailable } from '../errors';
-import { probe } from '../plugins/probe';
+import { ErrPluginUnavailable, type MutateFailure } from '../errors';
+import { errorMessage, probe } from '../plugins/probe';
 import { resolveSelection } from '../plugins/selection';
 import { kindForConfigKey } from '../plugins/subtype-table';
 import type {
@@ -20,15 +20,15 @@ import type {
   Plugin,
   PluginContext,
 } from '../plugins/types';
-
-/** Which mutating verb the composite is fanning out. */
-export type CompositeMode = 'install' | 'update';
+import { type MutationMode, failuresFor } from './mutation-report';
 
 /** Why a constituent won't run, or the refs it will act on (status 'planned'). */
 export interface ConstituentPlan {
   readonly plugin: Plugin;
   readonly status: 'planned' | 'excluded' | 'unavailable' | 'error';
   readonly refs: readonly PackageRef[];
+  /** The planning probe's listing, kept so the end-of-run report has a `before` snapshot to pair with its `after` (ADR 0052 rule 2). Empty where planning took no listing (`install`, or a constituent that never ran). */
+  readonly before: readonly PackageStatus[];
   readonly message?: string;
 }
 
@@ -36,16 +36,15 @@ export interface ConstituentPlan {
 export interface ConstituentOutcome {
   readonly pluginId: string;
   /**
-   * acted: mutate ran · nothing: no work · excluded: skip.all · unavailable:
-   * backend not installed (ErrPluginUnavailable) · error: real failure.
+   * acted: mutate ran, every ref attempted · nothing: no work · excluded:
+   * skip.all · unavailable: backend not installed (ErrPluginUnavailable) ·
+   * error: the backend errored out before any ref could be selected.
    */
   readonly status: 'acted' | 'nothing' | 'excluded' | 'unavailable' | 'error';
   readonly refs: readonly PackageRef[];
+  /** Per-ref detail for the refs whose mutate threw, absent when every ref's call returned. Only on `acted`; a whole-backend failure is `error` with `message`. */
+  readonly failures?: readonly MutateFailure[];
   readonly message?: string;
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 /**
@@ -66,7 +65,7 @@ function errorMessage(err: unknown): string {
  * ever made.
  */
 export async function planComposite(
-  mode: CompositeMode,
+  mode: MutationMode,
   constituents: readonly Plugin[],
   store: ConfigStore,
   makeCtx: () => PluginContext,
@@ -75,12 +74,12 @@ export async function planComposite(
   const plans: ConstituentPlan[] = [];
   for (const plugin of constituents) {
     if (excluded.has(plugin.manifest.id)) {
-      plans.push({ plugin, status: 'excluded', refs: [] });
+      plans.push({ plugin, status: 'excluded', refs: [], before: [] });
       continue;
     }
     const mutate = mode === 'update' ? plugin.update : plugin.install;
     if (!mutate) {
-      plans.push({ plugin, status: 'planned', refs: [] });
+      plans.push({ plugin, status: 'planned', refs: [], before: [] });
       continue;
     }
     const ctx = makeCtx();
@@ -91,32 +90,55 @@ export async function planComposite(
           plugin,
           status: 'planned',
           refs: selectUpdateRefs(outcome.statuses, plugin, store),
+          before: outcome.statuses,
         });
       } else if (outcome.kind === 'unavailable') {
-        plans.push({ plugin, status: 'unavailable', refs: [], message: outcome.message });
+        plans.push({
+          plugin,
+          status: 'unavailable',
+          refs: [],
+          before: [],
+          message: outcome.message,
+        });
       } else {
         const message = outcome.kind === 'timeout' ? 'probe timed out' : outcome.message;
-        plans.push({ plugin, status: 'error', refs: [], message });
+        plans.push({ plugin, status: 'error', refs: [], before: [], message });
       }
       continue;
     }
     try {
       await plugin.check(ctx);
-      plans.push({ plugin, status: 'planned', refs: selectInstallRefs(plugin, store) });
+      plans.push({
+        plugin,
+        status: 'planned',
+        refs: selectInstallRefs(plugin, store),
+        before: [],
+      });
     } catch (err) {
       plans.push(
         err instanceof ErrPluginUnavailable
-          ? { plugin, status: 'unavailable', refs: [], message: err.message }
-          : { plugin, status: 'error', refs: [], message: errorMessage(err) },
+          ? { plugin, status: 'unavailable', refs: [], before: [], message: err.message }
+          : { plugin, status: 'error', refs: [], before: [], message: errorMessage(err) },
       );
     }
   }
   return plans;
 }
 
-/** Apply a plan: mutate each planned constituent's refs, isolating failures. */
+/**
+ * Apply a plan: mutate each planned constituent's refs one call per ref,
+ * attempting every ref whatever happened to the one before it (ADR 0052), so
+ * a constituent whose `update()` fails atomically on one ref still gets the
+ * rest of its batch. A ref's failure is recorded as detail on the outcome
+ * for the report to classify against the after snapshot, never as a verdict
+ * here. The one exception is cancellation: a failure after the signal
+ * aborted is what a SIGINT-cancelled subprocess threw, and the run must end
+ * there rather than march through the remaining refs and backends.
+ *
+ * @throws the constituent's own error, only once `ctx.signal` has aborted.
+ */
 export async function applyComposite(
-  mode: CompositeMode,
+  mode: MutationMode,
   plans: readonly ConstituentPlan[],
   makeCtx: () => PluginContext,
   opts: MutateOptions,
@@ -133,19 +155,29 @@ export async function applyComposite(
       outcomes.push({ pluginId, status: 'nothing', refs: [] });
       continue;
     }
-    try {
-      await mutate(makeCtx(), plan.refs, opts);
-      outcomes.push({ pluginId, status: 'acted', refs: plan.refs });
-    } catch (err) {
-      outcomes.push({ pluginId, status: 'error', refs: [], message: errorMessage(err) });
+    const failures: MutateFailure[] = [];
+    for (const ref of plan.refs) {
+      const ctx = makeCtx();
+      try {
+        await mutate(ctx, [ref], opts);
+      } catch (err) {
+        if (ctx.signal.aborted) throw err;
+        failures.push(...failuresFor(ref, err));
+      }
     }
+    outcomes.push({
+      pluginId,
+      status: 'acted',
+      refs: plan.refs,
+      ...(failures.length > 0 ? { failures } : {}),
+    });
   }
   return outcomes;
 }
 
 /** Plan then apply in one call. The command layer splits them to prompt with a count. */
 export async function fanOutComposite(
-  mode: CompositeMode,
+  mode: MutationMode,
   constituents: readonly Plugin[],
   store: ConfigStore,
   makeCtx: () => PluginContext,

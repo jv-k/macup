@@ -109,6 +109,20 @@ holds only the document. `--dry-run` prints what would run, and no report.
 macup brew update --json | jq -r '.packages[] | select(.outcome == "failed") | .ref.name'
 ```
 
+`macup all update --json` emits the same document across every backend. Each
+backend gets a line in `plugins`: `ran`, `unavailable` with the reason (the
+backend is not on this machine), or `failed` with the reason (the backend
+errored out before it could name a package, so there is no entry to count).
+Every backend and every package is attempted even when one fails, and the exit
+code is `1` iff a package `failed` or a backend `failed`. An unavailable
+backend never forces a non-zero exit on its own. A backend listed in
+`skip.all` is not run and does not appear.
+
+```bash
+# Backends that errored out, with the reason
+macup all update --json | jq -r '.plugins[] | select(.status == "failed") | "\(.pluginId): \(.reason)"'
+```
+
 `<plugin> install --json` emits the same shape for an install. Each package's
 outcome is `installed` (this run put it on the machine), `already-present` (it
 was there before the run started, as the backend's own listing showed) or

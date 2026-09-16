@@ -19,6 +19,7 @@ import { type PathSource, selectorLabel } from './paths';
 import {
   type Applist,
   type ApplistKey,
+  ApplistKeySchema,
   ApplistSchema,
   INITIAL_SCHEMA_VERSION,
   SCHEMA_VERSION,
@@ -71,6 +72,14 @@ export interface Pin {
   readonly maxVersion: string;
 }
 
+/** One tracked name as the file declares it: a package name under one applist key. */
+export interface Tracked {
+  /** The applist key the name sits under, dotted as the file nests it (`brew.casks`). */
+  readonly key: ApplistKey;
+  /** The package name. */
+  readonly name: string;
+}
+
 /** One skip as the file declares it: a name taken out of update consideration under one plugin, and the subtype it binds when per-subtype (ADR 0035). */
 export interface Skip {
   /** The plugin whose package is skipped. */
@@ -79,6 +88,16 @@ export interface Skip {
   readonly subtype?: string;
   /** The package name. */
   readonly name: string;
+}
+
+/** One `pins:` or `skip:` block as the file keys it. Reported even when empty, since the key is a fact about the file whether or not it lists anything yet: a typo'd id names no plugin, and a `skip.all` that nests excludes nothing (ADR 0037). */
+export interface PolicyBlock {
+  /** Which top-level map the block sits in. */
+  readonly section: 'pins' | 'skip';
+  /** The id the block is keyed on: a plugin id, or `all` for the composite's policy namespace. */
+  readonly pluginId: string;
+  /** True when the block nests by subtype (`skip.brew.casks`), false for the flat form (ADR 0035). An empty `pins` block reads as flat, since the two shapes are indistinguishable there. */
+  readonly bySubtype: boolean;
 }
 
 /**
@@ -101,6 +120,10 @@ export interface ApplistRead {
   readonly pins: readonly Pin[];
   /** Every skip in force, likewise. */
   readonly skips: readonly Skip[];
+  /** Every tracked name under its applist key, keys in schema order and names in file order. Empty unless the file validates. */
+  readonly tracked: readonly Tracked[];
+  /** Every `pins:` and `skip:` block by the id it is keyed on, `pins` first, in file order. Empty unless the file validates. */
+  readonly policyBlocks: readonly PolicyBlock[];
 }
 
 interface ConfigStoreDeps {
@@ -202,13 +225,37 @@ function stampVersion(doc: Document, version: number): boolean {
   return true;
 }
 
-// Every pin and skip as a flat list, out of the two shapes the schema allows
-// per plugin (ADR 0035): a flat name→version map or name list, or a
-// subtype→(the same) map. File order is kept so a report reads like the file.
-function flattenPolicy(data: Applist): { pins: Pin[]; skips: Skip[] } {
+// Every tracked name, pin and skip as flat lists. Pins and skips come out of
+// the two shapes the schema allows per plugin (ADR 0035): a flat name→version
+// map or name list, or a subtype→(the same) map. File order is kept so a
+// report reads like the file. Tracked names are resolved per applist key the
+// way list() resolves them on the document, so this is the one key lookup.
+function flattenPolicy(data: Applist): {
+  pins: Pin[];
+  skips: Skip[];
+  tracked: Tracked[];
+  policyBlocks: PolicyBlock[];
+} {
+  const tracked: Tracked[] = [];
+  for (const key of ApplistKeySchema.options) {
+    const names = pathFor(key).reduce<unknown>(
+      (node, segment) =>
+        node && typeof node === 'object' ? (node as Record<string, unknown>)[segment] : undefined,
+      data,
+    );
+    if (!Array.isArray(names)) continue;
+    for (const name of names as readonly string[]) tracked.push({ key, name });
+  }
+  const policyBlocks: PolicyBlock[] = [];
   const pins: Pin[] = [];
   for (const [pluginId, entry] of Object.entries(data.pins)) {
-    for (const [key, value] of Object.entries<string | Record<string, string>>(entry)) {
+    const values = Object.entries<string | Record<string, string>>(entry);
+    policyBlocks.push({
+      section: 'pins',
+      pluginId,
+      bySubtype: values.some(([, value]) => typeof value !== 'string'),
+    });
+    for (const [key, value] of values) {
       if (typeof value === 'string') {
         pins.push({ pluginId, name: key, maxVersion: value });
       } else {
@@ -220,6 +267,7 @@ function flattenPolicy(data: Applist): { pins: Pin[]; skips: Skip[] } {
   }
   const skips: Skip[] = [];
   for (const [pluginId, entry] of Object.entries(data.skip)) {
+    policyBlocks.push({ section: 'skip', pluginId, bySubtype: !Array.isArray(entry) });
     if (Array.isArray(entry)) {
       for (const name of entry) skips.push({ pluginId, name });
     } else {
@@ -228,7 +276,7 @@ function flattenPolicy(data: Applist): { pins: Pin[]; skips: Skip[] } {
       }
     }
   }
-  return { pins, skips };
+  return { pins, skips, tracked, policyBlocks };
 }
 
 function pathFor(key: ApplistKey): readonly string[] {
@@ -320,7 +368,7 @@ export class ConfigStore {
     const exists = text !== undefined || failure !== undefined;
     const doc = parseDocument(text ?? '');
     const untouched = { exists, text: text ?? '', doc, migrated: false };
-    const nothing = { pins: [], skips: [] };
+    const nothing = { pins: [], skips: [], tracked: [], policyBlocks: [] };
     if (failure !== undefined) {
       return {
         ...untouched,

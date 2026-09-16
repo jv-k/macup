@@ -7,6 +7,7 @@ import { check as checkDataIntegrity } from '../../../src/commands/doctor/checks
 import { check as checkPlugins } from '../../../src/commands/doctor/checks/plugins';
 import type { CheckDeps } from '../../../src/commands/doctor/report';
 import { buildReport, exitCodeFor } from '../../../src/commands/doctor/report';
+import type { ApplistKey } from '../../../src/config/schema';
 import { ErrPluginUnavailable } from '../../../src/errors';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
 import type {
@@ -16,6 +17,7 @@ import type {
   PluginContext,
   PluginManifest,
 } from '../../../src/plugins/types';
+import { snapshotDir } from '../../fixtures/dir-snapshot';
 
 const silentLog = { info() {}, warn() {}, error() {}, debug() {} };
 
@@ -23,6 +25,7 @@ function fakePlugin(
   id: string,
   requires: string[],
   list: (ctx: PluginContext, opts: ListOptions) => Promise<PackageStatus[]>,
+  manifestOverrides: Partial<Pick<PluginManifest, 'configKeys' | 'compareVersions'>> = {},
 ): Plugin {
   const manifest: PluginManifest = {
     id,
@@ -38,8 +41,38 @@ function fakePlugin(
       untrack: false,
       outdated: true,
     },
+    ...manifestOverrides,
   };
   return { manifest, list } as unknown as Plugin;
+}
+
+// The data-integrity check against an applist written to a tmp dir, or no
+// file at all when `applistYaml` is undefined: the seam the store reads (#147).
+// A read-only diagnostic must leave the directory byte-identical, so every run
+// asserts that too.
+async function runIntegrity(plugins: readonly Plugin[], applistYaml?: string) {
+  const dir = await mkdtemp(join(tmpdir(), 'macup-doctor-'));
+  try {
+    const applistPath = join(dir, 'applist.yaml');
+    if (applistYaml !== undefined) await writeFile(applistPath, applistYaml, 'utf8');
+    const before = await snapshotDir(dir);
+    const section = await checkDataIntegrity(
+      makeDeps({
+        plugins,
+        paths: {
+          applistPath,
+          configDir: dir,
+          backupDir: join(dir, 'b'),
+          source: 'home-macup',
+          explicit: false,
+        },
+      }),
+    );
+    expect(await snapshotDir(dir)).toEqual(before);
+    return section;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 function makeDeps(overrides: Partial<CheckDeps>): CheckDeps {
@@ -159,32 +192,12 @@ describe('doctor — orphaned skip/pins keys', () => {
     fakePlugin('npm', [], async () => []),
     fakePlugin('system', [], async () => []),
   ];
-  async function runIntegrity(applistYaml: string) {
-    const dir = await mkdtemp(join(tmpdir(), 'macup-doctor-'));
-    try {
-      const applistPath = join(dir, 'applist.yaml');
-      await writeFile(applistPath, applistYaml, 'utf8');
-      return await checkDataIntegrity(
-        makeDeps({
-          plugins: knownPlugins(),
-          paths: {
-            applistPath,
-            configDir: dir,
-            backupDir: join(dir, 'b'),
-            source: 'home-macup',
-            explicit: false,
-          },
-        }),
-      );
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  }
 
   it('warns (never errors) on an unknown key, a bad skip.all id, and pins.all — not on real ids', async () => {
     // The CLI can't produce these — only a hand edit of the dotfile-portable
     // applist — so doctor is where they surface (ADR 0037).
     const section = await runIntegrity(
+      knownPlugins(),
       'skip:\n  bews:\n    - ffmpeg\n  all:\n    - systm\n    - npm\npins:\n  all:\n    foo: "1.0"\n',
     );
     const details = section.results
@@ -199,15 +212,214 @@ describe('doctor — orphaned skip/pins keys', () => {
   });
 
   it('does not warn on a valid config (no false positives)', async () => {
-    const section = await runIntegrity('skip:\n  brew:\n    - git\n  all:\n    - system\n');
+    const section = await runIntegrity(
+      knownPlugins(),
+      'skip:\n  brew:\n    - git\n  all:\n    - system\n',
+    );
     const orphaned = section.results.filter((r) => (r.detail ?? '').includes('not a known plugin'));
     expect(orphaned).toEqual([]);
   });
 
   it('flags skip.all written as a nested map instead of a flat id list', async () => {
-    const section = await runIntegrity('skip:\n  all:\n    brew:\n      - git\n');
+    const section = await runIntegrity(knownPlugins(), 'skip:\n  all:\n    brew:\n      - git\n');
     const details = section.results.map((r) => r.detail ?? '').join('\n');
     expect(details).toContain('skip.all must be a flat list');
+  });
+});
+
+// #147: the check reads the applist through the store's read (ADR 0058)
+// rather than parsing the file itself, and compares versions with the
+// selection resolver's comparator. Every finding here is asserted on the
+// exact line the user sees, because the point of the change is that none
+// of them moved.
+describe('doctor — data integrity reads the applist through the store (#147)', () => {
+  // An npm-shaped plugin whose backend reports exactly `installed`.
+  const npmWith = (
+    installed: Record<string, string>,
+    overrides: Partial<Pick<PluginManifest, 'compareVersions'>> = {},
+  ) =>
+    fakePlugin(
+      'npm',
+      [],
+      async () =>
+        Object.entries(installed).map(([name, installedVersion]) => ({
+          ref: { kind: 'npm', name },
+          installed: true,
+          installedVersion,
+          updateStatus: 'current',
+        })),
+      { configKeys: ['npm' as ApplistKey], ...overrides },
+    );
+
+  it('reads a pre-1.x layout in its migrated shape, as load() will, so its tracked names are verified', async () => {
+    // The check's own parser saw the raw file, and zod strips unknown keys, so
+    // `npm_apps` counted as nothing tracked while the next mutation would
+    // migrate it to `npm` and track everything in it. One reader, one
+    // judgement (ADR 0058).
+    const section = await runIntegrity([npmWith({})], 'npm_apps:\n  - typescript\n');
+    expect(section.results).toContainEqual({
+      level: 'warn',
+      label: 'Not installed',
+      detail: 'npm:typescript tracked but not installed',
+      hint: 'run: macup npm install typescript',
+    });
+  });
+
+  it('reports a missing applist as nothing to verify', async () => {
+    const section = await runIntegrity([npmWith({ typescript: '5.3.3' })]);
+    expect(section.results).toEqual([
+      { level: 'ok', label: 'Tracked packages', detail: 'no applist yet — nothing to verify' },
+    ]);
+  });
+
+  it('reports a file that fails validation as not verified, pointing at Config for the reason', async () => {
+    // The Config section carries the store's own issue line; this section
+    // says only that it could not do its job, as it always has.
+    const section = await runIntegrity([npmWith({})], 'brew:\n  casks:\n    - null\n');
+    expect(section.results).toEqual([
+      {
+        level: 'warn',
+        label: 'Tracked packages',
+        detail: 'not verified — applist.yaml failed validation (see Config)',
+      },
+    ]);
+  });
+
+  it('reports YAML that does not parse the same way', async () => {
+    const section = await runIntegrity([npmWith({})], 'npm:\n  - typescript\n bad: [\n');
+    expect(section.results.map((r) => r.detail)).toEqual([
+      'not verified — applist.yaml failed validation (see Config)',
+    ]);
+  });
+
+  it('confirms tracked names that resolve, with a count', async () => {
+    const section = await runIntegrity(
+      [npmWith({ typescript: '5.3.3', prettier: '3.0.0' })],
+      'npm:\n  - typescript\n  - prettier\n',
+    );
+    expect(section.results).toEqual([
+      { level: 'ok', label: 'npm', detail: '2 tracked packages resolve' },
+    ]);
+  });
+
+  it('flags a pin on a name the backend has above the pin, with the resolver ordering the two', async () => {
+    // 1.10.0 is above 1.9.0 in semver and below it lexically; the finding
+    // depends on which comparator is in use, and it must be the resolver's.
+    const section = await runIntegrity(
+      [npmWith({ typescript: '1.10.0' })],
+      'npm:\n  - typescript\npins:\n  npm:\n    typescript: 1.9.0\n',
+    );
+    expect(section.results).toEqual([
+      {
+        level: 'warn',
+        label: 'Stale pin',
+        detail: 'npm:typescript pinned 1.9.0 but 1.10.0 is already installed',
+        hint: 'run: macup npm unpin typescript',
+      },
+    ]);
+  });
+
+  it('does not flag a pin below the installed version', async () => {
+    const section = await runIntegrity(
+      [npmWith({ typescript: '5.3.3' })],
+      'npm:\n  - typescript\npins:\n  npm:\n    typescript: 5.4.0\n',
+    );
+    expect(section.results).toEqual([
+      { level: 'ok', label: 'npm', detail: '1 tracked package resolve' },
+    ]);
+  });
+
+  it('does not flag a pin it cannot order against the installed version', async () => {
+    // A brew-style date version against a semver pin: the resolver says
+    // null, and doctor keeps its policy that an incomparable pair is not a
+    // finding (`update` reports that pin as unenforceable instead).
+    const section = await runIntegrity(
+      [npmWith({ typescript: '2024-06-01' })],
+      'npm:\n  - typescript\npins:\n  npm:\n    typescript: 1.0.0\n',
+    );
+    expect(section.results).toEqual([
+      { level: 'ok', label: 'npm', detail: '1 tracked package resolve' },
+    ]);
+  });
+
+  it("orders versions with the plugin's own comparator when its manifest declares one", async () => {
+    // Plain string order calls 2024-06-01 above 2024-01-01, which semver
+    // could not have said either way.
+    const byString = (a: string, b: string): -1 | 0 | 1 => (a < b ? -1 : a > b ? 1 : 0);
+    const section = await runIntegrity(
+      [npmWith({ typescript: '2024-06-01' }, { compareVersions: byString })],
+      'npm:\n  - typescript\npins:\n  npm:\n    typescript: 2024-01-01\n',
+    );
+    expect(section.results.map((r) => r.detail)).toEqual([
+      'npm:typescript pinned 2024-01-01 but 2024-06-01 is already installed',
+    ]);
+  });
+
+  it('flags a pin and a skip on names that are not tracked, per-subtype forms included', async () => {
+    const brew = fakePlugin(
+      'brew',
+      [],
+      async () => [
+        { ref: { kind: 'formula', name: 'git' }, installed: true, updateStatus: 'current' },
+      ],
+      { configKeys: ['brew.formulas' as ApplistKey, 'brew.casks' as ApplistKey] },
+    );
+    const section = await runIntegrity(
+      [brew],
+      [
+        'brew:',
+        '  formulas:',
+        '    - git',
+        'pins:',
+        '  brew:',
+        '    casks:',
+        '      docker: 4.30.0',
+        'skip:',
+        '  brew:',
+        '    - ffmpeg',
+        '',
+      ].join('\n'),
+    );
+    expect(section.results).toEqual([
+      {
+        level: 'warn',
+        label: 'Stale pin',
+        detail: 'brew:docker pinned 4.30.0 but not in tracked list',
+        hint: 'run: macup brew unpin docker',
+      },
+      {
+        level: 'warn',
+        label: 'Stale skip',
+        detail: 'brew:ffmpeg skipped but not in tracked list',
+        hint: 'run: macup brew unskip ffmpeg',
+      },
+    ]);
+  });
+
+  it('reports tracked names under an unavailable plugin as not verified, without probing it', async () => {
+    const gone = fakePlugin(
+      'npm',
+      ['npm'],
+      async () => {
+        throw new Error('should not be probed when the binary is missing');
+      },
+      { configKeys: ['npm' as ApplistKey] },
+    );
+    const section = await runIntegrity([gone], 'npm:\n  - typescript\n  - prettier\n');
+    expect(section.results).toEqual([
+      {
+        level: 'warn',
+        label: 'npm',
+        detail: '2 tracked packages not verified — plugin unavailable',
+      },
+    ]);
+  });
+
+  it('still flags an unknown key whose block is empty', async () => {
+    // A typo'd key with nothing under it yet is the same typo; the read
+    // reports the block so the finding does not depend on its contents.
+    const section = await runIntegrity([npmWith({})], 'skip:\n  bews: []\npins:\n  all: {}\n');
+    expect(section.results.map((r) => r.label)).toEqual(['Unknown backend', 'Invalid pin']);
   });
 });
 

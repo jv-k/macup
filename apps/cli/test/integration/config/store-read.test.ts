@@ -45,6 +45,35 @@ describe('ConfigStore.read — what it found, without touching the directory', (
     expect(found.legacyLayout).toBe(false);
     expect(found.pins).toEqual([]);
     expect(found.skips).toEqual([]);
+    expect(found.tracked).toEqual([]);
+    expect(found.policyBlocks).toEqual([]);
+  });
+
+  it('reports every tracked name under its applist key, so no caller walks the file for them', async () => {
+    // doctor's data-integrity check used to resolve `brew.formulas` against
+    // the parsed file itself (#147); the read carries the names so the
+    // store's key lookup is the only one.
+    await seed(
+      [
+        'version: 1',
+        'npm:',
+        '  - typescript',
+        '  - prettier',
+        'brew:',
+        '  formulas:',
+        '    - git',
+        '  casks:',
+        '    - arc',
+        '',
+      ].join('\n'),
+    );
+    const found = await read();
+    expect(found.tracked).toEqual([
+      { key: 'npm', name: 'typescript' },
+      { key: 'npm', name: 'prettier' },
+      { key: 'brew.formulas', name: 'git' },
+      { key: 'brew.casks', name: 'arc' },
+    ]);
   });
 
   it('reports a valid file with its version and every pin and skip flattened out of both shapes', async () => {
@@ -86,6 +115,38 @@ describe('ConfigStore.read — what it found, without touching the directory', (
     ]);
   });
 
+  it('reports every pins and skip block by the id it is keyed on, empty blocks included', async () => {
+    // A block with no entries has no pin or skip to flatten, yet the key is
+    // still there for doctor to judge (`skip.bews:` is a typo whether or not
+    // it lists anything yet), and whether `skip.all` nests is a finding of
+    // its own (ADR 0037).
+    await seed(
+      [
+        'pins:',
+        '  npm:',
+        '    typescript: 5.3.3',
+        '  all: {}',
+        'skip:',
+        '  bews: []',
+        '  all:',
+        '    brew:',
+        '      - git',
+        '  brew:',
+        '    casks:',
+        '      - arc',
+        '',
+      ].join('\n'),
+    );
+    const found = await read();
+    expect(found.policyBlocks).toEqual([
+      { section: 'pins', pluginId: 'npm', bySubtype: false },
+      { section: 'pins', pluginId: 'all', bySubtype: false },
+      { section: 'skip', pluginId: 'bews', bySubtype: false },
+      { section: 'skip', pluginId: 'all', bySubtype: true },
+      { section: 'skip', pluginId: 'brew', bySubtype: true },
+    ]);
+  });
+
   it('reports a schema violation as an issue spelled the way the store spells it', async () => {
     // The exact corruption the picker bug produced (#48).
     await seed('---\nbrew:\n  casks:\n    - null\n');
@@ -95,6 +156,7 @@ describe('ConfigStore.read — what it found, without touching the directory', (
     expect(found.issues).toEqual(['brew.casks[0]: Invalid input: expected string, received null']);
     expect(found.pins).toEqual([]);
     expect(found.skips).toEqual([]);
+    expect(found.tracked).toEqual([]);
   });
 
   it('reports YAML that does not parse as an issue naming the line', async () => {

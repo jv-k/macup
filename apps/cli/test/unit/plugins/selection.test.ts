@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { type SelectionPolicy, resolveSelection } from '../../../src/plugins/selection';
+import {
+  type SelectionPolicy,
+  resolveSelection,
+  semverCompare,
+} from '../../../src/plugins/selection';
 import type { PackageStatus } from '../../../src/plugins/types';
 
 function status(
@@ -186,5 +190,22 @@ describe('resolveSelection', () => {
     const r = resolveSelection([s], emptyPolicy);
     expect(r.uncheckable).toEqual([s]);
     expect(r.upgradable).toEqual([]);
+  });
+});
+
+// The resolver's default comparator is the one doctor calls too (#147), so
+// "these two cannot be ordered" means the same thing in both: null, never a
+// guessed 0.
+describe('semverCompare', () => {
+  it('orders semver strings numerically, not lexically', () => {
+    expect(semverCompare('1.2.3', '1.10.0')).toBe(-1);
+    expect(semverCompare('2.0.0', '1.9.9')).toBe(1);
+    expect(semverCompare('1.0.0', '1.0.0')).toBe(0);
+  });
+
+  it('returns null for a pair it cannot order rather than calling them equal', () => {
+    // A brew date version against a semver pin: neither side wins.
+    expect(semverCompare('2024-01-01', '1.0.0')).toBeNull();
+    expect(semverCompare('1.0.0', 'build-1234')).toBeNull();
   });
 });

@@ -95,12 +95,16 @@ Backend verbs that act on the machine: install puts a package on the machine thr
 _Avoid_: upgrade (for update)
 
 **Install outcome**:
-The per-run classification of one package by an install: `installed` (macup put it on the machine this run), `already-present` (it was there before), `failed`, or `unavailable` (its plugin never ran). An outcome, not a state: an `already-present` package is Installed exactly as much as an `installed` one. What separates them is whether this run put it there, which is what Provenance records (ADR 0038). Classified host-side by reconciling `list()` snapshots taken before and after the batch, never by the plugin (ADR 0038, ADR 0052).
+The per-run classification of one package by an install: `installed` (macup put it on the machine this run), `already-present` (it was there before), `failed`, `unavailable` (its plugin never ran), or `planned` (a Dry run would have attempted it). An outcome, not a state: an `already-present` package is Installed exactly as much as an `installed` one. What separates them is whether this run put it there, which is what Provenance records (ADR 0038). Classified host-side by reconciling `list()` snapshots taken before and after the batch, never by the plugin (ADR 0038, ADR 0052).
 _Avoid_: install status, result, skipped (for already-present)
 
 **Update outcome**:
-The per-run classification of one package by an update: `updated`, `failed`, or `unavailable`. The sibling of Install outcome with no `already-present` case, because an already-current package is filtered out before `update()` is ever called. Classified host-side from the `list()` snapshot after the batch (ADR 0052). A run exits non-zero iff at least one package `failed` or a backend errored out entirely before it could name one, and `unavailable` alone never does.
+The per-run classification of one package by an update: `updated`, `failed`, `unavailable`, or `planned` (a Dry run would have attempted it). The sibling of Install outcome with no `already-present` case, because an already-current package is filtered out before `update()` is ever called. Classified host-side from the `list()` snapshot after the batch (ADR 0052). A run exits non-zero iff at least one package `failed` or a backend errored out entirely before it could name one, and `unavailable` alone never does.
 _Avoid_: update status, result, skipped, up-to-date (for a package the run never touched)
+
+**Dry run**:
+An install or update that plans and reports but mutates nothing: each backend prints what it would have run instead of running it, and every package the run would have attempted classifies `planned`. Still a run, not a preview of one: it probes, it reports an Unavailable or failed backend exactly as a wet run does, and it exits non-zero on the same terms (ADR 0056).
+_Avoid_: preview, simulation, no-op run, plan (the plan is what a dry run reports, not the run itself)
 
 ### Bundles
 

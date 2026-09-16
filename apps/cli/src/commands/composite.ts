@@ -28,6 +28,7 @@
 
 import { confirm, isCancel } from '@clack/prompts';
 import { type CommandDef, defineCommand } from 'citty';
+import { mutateFor } from '../plugins/operations';
 import { probe, probeOutcomeReason } from '../plugins/probe';
 import type {
   ListOptions,
@@ -50,7 +51,6 @@ import {
   type PluginRun,
   buildMutationReport,
   exitCodeFor,
-  mutateFor,
   renderJson,
   renderText,
 } from './mutation-report';

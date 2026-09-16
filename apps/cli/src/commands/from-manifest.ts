@@ -11,27 +11,25 @@
 
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ConfigStore } from '../config/store';
-import type { MutateFailure } from '../errors';
 import {
   type ApplistWriteResult,
+  applyRefs,
   listPackages,
   pinPackage,
+  planInstall,
+  planUpdate,
   skipPackages,
   trackPackages,
-  trackedKey,
-  trackedNames,
   unpinPackage,
   unskipPackages,
   untrackPackages,
 } from '../plugins/operations';
 import { errorMessage, probeOrThrow } from '../plugins/probe';
-import { resolveSelection } from '../plugins/selection';
-import { flagForSubtype, kindForSubtype, packageRefForSubtype } from '../plugins/subtype-table';
+import { flagForSubtype, kindForSubtype } from '../plugins/subtype-table';
 import type {
   ExecRunner,
   ListOptions,
   Logger,
-  MutateOptions,
   PackageRef,
   PackageStatus,
   Plugin,
@@ -45,8 +43,6 @@ import {
   type RanPlugin,
   buildMutationReport,
   exitCodeFor,
-  failuresFor,
-  mutateFor,
   renderJson,
   renderText,
 } from './mutation-report';
@@ -96,24 +92,6 @@ function reportWrite<T>(
   if (result.backupPath) log.print(log.trace(`Backup: ${result.backupPath}`));
 }
 
-// Presence of `plugin.healthCheck` is the capability signal (ADR 0039) — no
-// per-backend map to look `pluginId` up in. A plugin that doesn't define the
-// method (composite `all`, appstore/mas, system, xcode) is a no-op, exactly
-// as an absent map entry was before. `opts` is the same dry-run the mutation
-// ran under, so `--dry-run` reaches `brew doctor` the way it reaches `brew
-// upgrade` (#152).
-async function runHealthCheck(
-  deps: SpinnerDeps,
-  plugin: Plugin,
-  ctx: PluginContext,
-  opts: MutateOptions,
-): Promise<void> {
-  if (!plugin.healthCheck) return;
-  await withSpinner(deps, `Checking ${plugin.manifest.id} health…`, async () => {
-    await plugin.healthCheck?.(ctx, opts);
-  });
-}
-
 /** What {@link finishMutation} needs to know about the run beyond the plugin. */
 interface MutationRun {
   readonly mode: MutationMode;
@@ -130,10 +108,11 @@ interface MutationRun {
 }
 
 /**
- * The mutate → verify → report tail `install` and `update` share (#188): the
- * header, the per-ref loop, the dry-run early return, the after probe, the
- * health check, the render, and the exit code. Callers select the refs and
- * print their own pre-run lines; the invariant tail lived in both verbs before.
+ * The apply → verify → report tail `install` and `update` share (#188): the
+ * header, the apply operation with its counter lines and health check, the
+ * dry-run early return, the after probe, the render, and the exit code.
+ * Callers plan the refs and print their own pre-run lines; the invariant tail
+ * lived in both verbs before.
  * @throws Error when the manifest advertises the verb without the method, which
  * a capability must not (the conformance suite holds every built-in to it);
  * otherwise whatever `list()` raised from either probe, or a ref's own
@@ -143,8 +122,6 @@ async function finishMutation(deps: CommandDeps, plugin: Plugin, run: MutationRu
   const { manifest } = plugin;
   const { mode, refs, dryRun, showJson } = run;
   const { deps: spinnerDeps, printHuman } = routeOutput(deps, showJson);
-  const mutate = mutateFor(mode, plugin);
-  if (!mutate) throw new Error(`Plugin ${manifest.id} has no ${mode}()`);
   // The same listing at both ends, so an unavailable backend surfaces the same
   // way at each: full for install, since a present ref that is up to date
   // drops out of an outdated listing and would read as freshly installed;
@@ -183,36 +160,22 @@ async function finishMutation(deps: CommandDeps, plugin: Plugin, run: MutationRu
   printHuman('');
   printHuman(log.header(`${verb} ${manifest.displayName}`, refs.length));
   printHuman('');
-  // Every ref is attempted whatever happened to the one before it (ADR 0052):
-  // a failure is recorded for the report and the loop moves on. Two exceptions
-  // rethrow as the loop always did. Cancellation, where the failure is what a
-  // SIGINT-cancelled subprocess threw and the run must end there rather than
-  // march through the remaining refs. And a dry run, which prints no report,
-  // so a failure recorded for one would never be seen: the throw is the only
-  // way it reaches the user.
-  const failures: MutateFailure[] = [];
-  for (let i = 0; i < refs.length; i++) {
-    const ref = refs[i] as PackageRef;
-    try {
-      await withUserActionSpinner(
-        spinnerDeps,
-        log.counter(i + 1, refs.length, verb, ref.name),
-        async () => {
-          await mutate(makeCtx(deps), [ref], { dryRun });
-        },
-      );
-    } catch (err) {
-      if (dryRun || deps.signal.aborted) throw err;
-      failures.push(...failuresFor(ref, err));
-    }
-  }
+  // Every ref is attempted whatever happened to the one before it (ADR 0052),
+  // with the counter line around each and the health check after the batch
+  // (#152), all inside the operation. A dry run is the one exception: it
+  // prints no report, so a failure recorded for one would never be seen, and
+  // the throw is the only way it reaches the user (#188).
+  const applied = await applyRefs(plugin, makeCtx(deps), mode, refs, {
+    dryRun,
+    stopOnFailure: dryRun,
+    onAttempt: (ref, index, total, attempt) =>
+      withUserActionSpinner(spinnerDeps, log.counter(index, total, verb, ref.name), attempt),
+    onHealthCheck: (check) => withSpinner(spinnerDeps, `Checking ${manifest.id} health…`, check),
+  });
 
   // A dry run mutates nothing, so the after snapshot would call every ref
   // failed. Keep the pre-report output and the zero exit instead.
-  if (dryRun) {
-    await runHealthCheck(spinnerDeps, plugin, makeCtx(deps), { dryRun });
-    return;
-  }
+  if (dryRun) return;
 
   // The verdict is the backend's own listing, not the exit code (ADR 0052
   // rule 2): a ref on disk, or no longer behind, afterwards succeeded whatever
@@ -226,10 +189,9 @@ async function finishMutation(deps: CommandDeps, plugin: Plugin, run: MutationRu
     refs,
     before,
     after,
-    ...(failures.length > 0 ? { failures } : {}),
+    ...(applied.failures.length > 0 ? { failures: applied.failures } : {}),
   };
   const report = buildMutationReport(mode, [ran]);
-  await runHealthCheck(spinnerDeps, plugin, makeCtx(deps), { dryRun });
   if (showJson) {
     console.log(renderJson(report));
   } else {
@@ -423,27 +385,24 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         // run `check()` again inside the probe; it is a PATH lookup, so the
         // repeat costs nothing and keeps both probes the shape `update` uses.
         await plugin.check(makeCtx(deps));
-        const packages = rawArgs.filter((a) => !a.startsWith('-'));
-        let refs: PackageRef[];
-        if (packages.length > 0) {
-          refs = packages.map((name) => packageRefForSubtype(manifest, name, subtype));
-        } else if (manifest.configKeys.length === 0) {
-          // No tracked applist (e.g. system, xcode): install acts on explicit
-          // package args only, so an argless invocation has nothing to do.
-          refs = [];
-        } else {
-          const store = await deps.getStore();
-          const key = trackedKey(manifest, subtype);
-          refs = [...store.list(key)].map((name) => packageRefForSubtype(manifest, name, subtype));
-        }
-        if (refs.length === 0 && manifest.configKeys.length > 0) {
-          const emptyKey = trackedKey(manifest, subtype);
-          printHuman(log.info(`No packages tracked in ${emptyKey}.`));
+        const names = rawArgs.filter((a) => !a.startsWith('-'));
+        // The explicit names, or the tracked set under the subtype's key; a
+        // plugin with no applist (system, xcode) installs explicit names only,
+        // so an argless invocation has nothing to do and no key to point at.
+        const plan = await planInstall(plugin, deps.getStore, { subtype, names });
+        if (plan.emptyKey !== undefined) {
+          printHuman(log.info(`No packages tracked in ${plan.emptyKey}.`));
           printHuman(
             log.trace(`macup ${manifest.id} track ${subtypeCliFlag(manifest, subtype)}<name>`),
           );
         }
-        await finishMutation(deps, plugin, { mode: 'install', refs, subtype, dryRun, showJson });
+        await finishMutation(deps, plugin, {
+          mode: 'install',
+          refs: plan.refs,
+          subtype,
+          dryRun,
+          showJson,
+        });
       },
     });
   }
@@ -488,66 +447,54 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const showJson = Boolean(args.json);
         const { deps: spinnerDeps, printHuman } = routeOutput(deps, showJson);
 
-        const statuses = await withSpinner(
+        // The outdated listing, the pin/skip selection over it, and the
+        // scoping to explicit names or the tracked set all come back as data
+        // from the operation (#142). ConfigStore.load() returns an empty doc
+        // on ENOENT, so the "no config yet" case flows through with empty
+        // pin/skip sets and no filtering. Anything the store throws (invalid
+        // YAML, permission denied) is a real error and propagates, so the
+        // user finds out their pins aren't honored rather than silently
+        // upgrading across them.
+        const explicitNames = rawArgs.filter((a) => !a.startsWith('-'));
+        const plan = await withSpinner(
           spinnerDeps,
           `Checking ${manifest.displayName} for outdated packages…`,
-          () => probeOrThrow(plugin, makeCtx(deps), { subtype, onlyOutdated: true }),
-        );
-
-        // Apply pin/skip filtering. ConfigStore.load() returns an empty
-        // doc on ENOENT, so the "no config yet" case flows through with
-        // empty pin/skip sets and no filtering happens. Anything that
-        // throws here (invalid YAML, permission denied) is a real error
-        // — propagate so the user finds out their pins aren't honored
-        // rather than silently upgrading across them.
-        const store = await deps.getStore();
-        const policy = store.selectionFor(manifest.id);
-        const { upgradable, pinnedBlocked, skipped, pinUnenforceable } = resolveSelection(
-          statuses,
-          policy,
-          manifest.compareVersions,
+          () =>
+            planUpdate(plugin, makeCtx(deps), deps.getStore, {
+              subtype,
+              names: explicitNames,
+              showAll: Boolean(args.all),
+            }),
         );
         // Unenforceable pins still upgrade (ADR 0023 stays permissive), but we
         // say so first instead of applying them silently (ADR 0034).
-        let filtered = [...upgradable, ...pinUnenforceable];
-        if (pinnedBlocked.length > 0) {
+        if (plan.pinnedBlocked.length > 0) {
           printHuman(
-            `Pinned (skipping): ${pinnedBlocked.map((s) => `${s.ref.name}@${s.pinnedAt}`).join(', ')}`,
+            `Pinned (skipping): ${plan.pinnedBlocked.map((s) => `${s.ref.name}@${s.pinnedAt}`).join(', ')}`,
           );
         }
-        if (pinUnenforceable.length > 0) {
+        if (plan.pinUnenforceable.length > 0) {
           printHuman(
-            `Pin not enforceable (upgrading anyway): ${pinUnenforceable
+            `Pin not enforceable (upgrading anyway): ${plan.pinUnenforceable
               .map((s) => `${s.ref.name}@${s.pinnedAt}`)
               .join(', ')}`,
           );
         }
-        if (skipped.length > 0) {
-          printHuman(`Skipped: ${skipped.map((s) => s.ref.name).join(', ')}`);
-        }
-
-        const explicitNames = rawArgs.filter((a) => !a.startsWith('-'));
-        if (explicitNames.length > 0) {
-          const wanted = new Set(explicitNames);
-          filtered = filtered.filter((s) => wanted.has(s.ref.name));
-        } else if (!args.all && manifest.configKeys.length > 0) {
-          // Default: scope updates to the tracked applist, consistent with
-          // `install` and `list` (D-1). `--all` upgrades everything outdated.
-          // Plugins without a tracked applist (system, xcode) skip this and
-          // stay system-wide; the composite `all` took the fan-out path above.
-          const tracked = new Set(trackedNames(plugin, store, subtype));
-          filtered = filtered.filter((s) => tracked.has(s.ref.name));
+        if (plan.skipped.length > 0) {
+          printHuman(`Skipped: ${plan.skipped.map((s) => s.ref.name).join(', ')}`);
         }
 
         // Carry the whole plugin-reported ref (id included) — appstore
         // mutations resolve by Adam ID / bundle ID, and a name-only ref
-        // makes `mas upgrade` fail on any app whose name isn't its ID.
-        const refs: PackageRef[] = filtered.map((s) => ({ ...s.ref, kind }));
+        // makes `mas upgrade` fail on any app whose name isn't its ID. The
+        // kind is pinned to the verb's subtype here, as this verb always
+        // did; the plan carries the plugin's own.
+        const refs: PackageRef[] = plan.refs.map((ref) => ({ ...ref, kind }));
         if (refs.length === 0) {
           if (explicitNames.length > 0) {
             printHuman(
               log.info(
-                `No matching outdated packages for: ${explicitNames.join(', ')}. (Use \`${manifest.id} list --only-outdated\` to see what's outdated.)`,
+                `No matching outdated packages for: ${plan.unmatched.join(', ')}. (Use \`${manifest.id} list --only-outdated\` to see what's outdated.)`,
               ),
             );
           } else {
@@ -557,7 +504,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         await finishMutation(deps, plugin, {
           mode: 'update',
           refs,
-          before: statuses,
+          before: plan.statuses,
           subtype,
           dryRun,
           showJson,

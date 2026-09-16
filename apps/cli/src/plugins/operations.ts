@@ -148,7 +148,7 @@ export type ApplistStore = Pick<
  * the consumer owes the user the verb's name in the "failed to save" line and
  * the exit code, neither of which an error boundary knows.
  */
-export type ApplistWrite<T> =
+export type ApplistWriteResult<T> =
   | {
       readonly saved: true;
       /** What the mutation staged, in the store's own terms. */
@@ -183,7 +183,7 @@ async function writeApplist<T>(
   store: ApplistStore,
   operation: string,
   stage: () => T,
-): Promise<ApplistWrite<T>> {
+): Promise<ApplistWriteResult<T>> {
   const change = stage();
   let save: SaveResult;
   try {
@@ -217,7 +217,7 @@ export function trackPackages(
   store: ApplistStore,
   names: readonly string[],
   subtype?: string,
-): Promise<ApplistWrite<TrackChange>> {
+): Promise<ApplistWriteResult<TrackChange>> {
   const key = trackedKey(plugin.manifest, subtype);
   return writeApplist(store, 'track', () => ({ key, ...store.add(key, names) }));
 }
@@ -240,7 +240,7 @@ export function untrackPackages(
   store: ApplistStore,
   names: readonly string[],
   subtype?: string,
-): Promise<ApplistWrite<UntrackChange>> {
+): Promise<ApplistWriteResult<UntrackChange>> {
   const key = trackedKey(plugin.manifest, subtype);
   return writeApplist(store, 'untrack', () => ({ key, ...store.remove(key, names) }));
 }
@@ -278,7 +278,7 @@ export function pinPackage(
   name: string,
   maxVersion: string,
   subtype?: string,
-): Promise<ApplistWrite<PinChange>> {
+): Promise<ApplistWriteResult<PinChange>> {
   const pluginId = plugin.manifest.id;
   return writeApplist(store, 'pin', () => {
     store.pin(pluginId, name, maxVersion, subtype);
@@ -292,7 +292,7 @@ export function unpinPackage(
   store: ApplistStore,
   name: string,
   subtype?: string,
-): Promise<ApplistWrite<UnpinChange>> {
+): Promise<ApplistWriteResult<UnpinChange>> {
   const pluginId = plugin.manifest.id;
   return writeApplist(store, 'unpin', () => {
     store.unpin(pluginId, name, subtype);
@@ -310,7 +310,7 @@ export function skipPackages(
   store: ApplistStore,
   names: readonly string[],
   subtype?: string,
-): Promise<ApplistWrite<SkipChange>> {
+): Promise<ApplistWriteResult<SkipChange>> {
   const pluginId = plugin.manifest.id;
   return writeApplist(store, 'skip', () => {
     store.skip(pluginId, names, subtype);
@@ -324,7 +324,7 @@ export function unskipPackages(
   store: ApplistStore,
   names: readonly string[],
   subtype?: string,
-): Promise<ApplistWrite<SkipChange>> {
+): Promise<ApplistWriteResult<SkipChange>> {
   const pluginId = plugin.manifest.id;
   return writeApplist(store, 'unskip', () => {
     store.unskip(pluginId, names, subtype);

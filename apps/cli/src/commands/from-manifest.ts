@@ -13,7 +13,7 @@ import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
 import type { ConfigStore } from '../config/store';
 import type { MutateFailure } from '../errors';
 import {
-  type ApplistWrite,
+  type ApplistWriteResult,
   listPackages,
   pinPackage,
   skipPackages,
@@ -83,7 +83,7 @@ export function makeCtx(deps: CommandDeps): PluginContext {
  * report, then the backup path. The operation itself never prints (ADR 0054).
  */
 function reportWrite<T>(
-  result: ApplistWrite<T>,
+  result: ApplistWriteResult<T>,
   operation: string,
   report: (change: T) => void,
 ): void {

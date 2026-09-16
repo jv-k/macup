@@ -14,6 +14,7 @@ import npmPlugin from '../../../plugins/npm';
 import { ConfigStore } from '../../../src/config/store';
 import { ErrInvalidConfig } from '../../../src/errors';
 import {
+  type ApplistWriteResult,
   pinPackage,
   skipPackages,
   trackPackages,
@@ -51,13 +52,18 @@ async function backups(): Promise<string[]> {
   return readdir(backupDir).catch(() => []);
 }
 
+/** Asserts the write saved and narrows to that arm, so each case reads the change directly. */
+function saved<T>(result: ApplistWriteResult<T>): Extract<ApplistWriteResult<T>, { saved: true }> {
+  expect(result.saved).toBe(true);
+  if (!result.saved) throw new Error(`save failed: ${String(result.error)}`);
+  return result;
+}
+
 describe('trackPackages', () => {
   it('adds the new names under the subtype’s key, reports the rest as skipped, and backs up', async () => {
     const store = await storeFrom('brew:\n  formulas:\n    - git\n');
-    const result = await trackPackages(brewPlugin, store, ['git', 'jq'], 'formulas');
+    const result = saved(await trackPackages(brewPlugin, store, ['git', 'jq'], 'formulas'));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.change).toEqual({ key: 'brew.formulas', added: ['jq'], skipped: ['git'] });
     expect(result.changed).toBe(true);
     expect(result.backupPath).toBeDefined();
@@ -67,10 +73,8 @@ describe('trackPackages', () => {
 
   it('resolves a plugin with no subtypes to its one key', async () => {
     const store = await storeFrom('npm:\n  - typescript\n');
-    const result = await trackPackages(npmPlugin, store, ['eslint']);
+    const result = saved(await trackPackages(npmPlugin, store, ['eslint']));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.change).toEqual({ key: 'npm', added: ['eslint'], skipped: [] });
     expect(await onDisk()).toMatchObject({ npm: ['typescript', 'eslint'] });
   });
@@ -78,10 +82,8 @@ describe('trackPackages', () => {
   it('writes nothing and takes no backup when every name was already tracked', async () => {
     const before = 'brew:\n  formulas:\n    - git\n';
     const store = await storeFrom(before);
-    const result = await trackPackages(brewPlugin, store, ['git'], 'formulas');
+    const result = saved(await trackPackages(brewPlugin, store, ['git'], 'formulas'));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.change).toEqual({ key: 'brew.formulas', added: [], skipped: ['git'] });
     expect(result.changed).toBe(false);
     expect(result.backupPath).toBeUndefined();
@@ -106,10 +108,8 @@ describe('trackPackages', () => {
 describe('untrackPackages', () => {
   it('removes the names it finds, reports the rest as missing, and backs up', async () => {
     const store = await storeFrom('brew:\n  formulas:\n    - git\n    - jq\n');
-    const result = await untrackPackages(brewPlugin, store, ['jq', 'curl'], 'formulas');
+    const result = saved(await untrackPackages(brewPlugin, store, ['jq', 'curl'], 'formulas'));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.change).toEqual({ key: 'brew.formulas', removed: ['jq'], missing: ['curl'] });
     expect(result.changed).toBe(true);
     expect(result.backupPath).toBeDefined();
@@ -120,10 +120,8 @@ describe('untrackPackages', () => {
   it('writes nothing and takes no backup when no name was tracked', async () => {
     const before = 'brew:\n  formulas:\n    - git\n';
     const store = await storeFrom(before);
-    const result = await untrackPackages(brewPlugin, store, ['curl'], 'formulas');
+    const result = saved(await untrackPackages(brewPlugin, store, ['curl'], 'formulas'));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.change).toEqual({ key: 'brew.formulas', removed: [], missing: ['curl'] });
     expect(result.changed).toBe(false);
     expect(await backups()).toEqual([]);
@@ -134,10 +132,8 @@ describe('untrackPackages', () => {
 describe('pinPackage / unpinPackage', () => {
   it('writes the flat form when no subtype is given (ADR 0035)', async () => {
     const store = await storeFrom('brew:\n  formulas:\n    - git\n');
-    const result = await pinPackage(brewPlugin, store, 'git', '2.40');
+    const result = saved(await pinPackage(brewPlugin, store, 'git', '2.40'));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.change).toEqual({
       pluginId: 'brew',
       subtype: undefined,
@@ -150,20 +146,28 @@ describe('pinPackage / unpinPackage', () => {
 
   it('writes the subtype form when a subtype is given (ADR 0035)', async () => {
     const store = await storeFrom('brew:\n  casks:\n    - docker\n');
-    const result = await pinPackage(brewPlugin, store, 'docker', '4.0', 'casks');
+    const result = saved(await pinPackage(brewPlugin, store, 'docker', '4.0', 'casks'));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.change).toMatchObject({ pluginId: 'brew', subtype: 'casks', name: 'docker' });
     expect(await onDisk()).toMatchObject({ pins: { brew: { casks: { docker: '4.0' } } } });
   });
 
+  it('re-pinning a name to its current ceiling writes nothing and takes no backup', async () => {
+    const before = 'pins:\n  brew:\n    git: "2.40"\n';
+    const store = await storeFrom(before);
+    const result = saved(await pinPackage(brewPlugin, store, 'git', '2.40'));
+
+    expect(result.change).toMatchObject({ name: 'git', maxVersion: '2.40' });
+    expect(result.changed).toBe(false);
+    expect(result.backupPath).toBeUndefined();
+    expect(await backups()).toEqual([]);
+    expect(await readFile(applistPath, 'utf8')).toBe(before);
+  });
+
   it('unpin removes the ceiling from the form it was written in', async () => {
     const store = await storeFrom('pins:\n  brew:\n    casks:\n      docker: "4.0"\n');
-    const result = await unpinPackage(brewPlugin, store, 'docker', 'casks');
+    const result = saved(await unpinPackage(brewPlugin, store, 'docker', 'casks'));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.change).toEqual({ pluginId: 'brew', subtype: 'casks', name: 'docker' });
     expect(result.changed).toBe(true);
     expect(await onDisk()).toMatchObject({ pins: { brew: { casks: {} } } });
@@ -172,10 +176,8 @@ describe('pinPackage / unpinPackage', () => {
   it('unpin of a name with no pin writes nothing and takes no backup', async () => {
     const before = 'pins:\n  brew:\n    git: "2.40"\n';
     const store = await storeFrom(before);
-    const result = await unpinPackage(brewPlugin, store, 'jq');
+    const result = saved(await unpinPackage(brewPlugin, store, 'jq'));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.changed).toBe(false);
     expect(await backups()).toEqual([]);
     expect(await readFile(applistPath, 'utf8')).toBe(before);
@@ -185,10 +187,8 @@ describe('pinPackage / unpinPackage', () => {
 describe('skipPackages / unskipPackages', () => {
   it('writes the flat list when no subtype is given (ADR 0035)', async () => {
     const store = await storeFrom('npm:\n  - typescript\n');
-    const result = await skipPackages(npmPlugin, store, ['typescript', 'eslint']);
+    const result = saved(await skipPackages(npmPlugin, store, ['typescript', 'eslint']));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.change).toEqual({
       pluginId: 'npm',
       subtype: undefined,
@@ -200,10 +200,8 @@ describe('skipPackages / unskipPackages', () => {
 
   it('writes the subtype list when a subtype is given (ADR 0035)', async () => {
     const store = await storeFrom('brew:\n  casks:\n    - docker\n');
-    const result = await skipPackages(brewPlugin, store, ['docker'], 'casks');
+    const result = saved(await skipPackages(brewPlugin, store, ['docker'], 'casks'));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.change).toEqual({ pluginId: 'brew', subtype: 'casks', names: ['docker'] });
     expect(await onDisk()).toMatchObject({ skip: { brew: { casks: ['docker'] } } });
   });
@@ -218,10 +216,8 @@ describe('skipPackages / unskipPackages', () => {
   it('skip of names already skipped writes nothing and takes no backup', async () => {
     const before = 'skip:\n  npm:\n    - typescript\n';
     const store = await storeFrom(before);
-    const result = await skipPackages(npmPlugin, store, ['typescript']);
+    const result = saved(await skipPackages(npmPlugin, store, ['typescript']));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.changed).toBe(false);
     expect(await backups()).toEqual([]);
     expect(await readFile(applistPath, 'utf8')).toBe(before);
@@ -229,10 +225,8 @@ describe('skipPackages / unskipPackages', () => {
 
   it('unskip removes the names from the form they were written in', async () => {
     const store = await storeFrom('skip:\n  brew:\n    casks:\n      - docker\n      - firefox\n');
-    const result = await unskipPackages(brewPlugin, store, ['docker'], 'casks');
+    const result = saved(await unskipPackages(brewPlugin, store, ['docker'], 'casks'));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.change).toEqual({ pluginId: 'brew', subtype: 'casks', names: ['docker'] });
     expect(result.changed).toBe(true);
     expect(await onDisk()).toMatchObject({ skip: { brew: { casks: ['firefox'] } } });
@@ -241,10 +235,8 @@ describe('skipPackages / unskipPackages', () => {
   it('unskip of a name never skipped writes nothing and takes no backup', async () => {
     const before = 'skip:\n  npm:\n    - typescript\n';
     const store = await storeFrom(before);
-    const result = await unskipPackages(npmPlugin, store, ['eslint']);
+    const result = saved(await unskipPackages(npmPlugin, store, ['eslint']));
 
-    expect(result.saved).toBe(true);
-    if (!result.saved) return;
     expect(result.changed).toBe(false);
     expect(await backups()).toEqual([]);
     expect(await readFile(applistPath, 'utf8')).toBe(before);

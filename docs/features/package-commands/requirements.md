@@ -36,7 +36,7 @@
 ## Source of truth
 
 - apps/cli/src/commands/from-manifest.ts (the factory), apps/cli/src/commands/render-list.ts, apps/cli/src/commands/subtype.ts, apps/cli/src/commands/spinner.ts
-- apps/cli/test/integration/commands/update-positionals.test.ts, apps/cli/test/regression/track-untrack-verbs.test.ts, apps/cli/test/regression/add-remove-sees-packages.test.ts, apps/cli/test/regression/subtype-arg.test.ts, apps/cli/test/regression/validate-missing-args-exits-nonzero.test.ts
+- apps/cli/test/integration/commands/verb-plumbing.test.ts, apps/cli/test/integration/plugins/operations-mutate.test.ts, apps/cli/test/regression/track-untrack-verbs.test.ts, apps/cli/test/regression/add-remove-sees-packages.test.ts, apps/cli/test/regression/subtype-arg.test.ts, apps/cli/test/regression/validate-missing-args-exits-nonzero.test.ts
 - apps/docs/content/docs/reference/brew.mdx and sibling per-plugin reference pages (generated from the manifests)
 
 ## Out of scope

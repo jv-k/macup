@@ -204,10 +204,10 @@ pluginSubCommands.all = buildCompositeCommand(deps.registry, {
   pluginContext: deps.pluginContext,
 });
 
-// Only the tree citty dispatches gets the boundary. The wizard runs these
-// same commands via its own runCommand() call and reports failures inline
-// so the session survives — routing it through a boundary that exits the
-// process would turn one failed action into a lost session.
+// Only the tree citty dispatches gets the boundary. The wizard calls the
+// same verbs directly (wizard-runner.ts, dispatchAction) and reports failures
+// inline so the session survives — routing it through a boundary that exits
+// the process would turn one failed action into a lost session.
 const topLevelSubCommands = {
   ...Object.fromEntries(
     Object.entries(pluginSubCommands).map(([name, cmd]) => [name, withErrorBoundary(cmd)]),
@@ -278,7 +278,7 @@ const main = defineCommand({
     }
 
     // No flag matched: run the interactive wizard (or print a non-TTY hint).
-    await runWizard(deps, pluginSubCommands);
+    await runWizard(deps);
   },
 });
 

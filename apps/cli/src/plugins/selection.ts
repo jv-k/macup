@@ -61,7 +61,10 @@ export interface SelectionResult {
  */
 export type VersionComparator = (a: string, b: string) => -1 | 0 | 1 | null;
 
-const semverCompare: VersionComparator = (a, b) => {
+/**
+ * The default {@link VersionComparator}: semver order, or `null` when either side is not semver. The one comparator, shared with `doctor` so an incomparable pair means the same thing there as in `update` (#147).
+ */
+export const semverCompare: VersionComparator = (a, b) => {
   // Pins/skips are user-provided and some ecosystems use non-semver strings
   // (brew date versions, mas build IDs, etc.). semver.compare throws on
   // non-semver — guard with semver.valid. Plugins with non-semver versions

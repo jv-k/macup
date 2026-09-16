@@ -1,7 +1,7 @@
 /**
  * The CLI surface as data: the stand-alone nouns with their descriptions and
  * args, the verbs a plugin's manifest admits with the args each takes, and the
- * global flags with their aliases (#148, ADR 0058).
+ * global flags with their aliases (#148, ADR 0059).
  *
  * The command tree (`commands/from-manifest.ts`, `commands/composite.ts`), the
  * three shell completion generators, the help screen, the wizard's action list,

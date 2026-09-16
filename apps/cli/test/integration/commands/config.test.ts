@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildConfigReport, formatConfigReport } from '../../../src/commands/config';
 import type { PathResolution } from '../../../src/config/paths';
+import { snapshotDir } from '../../fixtures/dir-snapshot';
 
 let workDir: string;
 
@@ -67,6 +68,31 @@ describe('buildConfigReport', () => {
     expect(r.schemaValid).toBe(false);
     expect(r.schemaError).toBeDefined();
     expect(r.schemaError).toContain('formulas');
+  });
+
+  // The store validates a pre-1.x file in its migrated shape, where a bad
+  // legacy list fails. config used to parse the raw file, where zod stripped
+  // the unknown key and called it valid: the two readers disagreed (#145).
+  it('judges a pre-1.x file the way the store would, and leaves it in that layout', async () => {
+    const p = paths();
+    await writeFile(p.applistPath, 'brew_formulas:\n  - git\nnpm_apps: not-a-list\n', 'utf8');
+    const before = await snapshotDir(workDir);
+    const r = await buildConfigReport(p);
+    expect(r.exists).toBe(true);
+    expect(r.schemaValid).toBe(false);
+    expect(r.schemaError).toContain('npm: Invalid input: expected array, received string');
+    // Read, not loaded: no migration rewrite, no backup dir, no .tmp file.
+    expect(await snapshotDir(workDir)).toEqual(before);
+  });
+
+  it('reports YAML that does not parse as invalid, naming the line', async () => {
+    const p = paths();
+    await writeFile(p.applistPath, 'brew:\n  formulas:\n  - git\n bad: [\n', 'utf8');
+    const before = await snapshotDir(workDir);
+    const r = await buildConfigReport(p);
+    expect(r.schemaValid).toBe(false);
+    expect(r.schemaError).toMatch(/line 4/);
+    expect(await snapshotDir(workDir)).toEqual(before);
   });
 
   it('reports a newer-than-supported version as invalid, matching the store', async () => {

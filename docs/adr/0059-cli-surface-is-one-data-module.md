@@ -1,4 +1,4 @@
-# ADR 0058: The CLI surface is one data module, and every renderer projects from it
+# ADR 0059: The CLI surface is one data module, and every renderer projects from it
 
 > Status: accepted · Date: 2026-09-16 · Deciders: John Valai
 

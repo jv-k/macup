@@ -85,4 +85,5 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0055](0055-triage-labels-are-bare.md) | Triage labels are bare, matching the mattpocock/skills defaults | accepted |
 | [0056](0056-dry-run-emits-the-mutation-report.md) | A dry run emits the mutation report | accepted |
 | [0057](0057-bundle-preview-is-the-report-before-the-fact.md) | The bundle preview is the mutation report before the fact | accepted |
-| [0058](0058-cli-surface-is-one-data-module.md) | The CLI surface is one data module, and every renderer projects from it | accepted |
+| [0058](0058-the-applist-has-one-reader.md) | The applist has one reader, and the diagnostics consume its read | accepted |
+| [0059](0059-cli-surface-is-one-data-module.md) | The CLI surface is one data module, and every renderer projects from it | accepted |

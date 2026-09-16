@@ -10,11 +10,22 @@
  */
 
 import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
-import type { ApplistKey } from '../config/schema';
-import type { ConfigStore, SaveResult } from '../config/store';
-import { applyRefs, listPackages, planInstall, planUpdate } from '../plugins/operations';
-import { probeOrThrow } from '../plugins/probe';
-import { configKeyForSubtype, flagForSubtype, kindForSubtype } from '../plugins/subtype-table';
+import type { ConfigStore } from '../config/store';
+import {
+  type ApplistWriteResult,
+  applyRefs,
+  listPackages,
+  pinPackage,
+  planInstall,
+  planUpdate,
+  skipPackages,
+  trackPackages,
+  unpinPackage,
+  unskipPackages,
+  untrackPackages,
+} from '../plugins/operations';
+import { errorMessage, probeOrThrow } from '../plugins/probe';
+import { flagForSubtype, kindForSubtype } from '../plugins/subtype-table';
 import type {
   ExecRunner,
   ListOptions,
@@ -60,41 +71,25 @@ export function makeCtx(deps: CommandDeps): PluginContext {
   return deps.pluginContext ?? { exec: deps.exec, log: deps.log, signal: deps.signal };
 }
 
-// Wrapper around store.save() that turns disk/permissions failures into
-// a friendly stderr line + non-zero exit code, instead of an unhandled
-// stack trace. The in-memory doc was already mutated by the caller, so
-// we surface the failure rather than continuing as if it succeeded.
-async function trySave(store: ConfigStore, operation: string): Promise<SaveResult | null> {
-  try {
-    return await store.save(operation);
-  } catch (err) {
-    log.printErr(
-      `error: failed to save ${operation} changes (${err instanceof Error ? err.message : String(err)})`,
-    );
-    process.exitCode = 1;
-    return null;
-  }
-}
-
 /**
- * The mutate → save → report protocol every config verb (track, untrack, pin,
- * unpin, skip, unskip) runs: load the store, apply the mutation, save with a
- * friendly error, then report success and echo the backup path. Callers supply
- * only the mutation and how to describe its result; the invariant tail lived in
- * all six verbs before.
+ * Render what an applist verb (track, untrack, pin, unpin, skip, unskip)
+ * returned (#143): the failed save as a friendly stderr line plus exit 1
+ * rather than an unhandled stack trace, since the in-memory doc is already
+ * mutated and the run must not read as a success; otherwise the caller's
+ * report, then the backup path. The operation itself never prints (ADR 0054).
  */
-async function commitMutation<T>(
-  deps: CommandDeps,
+function reportWrite<T>(
+  result: ApplistWriteResult<T>,
   operation: string,
-  apply: (store: ConfigStore) => T,
-  report: (result: T) => void,
-): Promise<void> {
-  const store = await deps.getStore();
-  const result = apply(store);
-  const save = await trySave(store, operation);
-  if (!save) return;
-  report(result);
-  if (save.backupPath) log.print(log.trace(`Backup: ${save.backupPath}`));
+  report: (change: T) => void,
+): void {
+  if (!result.saved) {
+    log.printErr(`error: failed to save ${operation} changes (${errorMessage(result.error)})`);
+    process.exitCode = 1;
+    return;
+  }
+  report(result.change);
+  if (result.backupPath) log.print(log.trace(`Backup: ${result.backupPath}`));
 }
 
 /** What {@link finishMutation} needs to know about the run beyond the plugin. */
@@ -216,20 +211,6 @@ function requireNames(rawArgs: string[], pluginId: string, command: string): str
     return null;
   }
   return names;
-}
-
-/**
- * The one applist key a mutating verb (install, track, untrack) acts on: a
- * thin wrapper over the host helper (`plugins/subtype-table.ts`) that also
- * enforces the invariant every track-capable manifest must meet. The read
- * side (`list`, the wizard, the init scan) resolves its scope through
- * `plugins/operations.ts` instead, which may span every key.
- * @throws Error when the plugin declares no `configKeys`, which a track-capable manifest must.
- */
-function resolveConfigKey(plugin: Plugin, subtype: string | undefined): ApplistKey {
-  const key = configKeyForSubtype(plugin.manifest, subtype);
-  if (!key) throw new Error(`Plugin ${plugin.manifest.id} has no configKeys`);
-  return key;
 }
 
 // Render the CLI flag a user would type to scope a command to `subtype`, read
@@ -553,31 +534,26 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const subtype = resolved.subtype;
         const names = requireNames(rawArgs, manifest.id, 'track');
         if (!names) return;
-        const key = resolveConfigKey(plugin, subtype);
-        await commitMutation(
-          deps,
-          'track',
-          (store) => store.add(key, names),
-          (result) => {
-            if (result.added.length > 0) {
-              log.print(log.success(`Tracked in ${key}: ${result.added.join(', ')}`));
-              if (result.skipped.length > 0) {
-                log.print(log.info(`Already tracked: ${result.skipped.join(', ')}`));
-              }
-            } else {
-              // Every name was already tracked. Echo them and suggest install
-              // (the action a user typing `track <name>` is most likely after).
-              log.print(log.info(`Already tracked in ${key}: ${result.skipped.join(', ')}`));
-              if (manifest.capabilities.install) {
-                log.print(
-                  log.trace(
-                    `macup ${manifest.id} install ${subtypeCliFlag(manifest, subtype)}${result.skipped.join(' ')}`,
-                  ),
-                );
-              }
+        const result = await trackPackages(plugin, await deps.getStore(), names, subtype);
+        reportWrite(result, 'track', ({ key, added, skipped }) => {
+          if (added.length > 0) {
+            log.print(log.success(`Tracked in ${key}: ${added.join(', ')}`));
+            if (skipped.length > 0) {
+              log.print(log.info(`Already tracked: ${skipped.join(', ')}`));
             }
-          },
-        );
+          } else {
+            // Every name was already tracked. Echo them and suggest install
+            // (the action a user typing `track <name>` is most likely after).
+            log.print(log.info(`Already tracked in ${key}: ${skipped.join(', ')}`));
+            if (manifest.capabilities.install) {
+              log.print(
+                log.trace(
+                  `macup ${manifest.id} install ${subtypeCliFlag(manifest, subtype)}${skipped.join(' ')}`,
+                ),
+              );
+            }
+          }
+        });
       },
     });
   }
@@ -603,31 +579,26 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const subtype = resolved.subtype;
         const names = requireNames(rawArgs, manifest.id, 'untrack');
         if (!names) return;
-        const key = resolveConfigKey(plugin, subtype);
-        await commitMutation(
-          deps,
-          'untrack',
-          (store) => store.remove(key, names),
-          (result) => {
-            if (result.removed.length > 0) {
-              log.print(log.success(`Untracked from ${key}: ${result.removed.join(', ')}`));
-              if (result.missing.length > 0) {
-                log.print(log.info(`Not present: ${result.missing.join(', ')}`));
-              }
-            } else {
-              // Nothing matched. Echo the names so the user sees what they
-              // typed and point at `list` to find the tracked equivalents.
-              log.print(log.info(`Not tracked in ${key}: ${result.missing.join(', ')}`));
-              if (manifest.capabilities.list) {
-                log.print(
-                  log.trace(
-                    `macup ${manifest.id} list ${subtypeCliFlag(manifest, subtype)}`.trimEnd(),
-                  ),
-                );
-              }
+        const result = await untrackPackages(plugin, await deps.getStore(), names, subtype);
+        reportWrite(result, 'untrack', ({ key, removed, missing }) => {
+          if (removed.length > 0) {
+            log.print(log.success(`Untracked from ${key}: ${removed.join(', ')}`));
+            if (missing.length > 0) {
+              log.print(log.info(`Not present: ${missing.join(', ')}`));
             }
-          },
-        );
+          } else {
+            // Nothing matched. Echo the names so the user sees what they
+            // typed and point at `list` to find the tracked equivalents.
+            log.print(log.info(`Not tracked in ${key}: ${missing.join(', ')}`));
+            if (manifest.capabilities.list) {
+              log.print(
+                log.trace(
+                  `macup ${manifest.id} list ${subtypeCliFlag(manifest, subtype)}`.trimEnd(),
+                ),
+              );
+            }
+          }
+        });
       },
     });
   }
@@ -669,11 +640,11 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         const sub = configSubtype(args);
         if (!sub.ok) return;
         const [name, version] = positionals as [string, string];
-        await commitMutation(
-          deps,
-          'pin',
-          (store) => store.pin(manifest.id, name, version, sub.subtype),
-          () => log.print(log.success(`Pinned ${name} to ${version} (${manifest.id})`)),
+        const result = await pinPackage(plugin, await deps.getStore(), name, version, sub.subtype);
+        reportWrite(result, 'pin', (pinned) =>
+          log.print(
+            log.success(`Pinned ${pinned.name} to ${pinned.maxVersion} (${pinned.pluginId})`),
+          ),
         );
       },
     });
@@ -689,11 +660,14 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (!names) return;
         const sub = configSubtype(args);
         if (!sub.ok) return;
-        await commitMutation(
-          deps,
-          'unpin',
-          (store) => store.unpin(manifest.id, names[0] as string, sub.subtype),
-          () => log.print(log.success(`Unpinned ${names[0]} (${manifest.id})`)),
+        const result = await unpinPackage(
+          plugin,
+          await deps.getStore(),
+          names[0] as string,
+          sub.subtype,
+        );
+        reportWrite(result, 'unpin', (unpinned) =>
+          log.print(log.success(`Unpinned ${unpinned.name} (${unpinned.pluginId})`)),
         );
       },
     });
@@ -709,11 +683,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (!names) return;
         const sub = configSubtype(args);
         if (!sub.ok) return;
-        await commitMutation(
-          deps,
-          'skip',
-          (store) => store.skip(manifest.id, names, sub.subtype),
-          () => log.print(log.success(`Skipped from ${manifest.id} updates: ${names.join(', ')}`)),
+        const result = await skipPackages(plugin, await deps.getStore(), names, sub.subtype);
+        reportWrite(result, 'skip', ({ pluginId, names: skipped }) =>
+          log.print(log.success(`Skipped from ${pluginId} updates: ${skipped.join(', ')}`)),
         );
       },
     });
@@ -729,11 +701,9 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
         if (!names) return;
         const sub = configSubtype(args);
         if (!sub.ok) return;
-        await commitMutation(
-          deps,
-          'unskip',
-          (store) => store.unskip(manifest.id, names, sub.subtype),
-          () => log.print(log.success(`Unskipped (${manifest.id}): ${names.join(', ')}`)),
+        const result = await unskipPackages(plugin, await deps.getStore(), names, sub.subtype);
+        reportWrite(result, 'unskip', ({ pluginId, names: unskipped }) =>
+          log.print(log.success(`Unskipped (${pluginId}): ${unskipped.join(', ')}`)),
         );
       },
     });

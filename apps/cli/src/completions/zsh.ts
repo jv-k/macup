@@ -7,17 +7,27 @@
  * @module
  */
 
+import {
+  COMPLETABLE_COMMANDS,
+  GLOBAL_FLAGS,
+  type GlobalFlag,
+  SHELL_ARG_COMMANDS,
+  nounFlags,
+  pluginSurface,
+} from '../cli/surface';
 import { SUPPORTED_SHELLS } from '../commands/shell';
 import type { Plugin } from '../plugins/types';
-import {
-  SHELL_ARG_COMMANDS,
-  TOP_LEVEL_COMMANDS,
-  TOP_LEVEL_COMMAND_FLAGS,
-  commandsFor,
-  flagsForCommand,
-} from './shared';
 
 const esc = (s: string): string => s.replace(/'/g, "'\\''");
+
+// One `_arguments` spec per global flag: an aliased modifier excludes its own
+// pair; a path flag carries a `_files` value spec, narrowed to the declared
+// extensions when the surface names any.
+function globalSpec(f: GlobalFlag): string {
+  if (f.alias) return `'(-${f.alias} --${f.name})'{-${f.alias},--${f.name}}'[${f.description}]'`;
+  const glob = f.path?.extensions ? ` -g "*.(${f.path.extensions.join('|')})"` : '';
+  return `'--${f.name}[${f.description}]:${f.path?.hint ?? 'value'}:_files${glob}'`;
+}
 
 /**
  * The zsh completion script, generated from the plugin manifests so a new
@@ -33,9 +43,10 @@ export function generateZshCompletions(plugins: readonly Plugin[]): string {
   const pluginEntries = plugins
     .map((p) => `'${esc(p.manifest.id)}:${esc(p.manifest.displayName)}'`)
     .join(' ');
-  const commandEntries = TOP_LEVEL_COMMANDS.map(
+  const commandEntries = COMPLETABLE_COMMANDS.map(
     (c) => `'${esc(c.name)}:${esc(c.description)}'`,
   ).join(' ');
+  const globalSpecs = GLOBAL_FLAGS.map((f) => `    ${globalSpec(f)} \\`).join('\n');
 
   // `macup completions <TAB>` should offer zsh|bash|fish, the way
   // `--completions=<TAB>` used to from its value spec.
@@ -43,35 +54,35 @@ export function generateZshCompletions(plugins: readonly Plugin[]): string {
     (c) => `      ${c}) _values 'shell' ${SUPPORTED_SHELLS.map((sh) => `'${sh}'`).join(' ')} ;;`,
   ).join('\n');
 
-  const pluginCases = plugins
-    .map((p) => {
-      const cmds = commandsFor(p)
-        .map((c) => `'${c}[${c}]'`)
-        .join(' ');
-      return `      ${p.manifest.id}) _values 'command' ${cmds} ;;`;
+  const surfaces = plugins.map((p) => pluginSurface(p.manifest));
+  const pluginCases = surfaces
+    .map((s) => {
+      const cmds = s.verbs.map((v) => `'${v.name}[${v.name}]'`).join(' ');
+      return `      ${s.manifest.id}) _values 'command' ${cmds} ;;`;
     })
     .join('\n');
 
   // Stand-alone commands with flags of their own (`macup init --dry-run`).
   // They sit where a plugin id would, so their case keys have an empty
   // command half.
-  const nounFlagCases = Object.entries(TOP_LEVEL_COMMAND_FLAGS)
+  const nounFlagCases = COMPLETABLE_COMMANDS.map((c) => ({ c, flags: nounFlags(c) }))
+    .filter((x) => x.flags.length > 0)
     .map(
-      ([name, flags]) =>
-        `        ${name}:*) _values 'flag' ${flags.map((f) => `'${f}'`).join(' ')} ;;`,
+      (x) =>
+        `        ${x.c.name}:*) _values 'flag' ${x.flags.map((f) => `'${f.flag}'`).join(' ')} ;;`,
     )
     .join('\n');
 
   // `<plugin>:<command>) ...` cases offering that subcommand's flags in the
   // positional `rest` state ($words[2]=plugin, $words[3]=command).
-  const flagCases = plugins
-    .flatMap((p) =>
-      commandsFor(p)
-        .map((cmd) => ({ cmd, flags: flagsForCommand(p, cmd) }))
+  const flagCases = surfaces
+    .flatMap((s) =>
+      s.verbs
+        .map((v) => ({ v, flags: v.flags.filter((f) => f.inCompletions) }))
         .filter((x) => x.flags.length > 0)
         .map(
           (x) =>
-            `        ${p.manifest.id}:${x.cmd}) _values 'flag' ${x.flags.map((f) => `'${f}'`).join(' ')} ;;`,
+            `        ${s.manifest.id}:${x.v.name}) _values 'flag' ${x.flags.map((f) => `'${f.flag}'`).join(' ')} ;;`,
         ),
     )
     .join('\n');
@@ -88,12 +99,7 @@ _macup() {
   # spec. Positional args 1 and 2 dispatch to the plugin / command
   # states below.
   _arguments -C \\
-    '(-h --help)'{-h,--help}'[Show help]' \\
-    '(-v --version)'{-v,--version}'[Show version]' \\
-    '(-V --verbose)'{-V,--verbose}'[Stream output to scrollback]' \\
-    '(-D --debug)'{-D,--debug}'[Trace every shell call to stderr]' \\
-    '--applist[Use an alternate applist file]:applist:_files -g "*.(yaml|yml)"' \\
-    '--log[Append a subprocess log to a file]:logfile:_files' \\
+${globalSpecs}
     '1:plugin:->plugin' \\
     '2:command:->command' \\
     '*:: :->rest'

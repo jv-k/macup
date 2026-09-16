@@ -8,13 +8,8 @@
  * @module
  */
 
+import { COMPLETABLE_COMMANDS, GLOBAL_FLAGS, nounFlags, pluginSurface } from '../cli/surface';
 import type { Plugin } from '../plugins/types';
-import {
-  TOP_LEVEL_COMMANDS,
-  TOP_LEVEL_COMMAND_FLAGS,
-  commandsFor,
-  flagsForCommand,
-} from './shared';
 
 /**
  * The bash completion script, generated from the plugin manifests so a new
@@ -26,33 +21,39 @@ export function generateBashCompletions(plugins: readonly Plugin[]): string {
   // Stand-alone commands complete where a plugin id would go — `macup
   // restore` is a noun, not a flag (ADR 0029). Only the true modifiers
   // are left on the flag list.
-  const ids = [...plugins.map((p) => p.manifest.id), ...TOP_LEVEL_COMMANDS.map((c) => c.name)];
-  const globalFlags = '--help --version --verbose --debug --applist --log';
+  const ids = [...plugins.map((p) => p.manifest.id), ...COMPLETABLE_COMMANDS.map((c) => c.name)];
+  const globalFlags = GLOBAL_FLAGS.map((f) => `--${f.name}`).join(' ');
+  // The path-taking flags: bash completes a file after them, and offers them
+  // wherever a flag can go, since both are usable alongside plugin/action args.
+  const pathFlags = GLOBAL_FLAGS.filter((f) => f.path).map((f) => `--${f.name}`);
+  const prevIsPath = pathFlags.map((f) => `"$prev" == "${f}"`).join(' || ');
 
-  const pluginCases = plugins
+  const surfaces = plugins.map((p) => pluginSurface(p.manifest));
+  const pluginCases = surfaces
     .map(
-      (p) =>
-        `      ${p.manifest.id}) COMPREPLY=( $(compgen -W "${commandsFor(p).join(' ')}" -- "$cur") ) ;;`,
+      (s) =>
+        `      ${s.manifest.id}) COMPREPLY=( $(compgen -W "${s.verbs.map((v) => v.name).join(' ')}" -- "$cur") ) ;;`,
     )
     .join('\n');
 
   // `<plugin>/<command>) ...` cases offering that subcommand's flags.
-  const flagCases = plugins
-    .flatMap((p) =>
-      commandsFor(p)
-        .map((cmd) => ({ cmd, flags: flagsForCommand(p, cmd) }))
+  const flagCases = surfaces
+    .flatMap((s) =>
+      s.verbs
+        .map((v) => ({ v, flags: v.flags.filter((f) => f.inCompletions).map((f) => f.flag) }))
         .filter((x) => x.flags.length > 0)
         .map(
           (x) =>
-            `      ${p.manifest.id}/${x.cmd}) COMPREPLY=( $(compgen -W "${x.flags.join(' ')}" -- "$cur") ) ;;`,
+            `      ${s.manifest.id}/${x.v.name}) COMPREPLY=( $(compgen -W "${x.flags.join(' ')}" -- "$cur") ) ;;`,
         ),
     )
     .join('\n');
 
-  const nounFlagCases = Object.entries(TOP_LEVEL_COMMAND_FLAGS)
+  const nounFlagCases = COMPLETABLE_COMMANDS.map((c) => ({ c, flags: nounFlags(c) }))
+    .filter((x) => x.flags.length > 0)
     .map(
-      ([name, flags]) =>
-        `      ${name}) COMPREPLY=( $(compgen -W "${flags.join(' ')}" -- "$cur") ) ;;`,
+      (x) =>
+        `      ${x.c.name}) COMPREPLY=( $(compgen -W "${x.flags.map((f) => f.flag).join(' ')}" -- "$cur") ) ;;`,
     )
     .join('\n');
 
@@ -70,7 +71,7 @@ _macup() {
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
 
   # These take a path, and can appear anywhere before the command.
-  if [[ "\$prev" == "--applist" || "\$prev" == "--log" ]]; then
+  if [[ ${prevIsPath} ]]; then
     COMPREPLY=( $(compgen -f -- "$cur") )
     return
   fi
@@ -94,7 +95,7 @@ ${flagCases}
     esac
     # --applist is usable alongside plugin/action args, so offer it here too,
     # appended rather than replacing the per-command flags above.
-    COMPREPLY+=( $(compgen -W "--applist --log" -- "$cur") )
+    COMPREPLY+=( $(compgen -W "${pathFlags.join(' ')}" -- "$cur") )
     return
   fi
 }

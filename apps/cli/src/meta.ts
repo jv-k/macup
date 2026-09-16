@@ -16,16 +16,8 @@
  */
 
 import { FLAG_COMMAND_ALIASES } from './cli/argv';
-import { CHECK_ARGS } from './commands/check';
+import { COMPLETABLE_COMMANDS, GLOBAL_FLAGS, nounFlags, pluginSurface } from './cli/surface';
 import { withComposite } from './commands/composite';
-import { INIT_ARGS } from './commands/init';
-import { OUTDATED_ARGS } from './commands/outdated';
-import {
-  SUBTYPE_COMMANDS,
-  TOP_LEVEL_COMMANDS,
-  commandsFor,
-  flagsForCommand,
-} from './completions/shared';
 import { ApplistKeySchema } from './config/schema';
 import { BUILTIN_PLUGINS } from './plugins/registry';
 import type { Plugin } from './plugins/types';
@@ -104,9 +96,9 @@ export interface DocsMetadata {
   envVars: EnvVarDoc[];
 }
 
-// Prose per per-command flag. The LIST of flags for each command comes
-// from flagsForCommand() (the completion source of truth, src/completions/
-// shared.ts); only the human description lives here.
+// Prose per per-command flag. The LIST of flags for each command comes from
+// the surface (src/cli/surface.ts); only the reference's own words for a flag
+// live here, one entry per flag whatever verb carries it.
 const FLAG_DESCRIPTIONS: Record<string, string> = {
   '--only-outdated': 'Restrict the listing to outdated packages.',
   '--all': 'Widen the scope to every package, not just tracked ones.',
@@ -117,31 +109,6 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
   '--subtype': 'Scope the command to one subtype by name (e.g. `--subtype=casks`).',
   '--force': 'Proceed without the confirmation prompts, for unattended use.',
 };
-
-// Top-level flags, with the prose used for the reference. These are the
-// real modifiers plus `--completions`; the command nouns are subcommands
-// and belong in topLevelCommands, not here (ADR 0029). Few and stable, so
-// the descriptions live here.
-const GLOBAL_FLAGS: GlobalFlagDoc[] = [
-  { flag: '--help', alias: '-h', description: 'Show the help screen.' },
-  { flag: '--version', alias: '-v', description: 'Print the version.' },
-  { flag: '--verbose', alias: '-V', description: 'Tee subprocess output to scrollback.' },
-  {
-    flag: '--debug',
-    alias: '-D',
-    description: 'Full raw trace of every shell call, routed to stderr.',
-  },
-  {
-    flag: '--log',
-    description:
-      'Append a record per subprocess to this file, as JSON lines: the command, its exit code, how long it took, and its output. A side channel — terminal output is unchanged.',
-  },
-  {
-    flag: '--applist',
-    description:
-      'Path to the applist this run reads and writes, instead of the default. Relative paths resolve against the working directory and `~` expands.',
-  },
-];
 
 // The stable process exit codes. A hand-maintained mirror of the exit
 // paths in src/cli.ts (0 on success, 130 on SIGINT, 1 otherwise) —
@@ -224,31 +191,20 @@ function pluginDoc(plugin: Plugin): PluginDoc {
       untrack: m.capabilities.untrack,
       outdated: m.capabilities.outdated,
     },
-    commands: commandsFor(plugin).map((name) => {
-      // from-manifest.ts also defines --subtype on subtype-aware plugins;
-      // completions offer only the --cask/--formula shortcuts, so add it
-      // here for the docs.
-      const flags = flagsForCommand(plugin, name);
-      if ((m.subtypes?.length ?? 0) > 1 && SUBTYPE_COMMANDS.has(name)) {
-        flags.push('--subtype');
-      }
-      return {
-        name,
-        flags: flags.map((flag) => ({
-          flag,
-          description: FLAG_DESCRIPTIONS[flag] ?? '',
-        })),
-      };
-    }),
+    // Every flag the verb accepts, --subtype included: the reference lists
+    // what the parser takes, where the shells offer only the shortcuts.
+    commands: pluginSurface(m).verbs.map((verb) => ({
+      name: verb.name,
+      flags: verb.flags.map(({ flag }) => ({
+        flag,
+        description: FLAG_DESCRIPTIONS[flag] ?? '',
+      })),
+    })),
   };
 }
 
 // Bare spelling for flags argv rewrites (`macup version` → `--version`),
 // derived from the same list cli.ts rewrites with.
-// One description per command, shared with what the shells complete from.
-const describeCommand = (name: string): string =>
-  TOP_LEVEL_COMMANDS.find((c) => c.name === name)?.description ?? '';
-
 function bareFormFor(flag: string): string | undefined {
   const word = flag.replace(/^--/, '');
   return (FLAG_COMMAND_ALIASES as readonly string[]).includes(word) ? `macup ${word}` : undefined;
@@ -270,51 +226,29 @@ export function docsMetadata(): DocsMetadata {
     // composite `all` is appended from its own declaration so the docs
     // reference keeps listing it exactly as it did before that split.
     plugins: withComposite(BUILTIN_PLUGINS).map(pluginDoc),
-    topLevelCommands: [
-      {
-        name: 'outdated',
-        description: describeCommand('outdated'),
-        flags: Object.entries(OUTDATED_ARGS).map(([name, def]) => ({
-          flag: `--${name}`,
-          description: FLAG_DESCRIPTIONS[`--${name}`] ?? def.description,
-        })),
-      },
-      {
-        name: 'check',
-        description: describeCommand('check'),
-        flags: Object.entries(CHECK_ARGS).map(([name, def]) => ({
-          flag: `--${name}`,
-          description: FLAG_DESCRIPTIONS[`--${name}`] ?? def.description,
-        })),
-      },
-      {
-        // `init` has one positional (<shell>) plus the scaffolder's flags
-        // (#14). The positional stays described by INIT_ARGS.shell.
-        name: 'init',
-        description: describeCommand('init'),
-        flags: Object.entries(INIT_ARGS)
-          .filter(([, def]) => (def as { type?: string }).type !== 'positional')
-          .map(([name, def]) => ({
-            flag: `--${name}`,
-            description:
-              FLAG_DESCRIPTIONS[`--${name}`] ?? (def as { description?: string }).description ?? '',
-          })),
-      },
-      // The command nouns (ADR 0029). Descriptions come from the same list
-      // the shells complete from, so the reference and your tab key can't
-      // disagree about what `macup restore` is.
-      ...TOP_LEVEL_COMMANDS.filter((c) => !['outdated', 'check', 'init'].includes(c.name)).map(
-        (c) => ({
-          name: c.name,
-          description: c.description,
-          flags:
-            c.name === 'doctor'
-              ? [{ flag: '--json', description: FLAG_DESCRIPTIONS['--json'] ?? '' }]
-              : [],
-        }),
-      ),
-    ],
-    globalFlags: GLOBAL_FLAGS.map((f) => ({ ...f, bareForm: bareFormFor(f.flag) })),
+    // The command nouns (ADR 0029), with the flags their arg defs declare
+    // and the same description the shells complete from, so the reference
+    // and your tab key can't disagree about what `macup restore` is: the
+    // completable set, since `help` is an argv intercept rather than a
+    // dispatched subcommand. A flag with no reference prose of its own keeps
+    // its arg def's.
+    topLevelCommands: COMPLETABLE_COMMANDS.map((c) => ({
+      name: c.name,
+      description: c.description,
+      flags: nounFlags(c).map(({ flag }) => ({
+        flag,
+        description:
+          FLAG_DESCRIPTIONS[flag] ??
+          (c.args?.[flag.slice(2)] as { description?: string } | undefined)?.description ??
+          '',
+      })),
+    })),
+    globalFlags: GLOBAL_FLAGS.map((f) => ({
+      flag: `--${f.name}`,
+      ...(f.alias ? { alias: `-${f.alias}` } : {}),
+      description: f.docs,
+      bareForm: bareFormFor(`--${f.name}`),
+    })),
     config: [
       ...ApplistKeySchema.options.map((key) => ({
         key,

@@ -26,36 +26,11 @@
 
 import { confirm, isCancel } from '@clack/prompts';
 import { defineCommand } from 'citty';
+import { INIT_ARGS } from '../cli/surface';
 import type { CliDeps } from '../cli/types';
 import { ApplistKeySchema } from '../config/schema';
 import { countDetected, detectInstalled, runInitScaffold } from './init-scaffold';
 import { SUPPORTED_SHELLS, type Shell, isShell } from './shell';
-
-/**
- * Arg defs live outside the factory so macup/meta can project them into
- * the generated reference.
- */
-export const INIT_ARGS = {
-  shell: {
-    type: 'positional',
-    required: false,
-    description: 'Shell to emit integration code for: zsh | bash | fish.',
-  },
-  'dry-run': {
-    type: 'boolean',
-    description: 'Print what bare `macup init` would track, without writing.',
-  },
-  force: {
-    type: 'boolean',
-    description:
-      'Answer yes in advance to the prompts of bare `macup init`: the merge into a populated applist, and the prune.',
-  },
-  prune: {
-    type: 'boolean',
-    description:
-      'Also untrack packages the scan did not find, under the keys it covered. Asks first, unless --force.',
-  },
-} as const;
 
 // `rc=$?` (not `status=$?`): $status is read-only in zsh and the
 // POSIX-ish body is shared between the zsh and bash snippets.

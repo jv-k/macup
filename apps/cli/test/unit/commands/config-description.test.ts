@@ -3,7 +3,7 @@
 // per-command help shows). One description, held by the registry.
 
 import { describe, expect, it } from 'vitest';
-import { TOP_LEVEL_COMMANDS } from '../../../src/cli/commands';
+import { TOP_LEVEL_COMMANDS } from '../../../src/cli/surface';
 import { ConfigAction } from '../../../src/commands/config';
 
 describe('config has one description (#146)', () => {

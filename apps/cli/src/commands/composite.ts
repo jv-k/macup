@@ -28,6 +28,7 @@
 
 import { confirm, isCancel } from '@clack/prompts';
 import { type CommandDef, defineCommand } from 'citty';
+import { type VerbName, commandDefOf, pluginSurface } from '../cli/surface';
 import { mutateFor } from '../plugins/operations';
 import { probe, probeOutcomeReason } from '../plugins/probe';
 import type {
@@ -292,34 +293,28 @@ async function runCompositeMutation(
 /**
  * Build the `all` subcommand tree from the constituent plugin list: `list`
  * fans out through {@link listComposite}, `install`/`update` through the
- * host-owned {@link runCompositeMutation}. The composite has no subtypes and
- * no configKeys, so this is a direct hand-build rather than a call into
- * `commandsFromManifest` — the same list/install/update surface as before,
- * without the shape that generic factory carries for subtypes, track,
- * untrack, pin, unpin, skip, and unskip, none of which `all` ever offered.
+ * host-owned {@link runCompositeMutation}. The verbs and their args are what
+ * the surface (`cli/surface.ts`, #148) declares for {@link COMPOSITE_MANIFEST}:
+ * list, install, and update, with no subtype args and none of track, untrack,
+ * pin, unpin, skip, or unskip, since the manifest declares no `track` and no
+ * `configKeys`. This module owns only the `run` bodies, which fan out rather
+ * than call one backend.
+ * @throws Error when the composite manifest stops admitting one of its three verbs, which would leave `all` without the surface it advertises.
  */
 export function buildCompositeCommand(
   constituents: readonly Plugin[],
   deps: CommandDeps,
 ): CommandDef {
   const { manifest } = COMPOSITE_DECLARATION;
+  const surface = pluginSurface(manifest);
+  const define = (name: VerbName): ReturnType<typeof commandDefOf> => {
+    const verb = surface.verbs.find((v) => v.name === name);
+    if (!verb) throw new Error(`composite manifest does not admit \`${name}\``);
+    return commandDefOf(verb);
+  };
 
   const list = defineCommand({
-    meta: { name: 'list', description: `List packages tracked by ${manifest.displayName}.` },
-    args: {
-      'only-outdated': {
-        type: 'boolean',
-        description: 'Only show outdated packages.',
-      },
-      all: {
-        type: 'boolean',
-        description: 'Show all installed packages, not just tracked ones.',
-      },
-      json: {
-        type: 'boolean',
-        description: 'Output as JSON: PackageStatus[], or { error, packages } if a query fails.',
-      },
-    },
+    ...define('list'),
     async run({ args }) {
       const showJson = Boolean(args.json);
       const onlyOutdated = Boolean(args['only-outdated']);
@@ -358,22 +353,7 @@ export function buildCompositeCommand(
   });
 
   const install = defineCommand({
-    meta: { name: 'install', description: 'Install packages via the plugin.' },
-    args: {
-      'dry-run': {
-        type: 'boolean',
-        description: 'Print what would run without installing anything.',
-      },
-      packages: {
-        type: 'positional',
-        required: false,
-        description: 'Packages to install (empty = install all tracked).',
-      },
-      json: {
-        type: 'boolean',
-        description: 'Emit the end-of-run report as JSON instead of text.',
-      },
-    },
+    ...define('install'),
     async run({ args }) {
       await runCompositeMutation(constituents, deps, 'install', {
         dryRun: Boolean(args['dry-run']),
@@ -383,26 +363,7 @@ export function buildCompositeCommand(
   });
 
   const update = defineCommand({
-    meta: { name: 'update', description: 'Upgrade outdated packages to latest.' },
-    args: {
-      'dry-run': {
-        type: 'boolean',
-        description: 'Print what would run without upgrading anything.',
-      },
-      all: {
-        type: 'boolean',
-        description: 'Upgrade every outdated package, not just tracked ones.',
-      },
-      packages: {
-        type: 'positional',
-        required: false,
-        description: 'Optional package names to restrict the update to.',
-      },
-      json: {
-        type: 'boolean',
-        description: 'Emit the end-of-run report as JSON instead of text.',
-      },
-    },
+    ...define('update'),
     async run({ args }) {
       await runCompositeMutation(constituents, deps, 'update', {
         dryRun: Boolean(args['dry-run']),

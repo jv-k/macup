@@ -7,7 +7,7 @@
  * @module
  */
 
-import { TOP_LEVEL_COMMANDS } from '../cli/commands';
+import { TOP_LEVEL_COMMANDS } from '../cli/surface';
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import type { PathResolution } from '../config/paths';
 import { ConfigStore } from '../config/store';

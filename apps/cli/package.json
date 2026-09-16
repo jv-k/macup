@@ -46,6 +46,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/cli.ts",
+    "prototype:bundle-preview": "tsx prototype/bundle-preview.ts",
     "dev:watch": "tsup --watch --onSuccess 'echo built'",
     "test": "vitest run",
     "test:watch": "vitest",

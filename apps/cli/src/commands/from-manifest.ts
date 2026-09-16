@@ -1,10 +1,18 @@
 /**
- * The factory that turns a plugin manifest into its citty command tree.
+ * The factory that turns a plugin manifest into its citty command tree, and
+ * the three backend verbs it registers (`runList`, `runInstall`, `runUpdate`)
+ * as functions of a plugin and a scope.
  *
  * This is why adding a backend needs no edit to dispatch, help, or completions
  * (`CLAUDE.md`): only the verbs a manifest advertises are registered, with the
  * flags each accepts, so the manifest is the input and the CLI surface is the
  * output.
+ *
+ * The verbs are exported because the command tree is one of their two
+ * consumers (ADR 0054). Each calls the operation and renders what comes back;
+ * the citty `run()` bodies parse the flags into a scope and call one, and the
+ * wizard calls the same one with the picked target (#144), so the two surfaces
+ * cannot drift.
  *
  * @module
  */
@@ -223,6 +231,200 @@ function subtypeCliFlag(manifest: PluginManifest, subtype: string | undefined): 
   return flag ? `--${flag} ` : '';
 }
 
+// The three backend verbs below are the consumers ADR 0054 names: each calls
+// the operation and renders what comes back. The citty tree hands them its
+// parsed flags and the wizard hands them the picked target (#144), so the
+// two surfaces run the same code and cannot drift. Every field is optional
+// because the wizard sets none of the flags.
+
+/** How one `list` runs: the verb's flags, resolved. */
+export interface ListRun {
+  /** One subtype's scope; every subtype when unset (`list` shows all by default). */
+  readonly subtype?: string;
+  readonly onlyOutdated?: boolean;
+  /** Everything installed, with no tracked scoping (`--all`). */
+  readonly showAll?: boolean;
+  readonly showJson?: boolean;
+}
+
+/**
+ * `macup <plugin> list` for this scope: the operation (#141), then the render.
+ * @throws whatever `check()`, `list()` or the store raised. ConfigStore.load()
+ * handles "no file" by starting with an empty doc, so anything the store
+ * throws here is a real error (invalid YAML, permission denied) and
+ * propagates rather than silently dropping the user into "show all" mode.
+ */
+export async function runList(plugin: Plugin, deps: CommandDeps, run: ListRun): Promise<void> {
+  const { manifest } = plugin;
+  const { subtype, onlyOutdated = false, showAll = false, showJson = false } = run;
+  const { deps: spinnerDeps, printHuman } = routeOutput(deps, showJson);
+
+  // Tracked scoping, the fell-back verdict, and the plugin's warnings all
+  // come back as data from the operation (#141).
+  const result = await withSpinner(spinnerDeps, `Fetching ${manifest.displayName} packages…`, () =>
+    listPackages(plugin, makeCtx(deps), deps.getStore, { subtype, onlyOutdated, showAll }),
+  );
+
+  if (result.fellBackToAll) {
+    // Advice for a human, not part of the payload.
+    printHuman(
+      log.warning(
+        `No tracked packages. Showing all installed. Track with: macup ${manifest.id} track <name...>`,
+      ),
+    );
+  }
+
+  if (showJson) {
+    // On a query failure, emit an object with an `error` field instead
+    // of a bare array, so a consumer can tell "errored" from "empty"
+    // (#51). The success path keeps the documented PackageStatus[] shape.
+    const payload =
+      result.warnings.length > 0
+        ? { error: result.warnings.join('; '), packages: result.statuses }
+        : result.statuses;
+    console.log(JSON.stringify(payload, null, 2));
+  } else {
+    log.print(renderList(manifest.displayName, result.statuses, onlyOutdated));
+  }
+}
+
+/** How one `install` runs: the verb's flags and positionals, resolved. */
+export interface InstallRun {
+  /** The subtype whose applist key the tracked refs come from; the first declared when unset. */
+  readonly subtype?: string;
+  /** Explicit names; the tracked set under the subtype's key when empty. */
+  readonly names?: readonly string[];
+  readonly dryRun?: boolean;
+  readonly showJson?: boolean;
+}
+
+/**
+ * `macup <plugin> install` for this scope: availability, the plan (#142),
+ * then the apply → verify → report tail.
+ * @throws whatever `check()`, `list()` or the store raised: an unavailable
+ * backend still aborts the run before any ref is attempted (ADR 0052 rule 5).
+ * A ref's own `install()` failure is caught and reported rather than thrown,
+ * unless the run was cancelled (`deps.signal`) or is a dry run, when
+ * {@link finishMutation} rethrows it: Ctrl-C ends the run, and no report
+ * would carry the failure.
+ */
+export async function runInstall(
+  plugin: Plugin,
+  deps: CommandDeps,
+  run: InstallRun,
+): Promise<void> {
+  const { manifest } = plugin;
+  const { subtype, names = [], dryRun = false, showJson = false } = run;
+  const { printHuman } = routeOutput(deps, showJson);
+
+  // Availability first, before the applist is read or a snapshot taken,
+  // so an unavailable backend fails outright exactly as it did before
+  // the report existed (ADR 0052 rule 5). The snapshots the tail takes
+  // run `check()` again inside the probe; it is a PATH lookup, so the
+  // repeat costs nothing and keeps both probes the shape `update` uses.
+  await plugin.check(makeCtx(deps));
+  // The explicit names, or the tracked set under the subtype's key; a
+  // plugin with no applist (system, xcode) installs explicit names only,
+  // so an argless invocation has nothing to do and no key to point at.
+  const plan = await planInstall(plugin, deps.getStore, { subtype, names });
+  if (plan.emptyKey !== undefined) {
+    printHuman(log.info(`No packages tracked in ${plan.emptyKey}.`));
+    printHuman(log.trace(`macup ${manifest.id} track ${subtypeCliFlag(manifest, subtype)}<name>`));
+  }
+  await finishMutation(deps, plugin, {
+    mode: 'install',
+    refs: plan.refs,
+    subtype,
+    dryRun,
+    showJson,
+  });
+}
+
+/** How one `update` runs: the verb's flags and positionals, resolved. */
+export interface UpdateRun {
+  /** The subtype the listing, the tracked read and each ref's kind are bound to; the first declared when unset. */
+  readonly subtype?: string;
+  /** Explicit names: only these, and tracked scoping does not apply. */
+  readonly names?: readonly string[];
+  /** Everything outdated, with no tracked scoping (`--all`). */
+  readonly showAll?: boolean;
+  readonly dryRun?: boolean;
+  readonly showJson?: boolean;
+}
+
+/**
+ * `macup <plugin> update` for this scope: the plan (#142) with its withheld
+ * buckets said first, then the apply → verify → report tail.
+ * @throws whatever `check()`, `list()` or the store raised: an unavailable
+ * backend still aborts the run before any ref is attempted (ADR 0052 rule 5).
+ * A ref's own `update()` failure is caught and reported rather than thrown,
+ * unless the run was cancelled (`deps.signal`) or is a dry run, when
+ * {@link finishMutation} rethrows it: Ctrl-C ends the run, and no report
+ * would carry the failure.
+ */
+export async function runUpdate(plugin: Plugin, deps: CommandDeps, run: UpdateRun): Promise<void> {
+  const { manifest } = plugin;
+  const { subtype, names = [], showAll = false, dryRun = false, showJson = false } = run;
+  const kind = kindForSubtype(manifest, subtype);
+  const { deps: spinnerDeps, printHuman } = routeOutput(deps, showJson);
+
+  // The outdated listing, the pin/skip selection over it, and the scoping
+  // to explicit names or the tracked set all come back as data from the
+  // operation (#142). ConfigStore.load() returns an empty doc on ENOENT, so
+  // the "no config yet" case flows through with empty pin/skip sets and no
+  // filtering. Anything the store throws (invalid YAML, permission denied)
+  // is a real error and propagates, so the user finds out their pins aren't
+  // honored rather than silently upgrading across them.
+  const plan = await withSpinner(
+    spinnerDeps,
+    `Checking ${manifest.displayName} for outdated packages…`,
+    () => planUpdate(plugin, makeCtx(deps), deps.getStore, { subtype, names, showAll }),
+  );
+  // Unenforceable pins still upgrade (ADR 0023 stays permissive), but we
+  // say so first instead of applying them silently (ADR 0034).
+  if (plan.pinnedBlocked.length > 0) {
+    printHuman(
+      `Pinned (skipping): ${plan.pinnedBlocked.map((s) => `${s.ref.name}@${s.pinnedAt}`).join(', ')}`,
+    );
+  }
+  if (plan.pinUnenforceable.length > 0) {
+    printHuman(
+      `Pin not enforceable (upgrading anyway): ${plan.pinUnenforceable
+        .map((s) => `${s.ref.name}@${s.pinnedAt}`)
+        .join(', ')}`,
+    );
+  }
+  if (plan.skipped.length > 0) {
+    printHuman(`Skipped: ${plan.skipped.map((s) => s.ref.name).join(', ')}`);
+  }
+
+  // Carry the whole plugin-reported ref (id included) — appstore
+  // mutations resolve by Adam ID / bundle ID, and a name-only ref
+  // makes `mas upgrade` fail on any app whose name isn't its ID. The
+  // kind is pinned to the verb's subtype here, as this verb always
+  // did; the plan carries the plugin's own.
+  const refs: PackageRef[] = plan.refs.map((ref) => ({ ...ref, kind }));
+  if (refs.length === 0) {
+    if (names.length > 0) {
+      printHuman(
+        log.info(
+          `No matching outdated packages for: ${plan.unmatched.join(', ')}. (Use \`${manifest.id} list --only-outdated\` to see what's outdated.)`,
+        ),
+      );
+    } else {
+      printHuman(log.success(`All ${manifest.displayName} packages are up-to-date!`));
+    }
+  }
+  await finishMutation(deps, plugin, {
+    mode: 'update',
+    refs,
+    before: plan.statuses,
+    subtype,
+    dryRun,
+    showJson,
+  });
+}
+
 /**
  * Build a plugin's whole command tree from its manifest: only the verbs it
  * advertises, with the flags each accepts.
@@ -297,49 +499,12 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           Boolean(args.cask) ||
           Boolean(args.formula);
         const subtype = userSpecifiedSubtype ? resolved.subtype : undefined;
-        const showJson = Boolean(args.json);
-        const onlyOutdated = Boolean(args['only-outdated']);
-
-        const { deps: spinnerDeps, printHuman } = routeOutput(deps, showJson);
-
-        // Tracked scoping, the fell-back verdict, and the plugin's warnings
-        // all come back as data from the operation (#141). ConfigStore.load()
-        // handles "no file" by starting with an empty doc, so anything the
-        // store throws here is a real error (invalid YAML, permission denied)
-        // and propagates rather than silently dropping the user into "show
-        // all" mode.
-        const result = await withSpinner(
-          spinnerDeps,
-          `Fetching ${manifest.displayName} packages…`,
-          () =>
-            listPackages(plugin, makeCtx(deps), deps.getStore, {
-              subtype,
-              onlyOutdated,
-              showAll: Boolean(args.all),
-            }),
-        );
-
-        if (result.fellBackToAll) {
-          // Advice for a human, not part of the payload.
-          printHuman(
-            log.warning(
-              `No tracked packages. Showing all installed. Track with: macup ${manifest.id} track <name...>`,
-            ),
-          );
-        }
-
-        if (showJson) {
-          // On a query failure, emit an object with an `error` field instead
-          // of a bare array, so a consumer can tell "errored" from "empty"
-          // (#51). The success path keeps the documented PackageStatus[] shape.
-          const payload =
-            result.warnings.length > 0
-              ? { error: result.warnings.join('; '), packages: result.statuses }
-              : result.statuses;
-          console.log(JSON.stringify(payload, null, 2));
-        } else {
-          log.print(renderList(manifest.displayName, result.statuses, onlyOutdated));
-        }
+        await runList(plugin, deps, {
+          subtype,
+          onlyOutdated: Boolean(args['only-outdated']),
+          showAll: Boolean(args.all),
+          showJson: Boolean(args.json),
+        });
       },
     });
   }
@@ -363,45 +528,15 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           description: 'Emit the end-of-run report as JSON instead of text.',
         },
       },
-      /**
-       * @throws whatever `check()`, `list()` or the store raised: an
-       * unavailable backend still aborts the command before any ref is
-       * attempted (ADR 0052 rule 5). A ref's own `install()` failure is
-       * caught and reported rather than thrown, unless the run was cancelled
-       * (`deps.signal`) or is a dry run, when {@link finishMutation} rethrows
-       * it: Ctrl-C ends the run, and no report would carry the failure.
-       */
+      /** @throws see {@link runInstall}. */
       async run({ args, rawArgs }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
-        const subtype = resolved.subtype;
-        const dryRun = Boolean(args['dry-run']);
-        const showJson = Boolean(args.json);
-        const { printHuman } = routeOutput(deps, showJson);
-
-        // Availability first, before the applist is read or a snapshot taken,
-        // so an unavailable backend fails outright exactly as it did before
-        // the report existed (ADR 0052 rule 5). The snapshots the tail takes
-        // run `check()` again inside the probe; it is a PATH lookup, so the
-        // repeat costs nothing and keeps both probes the shape `update` uses.
-        await plugin.check(makeCtx(deps));
-        const names = rawArgs.filter((a) => !a.startsWith('-'));
-        // The explicit names, or the tracked set under the subtype's key; a
-        // plugin with no applist (system, xcode) installs explicit names only,
-        // so an argless invocation has nothing to do and no key to point at.
-        const plan = await planInstall(plugin, deps.getStore, { subtype, names });
-        if (plan.emptyKey !== undefined) {
-          printHuman(log.info(`No packages tracked in ${plan.emptyKey}.`));
-          printHuman(
-            log.trace(`macup ${manifest.id} track ${subtypeCliFlag(manifest, subtype)}<name>`),
-          );
-        }
-        await finishMutation(deps, plugin, {
-          mode: 'install',
-          refs: plan.refs,
-          subtype,
-          dryRun,
-          showJson,
+        await runInstall(plugin, deps, {
+          subtype: resolved.subtype,
+          names: rawArgs.filter((a) => !a.startsWith('-')),
+          dryRun: Boolean(args['dry-run']),
+          showJson: Boolean(args.json),
         });
       },
     });
@@ -430,84 +565,16 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
           description: 'Emit the end-of-run report as JSON instead of text.',
         },
       },
-      /**
-       * @throws whatever `check()`, `list()` or the store raised: an
-       * unavailable backend still aborts the command before any ref is
-       * attempted (ADR 0052 rule 5). A ref's own `update()` failure is caught
-       * and reported rather than thrown, unless the run was cancelled
-       * (`deps.signal`) or is a dry run, when {@link finishMutation} rethrows
-       * it: Ctrl-C ends the run, and no report would carry the failure.
-       */
+      /** @throws see {@link runUpdate}. */
       async run({ args, rawArgs }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
-        const subtype = resolved.subtype;
-        const kind = kindForSubtype(manifest, subtype);
-        const dryRun = Boolean(args['dry-run']);
-        const showJson = Boolean(args.json);
-        const { deps: spinnerDeps, printHuman } = routeOutput(deps, showJson);
-
-        // The outdated listing, the pin/skip selection over it, and the
-        // scoping to explicit names or the tracked set all come back as data
-        // from the operation (#142). ConfigStore.load() returns an empty doc
-        // on ENOENT, so the "no config yet" case flows through with empty
-        // pin/skip sets and no filtering. Anything the store throws (invalid
-        // YAML, permission denied) is a real error and propagates, so the
-        // user finds out their pins aren't honored rather than silently
-        // upgrading across them.
-        const explicitNames = rawArgs.filter((a) => !a.startsWith('-'));
-        const plan = await withSpinner(
-          spinnerDeps,
-          `Checking ${manifest.displayName} for outdated packages…`,
-          () =>
-            planUpdate(plugin, makeCtx(deps), deps.getStore, {
-              subtype,
-              names: explicitNames,
-              showAll: Boolean(args.all),
-            }),
-        );
-        // Unenforceable pins still upgrade (ADR 0023 stays permissive), but we
-        // say so first instead of applying them silently (ADR 0034).
-        if (plan.pinnedBlocked.length > 0) {
-          printHuman(
-            `Pinned (skipping): ${plan.pinnedBlocked.map((s) => `${s.ref.name}@${s.pinnedAt}`).join(', ')}`,
-          );
-        }
-        if (plan.pinUnenforceable.length > 0) {
-          printHuman(
-            `Pin not enforceable (upgrading anyway): ${plan.pinUnenforceable
-              .map((s) => `${s.ref.name}@${s.pinnedAt}`)
-              .join(', ')}`,
-          );
-        }
-        if (plan.skipped.length > 0) {
-          printHuman(`Skipped: ${plan.skipped.map((s) => s.ref.name).join(', ')}`);
-        }
-
-        // Carry the whole plugin-reported ref (id included) — appstore
-        // mutations resolve by Adam ID / bundle ID, and a name-only ref
-        // makes `mas upgrade` fail on any app whose name isn't its ID. The
-        // kind is pinned to the verb's subtype here, as this verb always
-        // did; the plan carries the plugin's own.
-        const refs: PackageRef[] = plan.refs.map((ref) => ({ ...ref, kind }));
-        if (refs.length === 0) {
-          if (explicitNames.length > 0) {
-            printHuman(
-              log.info(
-                `No matching outdated packages for: ${plan.unmatched.join(', ')}. (Use \`${manifest.id} list --only-outdated\` to see what's outdated.)`,
-              ),
-            );
-          } else {
-            printHuman(log.success(`All ${manifest.displayName} packages are up-to-date!`));
-          }
-        }
-        await finishMutation(deps, plugin, {
-          mode: 'update',
-          refs,
-          before: plan.statuses,
-          subtype,
-          dryRun,
-          showJson,
+        await runUpdate(plugin, deps, {
+          subtype: resolved.subtype,
+          names: rawArgs.filter((a) => !a.startsWith('-')),
+          showAll: Boolean(args.all),
+          dryRun: Boolean(args['dry-run']),
+          showJson: Boolean(args.json),
         });
       },
     });

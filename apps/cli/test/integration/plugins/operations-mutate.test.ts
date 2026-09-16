@@ -16,7 +16,7 @@ import systemPlugin from '../../../plugins/system';
 import { ConfigStore } from '../../../src/config/store';
 import { ErrMutateFailed, ErrPluginUnavailable } from '../../../src/errors';
 import { FixtureExecRunner, loadFixtures } from '../../../src/exec/fixtures';
-import { applyRefs, planInstall, planUpdate } from '../../../src/plugins/operations';
+import { applyRefs, planInstall, planUpdate, selectUpdate } from '../../../src/plugins/operations';
 import type {
   Logger,
   PackageRef,
@@ -236,6 +236,19 @@ describe('planUpdate', () => {
     const plan = await planUpdate(plugin, ctx, async () => store, {});
     expect(refNames(plan.refs)).toEqual(['behind']);
     expect(names(plan.uncheckable)).toEqual(['mystery']);
+  });
+
+  it('carries the plugin’s own ref through, id included, so an appstore ref keeps its Adam ID (#73)', async () => {
+    const store = await storeFrom('npm: []\n');
+    const status: PackageStatus = {
+      ref: { kind: 'npm', name: 'Color Picker', id: '1545870783' },
+      installed: true,
+      installedVersion: '2.1.4',
+      latestVersion: '2.2.2',
+      updateStatus: 'outdated',
+    };
+    const plan = selectUpdate(npmPlugin, [status], store, { showAll: true });
+    expect(plan.refs).toEqual([{ kind: 'npm', name: 'Color Picker', id: '1545870783' }]);
   });
 
   it('stays system-wide for a plugin with no applist keys', async () => {

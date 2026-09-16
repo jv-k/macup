@@ -29,7 +29,7 @@ apps/cli/test/
 │   ├── plugins/     # registry, selection, conformance
 │   └── ui/          # logo, status-bar, wrap-text, terminal-caps
 ├── integration/     # multi-module flows (still hermetic)
-│   ├── commands/    # cleanup, config, dry-run, restore, update-positionals
+│   ├── commands/    # cleanup, config, restore, the verbs' flag plumbing and rendering, the wizard's dispatch
 │   ├── config/      # backup, store
 │   ├── exec/        # PTY streaming
 │   ├── plugins/     # one file per built-in plugin, driven by recordings

@@ -15,7 +15,7 @@
 - apps/cli/src/plugins/types.ts (`MutateOptions`)
 - apps/cli/plugins/brew.ts, npm.ts, pnpm.ts, appstore.ts, xcode.ts, system.ts (per-plugin `[dry-run]` guards)
 - apps/cli/src/commands/from-manifest.ts (flag plumbing)
-- apps/cli/test/integration/commands/dry-run.test.ts
+- apps/cli/test/integration/commands/verb-plumbing.test.ts (the flag reaches the operation), apps/cli/test/integration/plugins/operations-mutate.test.ts (the operation runs nothing)
 
 ## Out of scope
 

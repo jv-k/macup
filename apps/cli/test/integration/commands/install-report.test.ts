@@ -1,11 +1,17 @@
-// Single-plugin `install` continues past a failed ref, tells a package that
-// was already on the machine from one this run put there, and ends with the
-// report (#163, ADR 0052). The stateful fake plugin it drives lives in
-// test/fixtures/fake-plugin.ts.
+// How single-plugin `install` renders what the operations return (#163, #144,
+// ADR 0052, ADR 0054): one case per distinct output shape. The behaviour
+// behind each shape (continue past a failed ref, the bounded failure message,
+// the abort, the health check, the tracked read) is proven at the operations
+// in test/integration/plugins/operations-mutate.test.ts, and the report's
+// classification in test/unit/commands/mutation-report.test.ts; what these
+// cases own is that the verb puts those results on the right stream in the
+// right shape. The stateful fake plugin lives in test/fixtures/fake-plugin.ts
+// and the applist is a real one on disk.
 
 import { runCommand } from 'citty';
 import { type Mock, describe, expect, it } from 'vitest';
 import { ErrPluginUnavailable } from '../../../src/errors';
+import { tempApplist } from '../../fixtures/applist';
 import {
   attemptedNames,
   captureConsole,
@@ -14,106 +20,40 @@ import {
   mutateFailure,
 } from '../../fixtures/fake-plugin';
 
-describe('install continues past a failed ref and reports (#163)', () => {
+describe('install renders the report (#163)', () => {
+  const applist = tempApplist();
   const io = captureConsole();
 
-  it('attempts every ref when one throws ErrMutateFailed, names each in the report, and exits 1', async () => {
+  it('text: every ref with its outcome, the backend message under a failure, the totals, and exit 1', async () => {
+    // alpha was on the machine before the run, so the full listing taken
+    // before the batch tells it from beta, which this run put there; gamma
+    // fails and the batch carries on past it.
     const plugin = fakePlugin({
       verb: 'install',
-      failWith: { beta: mutateFailure('beta: no bottle available') },
+      installed: ['alpha'],
+      failWith: { gamma: mutateFailure('gamma: no bottle available') },
     });
-    await runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta', 'gamma'] });
+    await runCommand(commandFor(plugin, applist), { rawArgs: ['alpha', 'beta', 'gamma'] });
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta', 'gamma']);
     const out = io.stdout();
-    expect(out).toMatch(/alpha\s+installed/);
-    expect(out).toMatch(/beta\s+failed/);
-    expect(out).toContain('beta: no bottle available');
-    expect(out).toMatch(/gamma\s+installed/);
-    expect(out).toContain('2 installed, 1 failed');
-    expect(process.exitCode).toBe(1);
-  });
-
-  it('reports a package that was on the machine before the run as already present, not installed', async () => {
-    const plugin = fakePlugin({ verb: 'install', installed: ['alpha'] });
-    await runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta'] });
-
-    // The backend is still asked, as before; the report is what changed.
-    expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
-    const out = io.stdout();
     expect(out).toMatch(/alpha\s+already present/);
-    expect(out).not.toMatch(/alpha\s+installed/);
     expect(out).toMatch(/beta\s+installed/);
-    expect(out).toContain('1 installed, 1 already present');
-    expect(process.exitCode).toBe(io.savedExitCode);
-  });
-
-  it('takes both snapshots as full listings, never onlyOutdated, and after the loop for the second', async () => {
-    const plugin = fakePlugin({ verb: 'install', installed: ['alpha'] });
-    await runCommand(commandFor(plugin), { rawArgs: ['beta'] });
-
-    const listCalls = (plugin.list as Mock).mock.calls;
-    expect(listCalls).toHaveLength(2);
-    for (const call of listCalls) expect(call[1]?.onlyOutdated).toBeFalsy();
-    const order = (plugin.list as Mock).mock.invocationCallOrder;
-    const installOrder = (plugin.install as Mock).mock.invocationCallOrder;
-    expect(order[0]).toBeLessThan(installOrder[0] as number);
-    expect(order[1]).toBeGreaterThan(installOrder[0] as number);
-  });
-
-  it('prints the report on a fully successful run and leaves the exit code alone', async () => {
-    const plugin = fakePlugin({ verb: 'install' });
-    await runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta'] });
-
-    expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
-    const out = io.stdout();
-    expect(out).toMatch(/alpha\s+installed/);
-    expect(out).toMatch(/beta\s+installed/);
-    expect(out).toContain('2 installed');
-    expect(out).not.toContain('failed');
-    expect(process.exitCode).toBe(io.savedExitCode);
-  });
-
-  it('installs the tracked applist when no package is named', async () => {
-    const plugin = fakePlugin({ verb: 'install' });
-    await runCommand(commandFor(plugin, { tracked: ['alpha', 'beta'] }), { rawArgs: [] });
-
-    expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
-    expect(io.stdout()).toContain('2 installed');
-  });
-
-  it('treats a bare Error as one failure for that ref, with its message as the detail', async () => {
-    const plugin = fakePlugin({
-      verb: 'install',
-      failWith: { alpha: () => new Error('registry refused the install') },
-    });
-    await runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta'] });
-
-    expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
-    const out = io.stdout();
-    expect(out).toMatch(/alpha\s+failed/);
-    expect(out).toContain('registry refused the install');
-    expect(out).toMatch(/beta\s+installed/);
+    expect(out).toMatch(/gamma\s+failed/);
+    expect(out).toContain('gamma: no bottle available');
+    expect(out).toContain('1 installed, 1 already present, 1 failed');
     expect(process.exitCode).toBe(1);
   });
 
-  it('bounds a bare Error message the way mutateRefs bounds subprocess output', async () => {
-    const long = 'x'.repeat(500);
-    const plugin = fakePlugin({ verb: 'install', failWith: { alpha: () => new Error(long) } });
-    await runCommand(commandFor(plugin), { rawArgs: ['alpha'] });
-
-    const out = io.stdout();
-    expect(out).not.toContain(long);
-    expect(out).toMatch(/x{200}… \(\+300 chars\)/);
-  });
-
-  it('--json puts exactly one report document on stdout and the human lines on stderr', async () => {
+  it('--json: exactly one report document on stdout and the human lines on stderr', async () => {
     const plugin = fakePlugin({
       verb: 'install',
       installed: ['alpha'],
       failWith: { gamma: mutateFailure('npm ERR! code EACCES') },
     });
-    await runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta', 'gamma', '--json'] });
+    await runCommand(commandFor(plugin, applist), {
+      rawArgs: ['alpha', 'beta', 'gamma', '--json'],
+    });
 
     expect(io.log).toHaveBeenCalledTimes(1);
     const report = JSON.parse(io.log.mock.calls[0]?.[0] as string);
@@ -139,9 +79,9 @@ describe('install continues past a failed ref and reports (#163)', () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it('--json prints the empty report when nothing is tracked, so stdout is still a document', async () => {
+  it('--json with nothing tracked: the empty report, so stdout is still a document', async () => {
     const plugin = fakePlugin({ verb: 'install' });
-    await runCommand(commandFor(plugin), { rawArgs: ['--json'] });
+    await runCommand(commandFor(plugin, applist), { rawArgs: ['--json'] });
 
     expect(plugin.install).not.toHaveBeenCalled();
     expect(plugin.list).not.toHaveBeenCalled();
@@ -157,67 +97,33 @@ describe('install continues past a failed ref and reports (#163)', () => {
     expect(process.exitCode).toBe(io.savedExitCode);
   });
 
-  it('keeps the text hint and prints no report when nothing is tracked', async () => {
+  it('text with nothing tracked: the hint that names the key, and no report', async () => {
     const plugin = fakePlugin({ verb: 'install' });
-    await runCommand(commandFor(plugin), { rawArgs: [] });
+    await runCommand(commandFor(plugin, applist), { rawArgs: [] });
 
     expect(plugin.list).not.toHaveBeenCalled();
     expect(io.stdout()).toContain('No packages tracked in npm.');
+    expect(io.stdout()).toContain('macup fake track <name>');
     expect(io.stdout()).not.toContain('Nothing to install');
     expect(process.exitCode).toBe(io.savedExitCode);
   });
 
-  it('stops after a failure once the signal is aborted, so Ctrl-C still ends the run', async () => {
-    const controller = new AbortController();
-    const boom = new Error('interrupted');
-    const plugin = fakePlugin({
-      verb: 'install',
-      failWith: {
-        beta: () => {
-          controller.abort();
-          return boom;
-        },
-      },
-    });
-    await expect(
-      runCommand(commandFor(plugin, { signal: controller.signal }), {
-        rawArgs: ['alpha', 'beta', 'gamma'],
-      }),
-    ).rejects.toBe(boom);
-
-    expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
-    expect(io.stdout()).not.toMatch(/gamma\s+(installed|failed)/);
-  });
-
-  it('--dry-run takes no snapshot and prints no report, and exits 0', async () => {
+  it('--dry-run: no snapshot, no report, and exit 0', async () => {
     const plugin = fakePlugin({ verb: 'install' });
     // A dry run mutates nothing: the fake keeps listing neither ref, which
     // the report would otherwise have to guess at.
     (plugin.install as Mock).mockImplementation(async () => {});
-    await runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta', '--dry-run'] });
+    await runCommand(commandFor(plugin, applist), { rawArgs: ['alpha', 'beta', '--dry-run'] });
 
     expect(attemptedNames(plugin)).toEqual(['alpha', 'beta']);
-    expect((plugin.install as Mock).mock.calls[0]?.[2]).toEqual({
-      dryRun: true,
-    });
     expect(plugin.list).not.toHaveBeenCalled();
     expect(io.stdout()).not.toMatch(/alpha\s+(installed|failed)/);
     expect(process.exitCode).toBe(io.savedExitCode);
   });
 
-  it('--dry-run rethrows an install() failure, since no report would carry it', async () => {
-    const boom = new Error('plugin bug under dry-run');
-    const plugin = fakePlugin({ verb: 'install', failWith: { alpha: () => boom } });
-    await expect(
-      runCommand(commandFor(plugin), { rawArgs: ['alpha', 'beta', '--dry-run'] }),
-    ).rejects.toBe(boom);
-
-    expect(attemptedNames(plugin)).toEqual(['alpha']);
-    expect(io.stdout()).not.toMatch(/alpha\s+(installed|failed)/);
-    expect(process.exitCode).toBe(io.savedExitCode);
-  });
-
-  it('still fails outright when the one backend is unavailable, before any ref is attempted', async () => {
+  it('unavailable backend: throws before any ref is attempted, and prints nothing', async () => {
+    // The verb's own `check()` call, ahead of the plan (ADR 0052 rule 5):
+    // `planInstall` asks no backend anything, so this guard is the command's.
     const unavailable = new ErrPluginUnavailable('fake', 'fake not on PATH');
     const plugin = fakePlugin({
       verb: 'install',
@@ -225,7 +131,9 @@ describe('install continues past a failed ref and reports (#163)', () => {
         throw unavailable;
       },
     });
-    await expect(runCommand(commandFor(plugin), { rawArgs: ['alpha'] })).rejects.toBe(unavailable);
+    await expect(runCommand(commandFor(plugin, applist), { rawArgs: ['alpha'] })).rejects.toBe(
+      unavailable,
+    );
 
     expect(plugin.install).not.toHaveBeenCalled();
     expect(plugin.list).not.toHaveBeenCalled();

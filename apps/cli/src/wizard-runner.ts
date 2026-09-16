@@ -2,8 +2,11 @@
  * Concrete TTY-side wiring for the interactive wizard. Imports the
  * abstract picker primitives from ./wizard (pickTarget, pickAction) and
  * supplies the clack callbacks, the package-loading IO, the
- * configstore-backed sync-tracked apply, and the dispatch back into
- * citty's per-plugin subcommand for the chosen action.
+ * configstore-backed sync-tracked apply, and the dispatch of the chosen
+ * action to the same verb the command tree runs (`commands/from-manifest.ts`),
+ * called directly with the target's plugin, subtype and picked names. It used
+ * to synthesise a command line and have citty parse it back (#144); a renamed
+ * flag could break the wizard and nothing would say so.
  *
  * runWizard() is the default-action body that used to be inlined inside
  * cli.ts's main.run(). Extracting it lets cli.ts shrink to a thin entry
@@ -16,8 +19,8 @@
  */
 
 import { isCancel, note, select, text } from '@clack/prompts';
-import { type CommandDef, runCommand } from 'citty';
 import type { CliDeps } from './cli/types';
+import { runInstall, runList, runUpdate } from './commands/from-manifest';
 import { withSpinner } from './commands/spinner';
 import { trackedKeys, trackedNames } from './plugins/operations';
 import { probe } from './plugins/probe';
@@ -351,6 +354,74 @@ async function pickTargetSafely(wizardDeps: TargetDeps): Promise<Target | null> 
   }
 }
 
+/** A dispatched action: the target, the verb, and the names the user picked. */
+export type DispatchedAction = Extract<ActionResult, { kind: 'dispatch' }>;
+
+// The verb for a dispatched action, called with the target's subtype and the
+// picked names. `list` takes no names, and a picked subtype narrows it to
+// that subtype as `--subtype` did; none of the flags (`--all`, `--dry-run`,
+// `--json`) are the wizard's to set.
+function runVerb(plugin: Plugin, deps: CliDeps, action: DispatchedAction): Promise<void> {
+  const { subtype } = action.target;
+  const names = action.packages;
+  switch (action.command) {
+    case 'list':
+      return runList(plugin, deps, { subtype });
+    case 'install':
+      return runInstall(plugin, deps, { subtype, names });
+    case 'update':
+      return runUpdate(plugin, deps, { subtype, names });
+  }
+}
+
+/**
+ * Run one dispatched action: the verb the user picked, called directly with
+ * the target's plugin, subtype and picked names (#144). Echoes the equivalent
+ * command line first, so the user learns the direct form. A failure is
+ * reported inline and the exit code it set is cleared afterwards, so one
+ * unavailable backend costs the user one action, not the session, and a
+ * failure cannot poison the next action's exit code.
+ */
+export async function dispatchAction(action: DispatchedAction, deps: CliDeps): Promise<void> {
+  const { target, command, packages } = action;
+  const subtypeFrag = target.subtype ? ` --subtype=${target.subtype}` : '';
+  const pkgFrag = packages?.length
+    ? ` ${packages.map((p) => (p.includes(' ') ? `'${p}'` : p)).join(' ')}`
+    : '';
+  const label = `${target.pluginId} ${command}${subtypeFrag}${pkgFrag}`;
+  const styledLabel = logui.paint(deps.color).bold(label);
+  logui.print(`\n${logui.badge('macup', deps.color)} ${styledLabel}`);
+
+  const plugin = deps.registry.find((p) => p.manifest.id === target.pluginId);
+  if (!plugin) {
+    logui.printErr(`error: plugin "${target.pluginId}" is not available`);
+    return;
+  }
+  try {
+    await runVerb(plugin, deps, action);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Indent + dim the failure block so it visually sits under the
+    // spinner's `◇  N/M Updating <pkg>` line rather than barging out
+    // at column 0. First line gets a dim ↳ arrow at the
+    // command-content column; continuation lines (e.g. multi-line
+    // stderr from brew's xcrun + Warning + Error blocks) sit one
+    // indent deeper.
+    const c = logui.paint(deps.color);
+    const dim = c.dim;
+    const arrow = c.dim('↳');
+    const lines = msg.split('\n');
+    const head = lines[0] ?? msg;
+    logui.printErr(`  ${arrow} ${dim(`${target.pluginId} ${command} failed: ${head}`)}`);
+    for (const line of lines.slice(1)) {
+      logui.printErr(`    ${dim(line)}`);
+    }
+  }
+  // Reset exit code between submenu actions so a previous failure
+  // doesn't poison the next iteration.
+  if (process.exitCode && process.exitCode !== 0) process.exitCode = 0;
+}
+
 /**
  * The interactive session bare `macup` opens: pick a target, pick an action,
  * dispatch, repeat.
@@ -359,10 +430,7 @@ async function pickTargetSafely(wizardDeps: TargetDeps): Promise<Target | null> 
  * unavailable backend does not end the session. On a non-TTY it prints the logo
  * and a hint instead of prompting (`docs/CODING_STANDARDS.md`).
  */
-export async function runWizard(
-  deps: CliDeps,
-  pluginSubCommands: Record<string, CommandDef>,
-): Promise<void> {
+export async function runWizard(deps: CliDeps): Promise<void> {
   // Non-TTY: print a hint and bail. The wizard needs interactive input;
   // logging a hint to a pipe is friendlier than crashing on the first
   // clack prompt.
@@ -388,16 +456,13 @@ export async function runWizard(
   // Direct invocations never set this — their output stays flat.
   logui.setFrame(true);
   try {
-    await wizardLoop(deps, pluginSubCommands);
+    await wizardLoop(deps);
   } finally {
     logui.setFrame(false);
   }
 }
 
-async function wizardLoop(
-  deps: CliDeps,
-  pluginSubCommands: Record<string, CommandDef>,
-): Promise<void> {
+async function wizardLoop(deps: CliDeps): Promise<void> {
   // Two-level loop:
   //   outer: pickTarget → choose category (or Esc to exit)
   //   inner: pickAction → choose action, execute, repeat (Esc → outer)
@@ -528,48 +593,7 @@ async function wizardLoop(
         continue; // stay in submenu
       }
 
-      // kind === 'dispatch'
-      const wizArgs: string[] = [result.command];
-      if (result.target.subtype) wizArgs.push(`--subtype=${result.target.subtype}`);
-      if (result.packages) wizArgs.push(...result.packages);
-      const subtypeFrag = result.target.subtype ? ` --subtype=${result.target.subtype}` : '';
-      const pkgFrag = result.packages?.length
-        ? ` ${result.packages.map((p) => (p.includes(' ') ? `'${p}'` : p)).join(' ')}`
-        : '';
-      const label = `${result.target.pluginId} ${result.command}${subtypeFrag}${pkgFrag}`;
-      const styledLabel = logui.paint(deps.color).bold(label);
-      logui.print(`\n${logui.badge('macup', deps.color)} ${styledLabel}`);
-
-      const cmd = pluginSubCommands[result.target.pluginId];
-      if (!cmd) {
-        logui.printErr(`error: plugin "${result.target.pluginId}" is not available`);
-        continue;
-      }
-      try {
-        await runCommand(cmd, { rawArgs: wizArgs });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        // Indent + dim the failure block so it visually sits under the
-        // spinner's `◇  N/M Updating <pkg>` line rather than barging out
-        // at column 0. First line gets a dim ↳ arrow at the
-        // command-content column; continuation lines (e.g. multi-line
-        // stderr from brew's xcrun + Warning + Error blocks) sit one
-        // indent deeper.
-        const c = logui.paint(deps.color);
-        const dim = c.dim;
-        const arrow = c.dim('↳');
-        const lines = msg.split('\n');
-        const head = lines[0] ?? msg;
-        logui.printErr(
-          `  ${arrow} ${dim(`${result.target.pluginId} ${result.command} failed: ${head}`)}`,
-        );
-        for (const line of lines.slice(1)) {
-          logui.printErr(`    ${dim(line)}`);
-        }
-      }
-      // Reset exit code between submenu actions so a previous failure
-      // doesn't poison the next iteration.
-      if (process.exitCode && process.exitCode !== 0) process.exitCode = 0;
+      await dispatchAction(result, deps);
     }
   }
 }

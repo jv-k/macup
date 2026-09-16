@@ -1,23 +1,31 @@
-// The fake single-verb plugin the install-report and update-report suites
-// drive `commandsFromManifest` with (#162, #163, ADR 0052). Pulled out during
-// #163's review (#189): install-report.test.ts had copied its scaffold from
-// update-report.test.ts, and the two copies were one edit away from drifting.
+// The fake plugins the command-level suites drive `commandsFromManifest` and
+// the wizard's dispatch with (#162, #163, #144, ADR 0052, ADR 0054). Pulled
+// out during #163's review (#189): install-report.test.ts had copied its
+// scaffold from update-report.test.ts, and the two copies were one edit away
+// from drifting.
 //
-// The fake is stateful on purpose. A real backend's listing changes under a
-// mutation, so the before and after snapshots the host reconciles against
+// `fakePlugin` is stateful on purpose. A real backend's listing changes under
+// a mutation, so the before and after snapshots the host reconciles against
 // must differ by exactly what the verb managed to do. The two verbs model
 // that differently: `install()` fills an installed set that a full `list()`
 // enumerates, while `update()` drains an outdated set that an `onlyOutdated`
 // listing filters on. Everything else (the manifest, the deps block, the
 // console capture, the failure helper) is the same for both.
+//
+// `fakeSubtypedPlugin` carries both verbs and two subtypes, for the suites
+// that prove a subtype reaches the operation: it is observable as the kind on
+// each ref and as the `subtype` the listing is asked for.
+//
+// The deps block opens a real applist on disk (`test/fixtures/applist.ts`),
+// never a hand-built object cast to ConfigStore (#144).
 
 import type { CommandDef, SubCommandsDef } from 'citty';
 import { type Mock, type MockInstance, afterEach, beforeEach, vi } from 'vitest';
 import { type CommandDeps, commandsFromManifest } from '../../src/commands/from-manifest';
-import type { ConfigStore } from '../../src/config/store';
 import { ErrMutateFailed } from '../../src/errors';
 import { FixtureExecRunner } from '../../src/exec/fixtures';
 import type { PackageRef, Plugin, PluginManifest } from '../../src/plugins/types';
+import type { TempApplist } from './applist';
 
 /** The two mutating verbs the fake can carry, one per plugin. */
 export type FakeVerb = 'install' | 'update';
@@ -117,41 +125,96 @@ export function fakePlugin(opts: FakePluginOptions): Plugin {
   };
 }
 
+/** What {@link fakeSubtypedPlugin} takes. */
+export interface FakeSubtypedOptions {
+  /** Names the listing reports outdated, under whichever subtype it is asked for. */
+  readonly outdated?: readonly string[];
+  /** Makes `check()` throw, for the unavailable-backend case. */
+  readonly check?: () => Promise<void>;
+}
+
+/**
+ * A plugin with two subtypes and both mutating verbs, all three spies. Its
+ * listing reports every `outdated` name behind, with the kind of the subtype
+ * asked for, and `update()` drains the set. The applist keys are brew's
+ * because the schema knows no others.
+ */
+export function fakeSubtypedPlugin(opts: FakeSubtypedOptions = {}): Plugin {
+  const outdated = new Set(opts.outdated ?? []);
+  return {
+    manifest: {
+      id: 'fake',
+      displayName: 'Fake',
+      supportedOS: ['darwin'],
+      requires: [],
+      configKeys: ['brew.formulas', 'brew.casks'],
+      subtypes: [
+        { id: 'formulas', kind: 'formula', configKey: 'brew.formulas', flag: 'formula' },
+        { id: 'casks', kind: 'cask', configKey: 'brew.casks', flag: 'cask' },
+      ],
+      capabilities: {
+        list: true,
+        install: true,
+        update: true,
+        track: true,
+        untrack: true,
+        outdated: true,
+      },
+    } as PluginManifest,
+    check: opts.check ?? (async () => {}),
+    list: vi.fn(async (_ctx, listOpts) =>
+      [...outdated].map((name) => ({
+        ref: { kind: listOpts?.subtype === 'casks' ? 'cask' : 'formula', name },
+        installed: true,
+        installedVersion: '1.0.0',
+        latestVersion: '1.1.0',
+        updateStatus: 'outdated' as const,
+      })),
+    ),
+    install: vi.fn(async () => {}),
+    update: vi.fn(async (_ctx, refs: readonly PackageRef[]) => {
+      for (const ref of refs) outdated.delete(ref.name);
+    }),
+  };
+}
+
 /** What the generated command is handed besides the plugin. */
 export interface FakeCommandOptions {
-  /** What the applist tracks under the fake's config key; empty by default. */
-  readonly tracked?: readonly string[];
+  /** The applist's YAML; an empty file (nothing tracked anywhere) by default. */
+  readonly applist?: string;
   /** The run's cancellation signal; a fresh, never-aborted one by default. */
   readonly signal?: AbortSignal;
+  /** The subcommand to hand back; the fake's one mutating verb by default. */
+  readonly verb?: 'list' | FakeVerb;
 }
 
-function storeWith(tracked: readonly string[]): ConfigStore {
-  return {
-    list: () => tracked,
-    selectionFor: () => ({ pinned: new Map(), skipped: new Set() }),
-  } as unknown as ConfigStore;
-}
-
-/** The `commandsFromManifest` deps block: no subprocess, no logging, no status bar. */
-export function fakeDeps(opts: FakeCommandOptions = {}): CommandDeps {
+/**
+ * The `commandsFromManifest` deps block: no subprocess, no logging, no status
+ * bar, and the applist opened lazily on the sandbox `applist` registered.
+ */
+export function fakeDeps(applist: TempApplist, opts: FakeCommandOptions = {}): CommandDeps {
   return {
     exec: new FixtureExecRunner({ fixtures: [], onPath: ['fake'] }),
     log: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-    getStore: async () => storeWith(opts.tracked ?? []),
+    getStore: applist.open(opts.applist ?? ''),
     suppressBar: true,
     signal: opts.signal ?? new AbortController().signal,
   };
 }
 
-// The fake carries exactly one mutating verb, so the manifest names it.
+// The stateful fake carries exactly one mutating verb, so the manifest names it.
 function verbOf(plugin: Plugin): FakeVerb {
   return plugin.manifest.capabilities.install ? 'install' : 'update';
 }
 
 /** The generated subcommand for the fake's verb, ready for citty's `runCommand`. */
-export function commandFor(plugin: Plugin, opts?: FakeCommandOptions): CommandDef {
-  const cmd = commandsFromManifest(plugin, fakeDeps(opts));
-  return (cmd.subCommands as SubCommandsDef)[verbOf(plugin)] as CommandDef;
+export function commandFor(
+  plugin: Plugin,
+  applist: TempApplist,
+  opts: FakeCommandOptions = {},
+): CommandDef {
+  const cmd = commandsFromManifest(plugin, fakeDeps(applist, opts));
+  return (cmd.subCommands as SubCommandsDef)[opts.verb ?? verbOf(plugin)] as CommandDef;
 }
 
 /** The names the fake's verb was asked for, in order, one per call. */

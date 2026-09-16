@@ -20,22 +20,13 @@
  * @module
  */
 
-import { ErrMutateFailed, type MutateFailure } from '../errors';
-import { boundFailureText } from '../plugins/helpers';
-import { errorMessage } from '../plugins/probe';
-import type { PackageRef, PackageStatus, Plugin } from '../plugins/types';
+import type { MutateFailure } from '../errors';
+import type { MutateVerb } from '../plugins/operations';
+import type { PackageRef, PackageStatus } from '../plugins/types';
 import * as log from '../ui/log';
 
-/** Which mutating verb the report describes. */
-export type MutationMode = 'install' | 'update';
-
-/** The signature `install()` and `update()` share. */
-export type MutateFn = NonNullable<Plugin['install']>;
-
-/** The verb a mode runs on a plugin, or undefined where the plugin lacks it. */
-export function mutateFor(mode: MutationMode, plugin: Plugin): MutateFn | undefined {
-  return mode === 'update' ? plugin.update : plugin.install;
-}
+/** Which verb the report describes: the report's `mode` field is the verb that ran (`plugins/operations.ts`). */
+export type MutationMode = MutateVerb;
 
 /**
  * Install outcome (`CONTEXT.md`: `installed`, `already-present`, `failed`),
@@ -138,20 +129,6 @@ export interface UpdateReport {
 
 /** The whole report, shared by the exit-code predicate and both renderers so they cannot diverge. */
 export type MutationReport = InstallReport | UpdateReport;
-
-/**
- * What one ref's thrown `install()` or `update()` contributes to
- * {@link RanPlugin.failures}. An `ErrMutateFailed` already names its refs
- * with bounded messages, so it is taken as-is; anything else is one failure
- * for the ref that was being attempted, bounded the same way `mutateRefs`
- * bounds subprocess output, so the report carries one truncation rule
- * whichever path the error took. Shared by the single-plugin loop and the
- * composite fan-out so the two cannot bound differently.
- */
-export function failuresFor(ref: PackageRef, err: unknown): readonly MutateFailure[] {
-  if (err instanceof ErrMutateFailed) return err.failures;
-  return [{ ref, message: boundFailureText(errorMessage(err)) }];
-}
 
 // A formula and a cask sharing a name are different packages (ADR 0035), and
 // `kind` is what separates them in a ref, so the snapshot index keys on both.

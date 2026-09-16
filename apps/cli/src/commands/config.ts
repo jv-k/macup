@@ -10,7 +10,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { parse } from 'yaml';
-import { TOP_LEVEL_COMMANDS } from '../cli/commands';
+import { TOP_LEVEL_COMMANDS } from '../cli/surface';
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import type { PathResolution } from '../config/paths';
 import { ApplistSchema, SCHEMA_VERSION, formatApplistIssueLines } from '../config/schema';

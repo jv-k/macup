@@ -7,8 +7,8 @@
 
 import type { ArgsDef, CommandDef } from 'citty';
 import { describe, expect, it } from 'vitest';
-import { TOP_LEVEL_COMMANDS } from '../../../src/cli/commands';
 import { HELP_EXAMPLES, buildHelp } from '../../../src/cli/help';
+import { TOP_LEVEL_COMMANDS } from '../../../src/cli/surface';
 import type { CliDeps } from '../../../src/cli/types';
 import { COMPOSITE_DECLARATION, buildCompositeCommand } from '../../../src/commands/composite';
 import { commandsFromManifest } from '../../../src/commands/from-manifest';

@@ -7,13 +7,8 @@
  * @module
  */
 
+import { COMPLETABLE_COMMANDS, GLOBAL_FLAGS, nounFlags, pluginSurface } from '../cli/surface';
 import type { Plugin } from '../plugins/types';
-import {
-  TOP_LEVEL_COMMANDS,
-  TOP_LEVEL_COMMAND_FLAGS,
-  commandsFor,
-  flagsForCommand,
-} from './shared';
 
 /**
  * The fish completion script, generated from the plugin manifests so a new
@@ -29,20 +24,20 @@ export function generateFishCompletions(plugins: readonly Plugin[]): string {
     'complete -c macup -f',
     '',
     '# Global flags',
-    'complete -c macup -n "__fish_use_subcommand" -l help -d "Show help"',
-    'complete -c macup -n "__fish_use_subcommand" -l version -d "Show version"',
-    'complete -c macup -n "__fish_use_subcommand" -l verbose -d "Stream output to scrollback"',
-    'complete -c macup -n "__fish_use_subcommand" -l debug -d "Trace every shell call to stderr"',
-    // -r takes an argument, -F re-enables file completion for it (the file
-    // said `complete -c macup -f` at the top, which would otherwise suppress
-    // path completion for the applist too).
-    'complete -c macup -l applist -r -F -d "Use an alternate applist file"',
-    'complete -c macup -l log -r -F -d "Append a subprocess log to a file"',
+    // A path flag takes an argument (-r) and re-enables file completion for
+    // it (-F): the file said `complete -c macup -f` at the top, which would
+    // otherwise suppress path completion for the applist too. The modifiers
+    // are offered only in the subcommand position.
+    ...GLOBAL_FLAGS.map((f) =>
+      f.path
+        ? `complete -c macup -l ${f.name} -r -F -d "${f.description}"`
+        : `complete -c macup -n "__fish_use_subcommand" -l ${f.name} -d "${f.description}"`,
+    ),
     '',
     // Nouns, not flags (ADR 0029) — so they complete as subcommands,
     // in the same position as a plugin id.
     '# Stand-alone commands',
-    ...TOP_LEVEL_COMMANDS.map(
+    ...COMPLETABLE_COMMANDS.map(
       (c) =>
         `complete -c macup -n "__fish_use_subcommand" -a "${c.name}" -d "${c.description.replace(/"/g, '\\"')}"`,
     ),
@@ -53,14 +48,14 @@ export function generateFishCompletions(plugins: readonly Plugin[]): string {
   for (const plugin of plugins) {
     const { id, displayName } = plugin.manifest;
     lines.push(`complete -c macup -n "__fish_use_subcommand" -a "${id}" -d "${displayName}"`);
-    for (const cmd of commandsFor(plugin)) {
+    for (const verb of pluginSurface(plugin.manifest).verbs) {
       lines.push(
-        `complete -c macup -n "__fish_seen_subcommand_from ${id}" -a "${cmd}" -d "${cmd}"`,
+        `complete -c macup -n "__fish_seen_subcommand_from ${id}" -a "${verb.name}" -d "${verb.name}"`,
       );
-      for (const flag of flagsForCommand(plugin, cmd)) {
+      for (const { flag } of verb.flags.filter((f) => f.inCompletions)) {
         const name = flag.replace(/^--/, '');
         lines.push(
-          `complete -c macup -n "__fish_seen_subcommand_from ${id}; and __fish_seen_subcommand_from ${cmd}" -l ${name} -d "${flag}"`,
+          `complete -c macup -n "__fish_seen_subcommand_from ${id}; and __fish_seen_subcommand_from ${verb.name}" -l ${name} -d "${flag}"`,
         );
       }
     }
@@ -68,10 +63,10 @@ export function generateFishCompletions(plugins: readonly Plugin[]): string {
 
   lines.push('');
   lines.push('# Flags on the stand-alone commands');
-  for (const [name, flags] of Object.entries(TOP_LEVEL_COMMAND_FLAGS)) {
-    for (const flag of flags) {
+  for (const c of COMPLETABLE_COMMANDS) {
+    for (const { flag } of nounFlags(c)) {
       lines.push(
-        `complete -c macup -n "__fish_seen_subcommand_from ${name}" -l ${flag.replace(/^--/, '')} -d "${flag}"`,
+        `complete -c macup -n "__fish_seen_subcommand_from ${c.name}" -l ${flag.replace(/^--/, '')} -d "${flag}"`,
       );
     }
   }

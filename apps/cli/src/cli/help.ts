@@ -16,7 +16,7 @@ import { withComposite } from '../commands/composite';
 import * as logui from '../ui/log';
 import { page } from '../ui/pager';
 import { getVersion } from '../version';
-import { TOP_LEVEL_COMMANDS } from './commands';
+import { GLOBAL_FLAGS, TOP_LEVEL_COMMANDS, pluginSurface } from './surface';
 import type { CliDeps } from './types';
 
 /**
@@ -100,14 +100,14 @@ export function buildHelp(deps: CliDeps): string {
   // `deps.registry` holds only real backends (ADR 0033, ADR 0053); the
   // composite `all` is appended from its own declaration so it keeps
   // appearing here exactly as it did when it lived in the registry.
+  // The row names the verbs the manifest's capabilities admit; the config
+  // verbs (pin, unpin, skip, unskip) are the same for every tracking backend
+  // and get the PIN / SKIP section below instead.
   const pluginRows: logui.ColumnRow[] = withComposite(deps.registry).map((plugin) => {
     const m = plugin.manifest;
-    const cmds = [];
-    if (m.capabilities.list) cmds.push('list');
-    if (m.capabilities.install) cmds.push('install');
-    if (m.capabilities.update) cmds.push('update');
-    if (m.capabilities.track) cmds.push('track');
-    if (m.capabilities.untrack) cmds.push('untrack');
+    const cmds = pluginSurface(m)
+      .verbs.filter((v) => v.admittedBy === 'capability')
+      .map((v) => v.name);
     const subtypeHint =
       m.subtypes && m.subtypes.length > 1
         ? ` [--subtype=${m.subtypes.map((s) => s.id).join('|')}]`
@@ -147,14 +147,13 @@ export function buildHelp(deps: CliDeps): string {
   say(cols(pinRows));
   say('');
 
-  // Genuine global options.
+  // Genuine global options: the flags the surface gives help copy, which
+  // leaves out --help and --version since they end a run rather than modify it.
   say(logui.header('GLOBAL OPTIONS'));
-  const optionRows: logui.ColumnRow[] = [
-    { label: '--verbose, -V', desc: 'Stream user-facing output to scrollback' },
-    { label: '--debug, -D', desc: 'Trace every shell call to stderr (dev mode)' },
-    { label: '--applist <path>', desc: 'Read and write an alternate applist file' },
-    { label: '--log <path>', desc: 'Append a subprocess log to a file (JSON lines)' },
-  ];
+  const optionRows: logui.ColumnRow[] = GLOBAL_FLAGS.filter((f) => f.help).map((f) => ({
+    label: f.alias ? `--${f.name}, -${f.alias}` : `--${f.name} <path>`,
+    desc: f.help as string,
+  }));
   say(cols(optionRows, s.dim));
   say('');
 

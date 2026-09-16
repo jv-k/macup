@@ -11,6 +11,7 @@
  */
 
 import { release } from 'node:os';
+import { DOCTOR_ARGS } from '../cli/surface';
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import { BUILTIN_PLUGINS } from '../plugins/registry';
 import { getVersion } from '../version';
@@ -97,12 +98,17 @@ export class DoctorAction implements ActionCommand {
       description:
         'Run a self-diagnostic report: environment, config, plugin probes, data integrity, shell integration.',
     },
+    // The surface declares `--json` (#148), so `macup doctor` registers it
+    // and the shells and the reference list it; the run still reads argv
+    // below, as it did when `--doctor` was a root flag and registering
+    // `json` there would have shadowed the subcommands' own.
+    ...DOCTOR_ARGS,
   };
 
-  // `--json` is deliberately NOT a registered root arg. Registering it
-  // would shadow subcommand `--json` (e.g. `macup outdated --json`) and
-  // make bare `macup --json` a "known" flag that skips the unknown-flag
-  // guard and silently opens the wizard. Instead read it from argv here;
+  // Read from argv rather than the parsed bag: this predates ADR 0029, when
+  // `--doctor` was a root flag and a root `--json` would have shadowed
+  // subcommand `--json` (e.g. `macup outdated --json`) and made bare
+  // `macup --json` a "known" flag that skipped the unknown-flag guard.
   // citty accepts the unrecognised `--json` on the root command
   // permissively, and this action only runs when `--doctor` is present.
   run(args: ParsedArgs, deps: CliDeps): Promise<void> {

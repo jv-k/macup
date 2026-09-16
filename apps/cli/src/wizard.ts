@@ -7,6 +7,7 @@
  * @module
  */
 
+import { pluginSurface } from './cli/surface';
 import type { Plugin } from './plugins/types';
 
 /** What the user picked to act on: a plugin, and optionally one of its subtypes. */
@@ -182,17 +183,24 @@ const ACTION_LABELS: Record<WizardActionOption, string> = {
   install: 'Install tracked',
 };
 
+// Each action is offered iff the verb it dispatches to exists on the CLI
+// surface for this plugin (#148), so the wizard cannot offer what
+// `macup <plugin> <verb>` would reject. `outdated` is a capability with no
+// verb and `search` an operation signalled by method presence (ADR 0039), so
+// those two read the plugin directly.
 function actionsFor(plugin: Plugin): WizardActionOption[] {
-  const cap = plugin.manifest.capabilities;
+  const verbs = new Set(pluginSurface(plugin.manifest).verbs.map((v) => v.name));
   const hasConfigKey = plugin.manifest.configKeys.length > 0;
   const opts: WizardActionOption[] = [];
-  if (cap.list) opts.push('list');
-  if (cap.update) opts.push('update');
-  if (cap.track && cap.untrack && hasConfigKey) opts.push('sync-tracked');
+  if (verbs.has('list')) opts.push('list');
+  if (verbs.has('update')) opts.push('update');
+  if (verbs.has('track') && verbs.has('untrack') && hasConfigKey) opts.push('sync-tracked');
   // Search-add needs somewhere to record the pick and a backend to query.
-  if (cap.track && hasConfigKey && typeof plugin.search === 'function') opts.push('search-add');
-  if (cap.update && cap.outdated) opts.push('update-selected');
-  if (cap.install) opts.push('install');
+  if (verbs.has('track') && hasConfigKey && typeof plugin.search === 'function') {
+    opts.push('search-add');
+  }
+  if (verbs.has('update') && plugin.manifest.capabilities.outdated) opts.push('update-selected');
+  if (verbs.has('install')) opts.push('install');
   return opts;
 }
 

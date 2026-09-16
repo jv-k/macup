@@ -36,6 +36,7 @@ import {
 import { bootstrap } from './cli/bootstrap';
 import { withErrorBoundary } from './cli/error-boundary';
 import { printVersionSplash, showCustomHelp } from './cli/help';
+import { GLOBAL_FLAGS, SHELL_POSITIONAL } from './cli/surface';
 import type { ActionCommand } from './cli/types';
 import { buildCheckCommand } from './commands/check';
 import { CleanupAction } from './commands/cleanup';
@@ -50,7 +51,6 @@ import { LogoAction } from './commands/logo';
 import { buildOutdatedCommand } from './commands/outdated';
 import { PluginsAction } from './commands/plugins';
 import { RestoreAction } from './commands/restore';
-import { SUPPORTED_SHELLS } from './commands/shell';
 import { UndoAction } from './commands/undo';
 import { MacupError } from './errors';
 import { BUILTIN_PLUGINS } from './plugins/registry';
@@ -168,14 +168,7 @@ function subCommandFromAction(action: ActionCommand): CommandDef {
   const { [action.name]: _trigger, ...modifiers } = action.args;
 
   const args: ArgsDef = takesValue
-    ? {
-        ...(modifiers as ArgsDef),
-        shell: {
-          type: 'positional',
-          required: false,
-          description: `Shell to target: ${SUPPORTED_SHELLS.join(' | ')}. Omit to auto-detect from $SHELL.`,
-        },
-      }
+    ? { ...(modifiers as ArgsDef), shell: SHELL_POSITIONAL }
     : (modifiers as ArgsDef);
 
   return defineCommand({
@@ -243,24 +236,14 @@ for (const plugin of BUILTIN_PLUGINS) {
 // Known top-level flags, for rejecting unknown ones (A-1). citty is permissive
 // about unrecognised --flags on the root command, so we detect them ourselves
 // before falling through to the wizard. --help/--version are intercepted above;
-// verbosity flags are stripped from argv before citty. Every action now owns a
-// subcommand (ADR 0029), so this list is the whole top-level flag surface —
-// nothing is merged in from the actions any more.
-const KNOWN_TOP_LEVEL_FLAGS = new Set<string>([
-  '--help',
-  '-h',
-  '--version',
-  '-v',
-  '--verbose',
-  '-V',
-  '--debug',
-  '-D',
-  // Stripped from argv before citty, like the verbosity flags — listed so a
-  // future change that stops stripping them doesn't silently make them
-  // "unknown".
-  '--applist',
-  '--log',
-]);
+// the rest are stripped from argv before citty. Every action now owns a
+// subcommand (ADR 0029), so the surface's global flags are the whole top-level
+// flag surface — nothing is merged in from the actions. The stripped flags
+// stay listed so a change that stops stripping one doesn't silently make it
+// "unknown".
+const KNOWN_TOP_LEVEL_FLAGS = new Set<string>(
+  GLOBAL_FLAGS.flatMap((f) => [`--${f.name}`, ...(f.alias ? [`-${f.alias}`] : [])]),
+);
 
 const main = defineCommand({
   meta: {

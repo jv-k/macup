@@ -16,19 +16,9 @@
  */
 
 import { defineCommand } from 'citty';
+import { CHECK_ARGS } from '../cli/surface';
 import type { CliDeps } from '../cli/types';
 import { type OutdatedReport, buildOutdatedReport } from './outdated';
-
-/**
- * Arg defs live outside the factory so macup/meta can project them into
- * the generated reference without constructing CliDeps.
- */
-export const CHECK_ARGS = {
-  quiet: {
-    type: 'boolean',
-    description: 'Print nothing; communicate through the exit code only.',
-  },
-} as const;
 
 /** True when any plugin's check/list failed for a non-benign reason. */
 export function hasCheckFailure(report: OutdatedReport): boolean {

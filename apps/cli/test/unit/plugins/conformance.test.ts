@@ -8,6 +8,7 @@
 // contract → this catches it before the integration tests run.
 
 import { describe, expect, it } from 'vitest';
+import { reservedFlagNames } from '../../../src/cli/surface';
 import { ApplistKeySchema } from '../../../src/config/schema';
 import { ErrPluginUnavailable } from '../../../src/errors';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
@@ -134,23 +135,14 @@ describe('plugin conformance — every builtin obeys the contract', () => {
         });
 
         it('shortcut flags are unique within the plugin and never collide with a verb flag', () => {
-          // Verb flags a subtype command already carries (from-manifest.ts):
-          // --dry-run, --only-outdated, --all, --json, --subtype. `verbose`
-          // stays reserved for a different reason: the global stripper eats
-          // `--verbose` before citty parses, so a shortcut so named could
-          // never fire (#146).
-          const reservedVerbFlags = [
-            'dry-run',
-            'verbose',
-            'only-outdated',
-            'all',
-            'json',
-            'subtype',
-          ];
+          // The reserved names come from the surface (#148, #154): every flag
+          // a verb declares, `subtype`, and the global flags argv strips
+          // before citty parses, so a shortcut so named could never fire (#146).
+          const reserved = reservedFlagNames();
           const flags = subtypes.map((e) => e.flag).filter((f): f is string => f !== undefined);
           expect(new Set(flags).size).toBe(flags.length);
           for (const flag of flags) {
-            expect(reservedVerbFlags).not.toContain(flag);
+            expect(reserved.has(flag), flag).toBe(false);
           }
         });
       }

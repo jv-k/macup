@@ -8,6 +8,7 @@
  */
 
 import { defineCommand } from 'citty';
+import { OUTDATED_ARGS } from '../cli/surface';
 import type { CliDeps } from '../cli/types';
 import { probe } from '../plugins/probe';
 import type { PackageStatus, Plugin, PluginContext } from '../plugins/types';
@@ -216,17 +217,6 @@ export function formatOutdatedReport(report: OutdatedReport, opts: FormatOptions
 
   return lines.join('\n');
 }
-
-/**
- * Arg defs live outside the factory so macup/meta can project them into
- * the generated reference without constructing CliDeps.
- */
-export const OUTDATED_ARGS = {
-  json: {
-    type: 'boolean',
-    description: 'Emit JSON instead of formatted text.',
-  },
-} as const;
 
 /**
  * Citty CommandDef factory for the cross-plugin `macup outdated` subcommand.

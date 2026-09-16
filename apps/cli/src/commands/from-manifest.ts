@@ -9,7 +9,8 @@
  * @module
  */
 
-import { type ArgsDef, type CommandDef, defineCommand } from 'citty';
+import { type CommandDef, defineCommand } from 'citty';
+import { type Verb, type VerbName, pluginSurface } from '../cli/surface';
 import type { ApplistKey } from '../config/schema';
 import type { ConfigStore, SaveResult } from '../config/store';
 import { applyRefs, listPackages, planInstall, planUpdate } from '../plugins/operations';
@@ -37,7 +38,7 @@ import {
 } from './mutation-report';
 import { renderList } from './render-list';
 import { type SpinnerDeps, routeOutput, withSpinner, withUserActionSpinner } from './spinner';
-import { pluginHasSubtypes, resolveSubtypeOrExit } from './subtype';
+import { resolveSubtypeOrExit } from './subtype';
 
 /** What the generated per-plugin commands need. @see {@link commandsFromManifest} */
 export interface CommandDeps extends SpinnerDeps {
@@ -242,42 +243,24 @@ function subtypeCliFlag(manifest: PluginManifest, subtype: string | undefined): 
   return flag ? `--${flag} ` : '';
 }
 
+/** The `meta` and `args` a verb's `defineCommand` takes, as the surface declares them. */
+function define(verb: Verb): { meta: { name: string; description: string }; args: Verb['args'] } {
+  return { meta: { name: verb.name, description: verb.description }, args: verb.args };
+}
+
 /**
  * Build a plugin's whole command tree from its manifest: only the verbs it
  * advertises, with the flags each accepts.
  *
  * This single factory is why adding a backend needs no edit to dispatch, help,
  * or completions (`CLAUDE.md`) — the manifest is the input and the CLI surface
- * is the output.
+ * is the output. Which verbs exist and what args each takes come from the
+ * surface (`cli/surface.ts`, #148); this file owns only the `run` bodies.
  */
 export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): CommandDef {
   const { manifest } = plugin;
-  const hasSubtypes = pluginHasSubtypes(plugin);
-  const subtypeArg: ArgsDef = hasSubtypes
-    ? {
-        subtype: {
-          type: 'string',
-          description: `Subtype: ${manifest.subtypes?.map((e) => e.id).join(' | ')}.`,
-        },
-        // One boolean flag per subtype that declares a shortcut (`flag` on
-        // its manifest entry), so a new subtyped plugin's shortcuts appear
-        // here with no edit — only its own manifest table changes.
-        ...Object.fromEntries(
-          (manifest.subtypes ?? [])
-            .filter((e): e is typeof e & { flag: string } => e.flag !== undefined)
-            .map((e, i) => [
-              e.flag,
-              {
-                type: 'boolean' as const,
-                description:
-                  i === 0
-                    ? `Operate on ${e.id} (the default — explicit form for symmetry with the other shortcuts).`
-                    : `Operate on ${e.id} instead of the default.`,
-              },
-            ]),
-        ),
-      }
-    : {};
+  const surface = pluginSurface(manifest);
+  const verb = (name: VerbName): Verb | undefined => surface.verbs.find((v) => v.name === name);
 
   // Citty's CommandDef is generic over its args; each defineCommand call
   // returns a narrower type. We collect them into an untyped bag and let
@@ -285,24 +268,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
   // biome-ignore lint/suspicious/noExplicitAny: citty generics don't compose via Record
   const subCommands: Record<string, any> = {};
 
-  if (manifest.capabilities.list) {
+  const list = verb('list');
+  if (list) {
     subCommands.list = defineCommand({
-      meta: { name: 'list', description: `List packages tracked by ${manifest.displayName}.` },
-      args: {
-        ...subtypeArg,
-        'only-outdated': {
-          type: 'boolean',
-          description: 'Only show outdated packages.',
-        },
-        all: {
-          type: 'boolean',
-          description: 'Show all installed packages, not just tracked ones.',
-        },
-        json: {
-          type: 'boolean',
-          description: 'Output as JSON: PackageStatus[], or { error, packages } if a query fails.',
-        },
-      },
+      ...define(list),
       async run({ args }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
@@ -363,25 +332,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
   }
 
-  if (manifest.capabilities.install) {
+  const install = verb('install');
+  if (install) {
     subCommands.install = defineCommand({
-      meta: { name: 'install', description: 'Install packages via the plugin.' },
-      args: {
-        ...subtypeArg,
-        'dry-run': {
-          type: 'boolean',
-          description: 'Print what would run without installing anything.',
-        },
-        packages: {
-          type: 'positional',
-          required: false,
-          description: 'Packages to install (empty = install all tracked).',
-        },
-        json: {
-          type: 'boolean',
-          description: 'Emit the end-of-run report as JSON instead of text.',
-        },
-      },
+      ...define(install),
       /**
        * @throws whatever `check()`, `list()` or the store raised: an
        * unavailable backend still aborts the command before any ref is
@@ -426,29 +380,10 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
   }
 
-  if (manifest.capabilities.update) {
+  const update = verb('update');
+  if (update) {
     subCommands.update = defineCommand({
-      meta: { name: 'update', description: 'Upgrade outdated packages to latest.' },
-      args: {
-        ...subtypeArg,
-        'dry-run': {
-          type: 'boolean',
-          description: 'Print what would run without upgrading anything.',
-        },
-        all: {
-          type: 'boolean',
-          description: 'Upgrade every outdated package, not just tracked ones.',
-        },
-        packages: {
-          type: 'positional',
-          required: false,
-          description: 'Optional package names to restrict the update to.',
-        },
-        json: {
-          type: 'boolean',
-          description: 'Emit the end-of-run report as JSON instead of text.',
-        },
-      },
+      ...define(update),
       /**
        * @throws whatever `check()`, `list()` or the store raised: an
        * unavailable backend still aborts the command before any ref is
@@ -532,21 +467,14 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
   }
 
-  if (manifest.capabilities.track) {
+  const track = verb('track');
+  if (track) {
     // The deprecated `add` alias dispatches here via argv rewriting in
     // cli/argv.ts (ADR 0031): it prints a one-line stderr notice and is
     // deliberately not registered as a subcommand, so it stays out of
     // citty's per-plugin help and the generated completions.
     subCommands.track = defineCommand({
-      meta: { name: 'track', description: 'Track packages in the applist (config-only).' },
-      args: {
-        ...subtypeArg,
-        packages: {
-          type: 'positional',
-          required: true,
-          description: 'One or more package names to track.',
-        },
-      },
+      ...define(track),
       async run({ args, rawArgs }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
@@ -582,21 +510,11 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
   }
 
-  if (manifest.capabilities.untrack) {
+  const untrack = verb('untrack');
+  if (untrack) {
     // Deprecated `remove` alias: see the argv-rewrite note on `track` above.
     subCommands.untrack = defineCommand({
-      meta: {
-        name: 'untrack',
-        description: 'Untrack packages from the applist (config-only).',
-      },
-      args: {
-        ...subtypeArg,
-        packages: {
-          type: 'positional',
-          required: true,
-          description: 'One or more package names to untrack.',
-        },
-      },
+      ...define(untrack),
       async run({ args, rawArgs }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
@@ -633,8 +551,13 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
   }
 
   // Pin/unpin/skip/unskip are config-only commands available to any plugin
-  // with configKeys (i.e. any plugin that tracks packages in applist.yaml).
-  if (manifest.configKeys.length > 0) {
+  // with configKeys (i.e. any plugin that tracks packages in applist.yaml);
+  // the surface admits all four together, so one lookup gates the block.
+  const pin = verb('pin');
+  const unpin = verb('unpin');
+  const skip = verb('skip');
+  const unskip = verb('unskip');
+  if (pin && unpin && skip && unskip) {
     // skip/pin default to the FLAT form (binds every subtype); a subtype scopes
     // the write only when --cask/--formula/--subtype is given explicitly. This
     // differs from track/update, which default to the first subtype (ADR 0035).
@@ -651,12 +574,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     };
 
     subCommands.pin = defineCommand({
-      meta: { name: 'pin', description: 'Pin a package to a maximum version.' },
-      args: {
-        ...subtypeArg,
-        name: { type: 'positional', required: true, description: 'Package name.' },
-        version: { type: 'positional', required: true, description: 'Maximum version.' },
-      },
+      ...define(pin),
       async run({ args, rawArgs }) {
         const positionals = requireNames(rawArgs, manifest.id, 'pin <name> <version>');
         if (!positionals || positionals.length < 2) {
@@ -679,11 +597,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
 
     subCommands.unpin = defineCommand({
-      meta: { name: 'unpin', description: 'Remove a version pin.' },
-      args: {
-        ...subtypeArg,
-        name: { type: 'positional', required: true, description: 'Package name.' },
-      },
+      ...define(unpin),
       async run({ args, rawArgs }) {
         const names = requireNames(rawArgs, manifest.id, 'unpin');
         if (!names) return;
@@ -699,11 +613,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
 
     subCommands.skip = defineCommand({
-      meta: { name: 'skip', description: 'Skip packages from future updates.' },
-      args: {
-        ...subtypeArg,
-        packages: { type: 'positional', required: true, description: 'Package name(s).' },
-      },
+      ...define(skip),
       async run({ args, rawArgs }) {
         const names = requireNames(rawArgs, manifest.id, 'skip');
         if (!names) return;
@@ -719,11 +629,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
 
     subCommands.unskip = defineCommand({
-      meta: { name: 'unskip', description: 'Remove packages from the skip list.' },
-      args: {
-        ...subtypeArg,
-        packages: { type: 'positional', required: true, description: 'Package name(s).' },
-      },
+      ...define(unskip),
       async run({ args, rawArgs }) {
         const names = requireNames(rawArgs, manifest.id, 'unskip');
         if (!names) return;

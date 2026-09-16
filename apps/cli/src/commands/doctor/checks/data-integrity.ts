@@ -7,79 +7,35 @@
  * the Plugins section — double-reporting it here would double-count one
  * root cause).
  *
+ * The applist comes from the store's read (ADR 0058), which never throws
+ * on the file and never writes, so a missing or broken file is a finding
+ * here and a `doctor` run inside a dotfiles checkout leaves the directory
+ * as it found it. Versions are ordered by the selection resolver's
+ * comparator, so "these two cannot be compared" means the same thing
+ * here as in `update`.
+ *
  * @module
  */
 
-import { readFile } from 'node:fs/promises';
-import semver from 'semver';
-import { parse } from 'yaml';
-import { type Applist, type ApplistKey, ApplistSchema } from '../../../config/schema';
+import { type ApplistRead, ConfigStore } from '../../../config/store';
 import { probe } from '../../../plugins/probe';
+import { semverCompare } from '../../../plugins/selection';
 import type { Plugin } from '../../../plugins/types';
 import type { CheckDeps, CheckResult, Section } from '../report';
 import { missingBinaries } from './probe';
 
-function trackedFor(applist: Applist, key: ApplistKey): readonly string[] {
-  // Walk the dotted applist key generically (e.g. 'brew.formulas' resolves
-  // applist.brew.formulas), so this reader needs no per-key case and a new
-  // plugin's config key does not force an edit here. The applist schema
-  // (config/schema.ts) stays the one place the key set is declared.
-  const value = key
-    .split('.')
-    .reduce<unknown>(
-      (node, seg) =>
-        node && typeof node === 'object' ? (node as Record<string, unknown>)[seg] : undefined,
-      applist,
-    );
-  return Array.isArray(value) ? (value as readonly string[]) : [];
-}
-
-// Same permissive stance as src/plugins/selection.ts: pins can be
-// non-semver strings (brew date versions, mas build IDs); when a plugin
-// has no comparator of its own and the strings aren't semver, treat
-// them as equal so a malformed pin never flags spuriously.
-function compareVersions(plugin: Plugin, a: string, b: string): -1 | 0 | 1 {
-  const custom = plugin.manifest.compareVersions;
-  if (custom) return custom(a, b);
-  if (semver.valid(a) && semver.valid(b)) {
-    const result = semver.compare(a, b);
-    if (result < 0) return -1;
-    if (result > 0) return 1;
-  }
-  return 0;
-}
-
-async function loadApplist(deps: CheckDeps): Promise<Applist | 'missing' | 'invalid'> {
-  let text: string;
-  try {
-    text = await readFile(deps.paths.applistPath, 'utf8');
-  } catch {
-    return 'missing';
-  }
-  try {
-    const parsed = ApplistSchema.safeParse(parse(text) ?? {});
-    return parsed.success ? parsed.data : 'invalid';
-  } catch {
-    return 'invalid';
-  }
-}
-
 async function verifyPlugin(
   plugin: Plugin,
-  applist: Applist,
+  found: ApplistRead,
   deps: CheckDeps,
 ): Promise<CheckResult[]> {
   const m = plugin.manifest;
-  const tracked = m.configKeys.flatMap((key) => [...trackedFor(applist, key)]);
-  // Flatten both config shapes to leaf name→version / name entries. The
+  const tracked = found.tracked.filter((t) => m.configKeys.includes(t.key)).map((t) => t.name);
+  // A per-subtype pin or skip counts the same as a flat one here. The
   // subtype-precise checks (does this subtype exist? is skip.all a plugin-id
   // list?) are a separate doctor concern; here we verify the names resolve.
-  const pinsRaw = applist.pins[m.id] ?? {};
-  const pins: [string, string][] = Object.entries(pinsRaw).flatMap(([k, v]) =>
-    typeof v === 'string' ? [[k, v] as [string, string]] : Object.entries(v),
-  );
-  const skipsRaw = applist.skip[m.id] ?? [];
-  const skips = Array.isArray(skipsRaw) ? skipsRaw : Object.values(skipsRaw).flat();
+  const pins = found.pins.filter((p) => p.pluginId === m.id);
+  const skips = found.skips.filter((s) => s.pluginId === m.id);
   if (tracked.length === 0 && pins.length === 0 && skips.length === 0) {
     return [];
   }
@@ -128,7 +84,10 @@ async function verifyPlugin(
     });
   }
 
-  for (const [name, pin] of pins) {
+  // The resolver's comparator, with the plugin's own taking precedence
+  // exactly as it does for `update` (src/plugins/operations.ts).
+  const compare = m.compareVersions ?? semverCompare;
+  for (const { name, maxVersion: pin } of pins) {
     if (!trackedSet.has(name)) {
       results.push({
         level: 'warn',
@@ -139,7 +98,12 @@ async function verifyPlugin(
       continue;
     }
     const installedVersion = installed.get(name);
-    if (installedVersion && compareVersions(plugin, installedVersion, pin) > 0) {
+    if (!installedVersion) continue;
+    // An incomparable pair (a brew date version against a semver pin) is
+    // not flagged: `update` reports that pin as unenforceable, and calling
+    // it stale here would tell the user to unpin something they meant.
+    const cmp = compare(installedVersion, pin);
+    if (cmp !== null && cmp > 0) {
       results.push({
         level: 'warn',
         label: 'Stale pin',
@@ -149,7 +113,7 @@ async function verifyPlugin(
     }
   }
 
-  for (const name of skips) {
+  for (const { name } of skips) {
     if (trackedSet.has(name)) continue;
     results.push({
       level: 'warn',
@@ -174,12 +138,15 @@ async function verifyPlugin(
 // entry (a plugin id to exclude from the composite, ADR 0037). The per-plugin
 // loop only visits known plugins, so unknown keys are surfaced here or they
 // silently do nothing.
-function orphanedConfigKeys(applist: Applist, deps: CheckDeps): CheckResult[] {
+function orphanedConfigKeys(found: ApplistRead, deps: CheckDeps): CheckResult[] {
   const known = new Set(deps.plugins.map((p) => p.manifest.id));
   const knownList = [...known].sort().join(', ');
   const results: CheckResult[] = [];
 
-  for (const key of new Set([...Object.keys(applist.skip), ...Object.keys(applist.pins)])) {
+  // skip keys before pins keys, which is the order the findings always came in.
+  const skipBlocks = found.policyBlocks.filter((b) => b.section === 'skip');
+  const pinBlocks = found.policyBlocks.filter((b) => b.section === 'pins');
+  for (const key of new Set([...skipBlocks, ...pinBlocks].map((b) => b.pluginId))) {
     if (key === 'all' || known.has(key)) continue;
     results.push({
       level: 'warn',
@@ -191,9 +158,17 @@ function orphanedConfigKeys(applist: Applist, deps: CheckDeps): CheckResult[] {
 
   // skip.all lists plugin ids to drop from the composite; each must be real, or
   // the exclusion silently does nothing.
-  const skipAll = applist.skip.all;
-  if (Array.isArray(skipAll)) {
-    for (const id of skipAll) {
+  const skipAll = skipBlocks.find((b) => b.pluginId === 'all');
+  if (skipAll?.bySubtype) {
+    // The union schema also accepts a subtype-nested map here, but skip.all is
+    // a flat list of plugin ids (ADR 0037); a map excludes nothing.
+    results.push({
+      level: 'warn',
+      label: 'Invalid skip.all',
+      detail: 'skip.all must be a flat list of plugin ids, not a nested map — it excludes nothing',
+    });
+  } else if (skipAll) {
+    for (const { name: id } of found.skips.filter((s) => s.pluginId === 'all')) {
       if (known.has(id)) continue;
       results.push({
         level: 'warn',
@@ -202,18 +177,10 @@ function orphanedConfigKeys(applist: Applist, deps: CheckDeps): CheckResult[] {
         hint: `known plugins: ${knownList}`,
       });
     }
-  } else if (skipAll !== undefined) {
-    // The union schema also accepts a subtype-nested map here, but skip.all is
-    // a flat list of plugin ids (ADR 0037); a map excludes nothing.
-    results.push({
-      level: 'warn',
-      label: 'Invalid skip.all',
-      detail: 'skip.all must be a flat list of plugin ids, not a nested map — it excludes nothing',
-    });
   }
 
   // The composite owns no packages, so a pin under it can never apply.
-  if (applist.pins.all !== undefined) {
+  if (pinBlocks.some((b) => b.pluginId === 'all')) {
     results.push({
       level: 'warn',
       label: 'Invalid pin',
@@ -227,8 +194,8 @@ function orphanedConfigKeys(applist: Applist, deps: CheckDeps): CheckResult[] {
 /** Doctor section: applist contents against the registry: unknown keys, skip ids that match no plugin, and pins that cannot apply. */
 export async function check(deps: CheckDeps): Promise<Section> {
   const title = 'Data integrity';
-  const applist = await loadApplist(deps);
-  if (applist === 'missing') {
+  const found = await new ConfigStore(deps.paths).read();
+  if (!found.exists) {
     return {
       title,
       results: [
@@ -236,8 +203,8 @@ export async function check(deps: CheckDeps): Promise<Section> {
       ],
     };
   }
-  if (applist === 'invalid') {
-    // The Config section carries the schema error itself.
+  if (found.issues.length > 0) {
+    // The Config section carries the issue itself.
     return {
       title,
       results: [
@@ -253,10 +220,10 @@ export async function check(deps: CheckDeps): Promise<Section> {
   const perPlugin = await Promise.all(
     deps.plugins
       .filter((p) => p.manifest.configKeys.length > 0)
-      .map((p) => verifyPlugin(p, applist, deps)),
+      .map((p) => verifyPlugin(p, found, deps)),
   );
   const results = perPlugin.flat();
-  results.push(...orphanedConfigKeys(applist, deps));
+  results.push(...orphanedConfigKeys(found, deps));
   if (results.length === 0) {
     results.push({ level: 'ok', label: 'Tracked packages', detail: 'nothing tracked yet' });
   }

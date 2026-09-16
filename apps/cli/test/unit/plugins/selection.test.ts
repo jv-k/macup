@@ -205,7 +205,7 @@ describe('semverCompare', () => {
 
   it('returns null for a pair it cannot order rather than calling them equal', () => {
     // A brew date version against a semver pin: neither side wins.
-    expect(semverCompare('2024-01-01', '1.0.0')).toBeNull();
-    expect(semverCompare('1.0.0', 'build-1234')).toBeNull();
+    expect(semverCompare('2024-01-01', '1.0.0')).toBe(null);
+    expect(semverCompare('1.0.0', 'build-1234')).toBe(null);
   });
 });

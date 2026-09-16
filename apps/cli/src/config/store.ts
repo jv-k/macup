@@ -120,7 +120,7 @@ export interface ApplistRead {
   readonly pins: readonly Pin[];
   /** Every skip in force, likewise. */
   readonly skips: readonly Skip[];
-  /** Every tracked name under its applist key, keys in schema order and names in file order. Empty unless the file validates. */
+  /** Every tracked name under its applist key, resolved as {@link ConfigStore.list} resolves it: keys in schema order, names in file order. Empty unless the file validates. */
   readonly tracked: readonly Tracked[];
   /** Every `pins:` and `skip:` block by the id it is keyed on, `pins` first, in file order. Empty unless the file validates. */
   readonly policyBlocks: readonly PolicyBlock[];
@@ -225,27 +225,11 @@ function stampVersion(doc: Document, version: number): boolean {
   return true;
 }
 
-// Every tracked name, pin and skip as flat lists. Pins and skips come out of
-// the two shapes the schema allows per plugin (ADR 0035): a flat name→version
-// map or name list, or a subtype→(the same) map. File order is kept so a
-// report reads like the file. Tracked names are resolved per applist key the
-// way list() resolves them on the document, so this is the one key lookup.
-function flattenPolicy(data: Applist): {
-  pins: Pin[];
-  skips: Skip[];
-  tracked: Tracked[];
-  policyBlocks: PolicyBlock[];
-} {
-  const tracked: Tracked[] = [];
-  for (const key of ApplistKeySchema.options) {
-    const names = pathFor(key).reduce<unknown>(
-      (node, segment) =>
-        node && typeof node === 'object' ? (node as Record<string, unknown>)[segment] : undefined,
-      data,
-    );
-    if (!Array.isArray(names)) continue;
-    for (const name of names as readonly string[]) tracked.push({ key, name });
-  }
+// Every pin and skip as flat lists, with the block each came from, out of the
+// two shapes the schema allows per plugin (ADR 0035): a flat name→version map
+// or name list, or a subtype→(the same) map. File order is kept so a report
+// reads like the file.
+function flattenPolicy(data: Applist): Pick<ApplistRead, 'pins' | 'skips' | 'policyBlocks'> {
   const policyBlocks: PolicyBlock[] = [];
   const pins: Pin[] = [];
   for (const [pluginId, entry] of Object.entries(data.pins)) {
@@ -276,7 +260,7 @@ function flattenPolicy(data: Applist): {
       }
     }
   }
-  return { pins, skips, tracked, policyBlocks };
+  return { pins, skips, policyBlocks };
 }
 
 function pathFor(key: ApplistKey): readonly string[] {
@@ -291,6 +275,18 @@ function resolveSeq(doc: Document, key: ApplistKey): YAMLSeq | undefined {
     node = node.get(segment);
   }
   return node instanceof YAMLSeq ? node : undefined;
+}
+
+// The one key lookup: list() and the read's tracked view both come through
+// here, so the two cannot resolve a key differently.
+function namesUnder(doc: Document, key: ApplistKey): readonly string[] {
+  return resolveSeq(doc, key)?.items.map(scalarValue) ?? [];
+}
+
+function trackedIn(doc: Document): Tracked[] {
+  return ApplistKeySchema.options.flatMap((key) =>
+    namesUnder(doc, key).map((name) => ({ key, name })),
+  );
 }
 
 function ensureSeq(doc: Document, key: ApplistKey): YAMLSeq {
@@ -368,7 +364,12 @@ export class ConfigStore {
     const exists = text !== undefined || failure !== undefined;
     const doc = parseDocument(text ?? '');
     const untouched = { exists, text: text ?? '', doc, migrated: false };
-    const nothing = { pins: [], skips: [], tracked: [], policyBlocks: [] };
+    const nothing: Pick<ApplistRead, 'pins' | 'skips' | 'tracked' | 'policyBlocks'> = {
+      pins: [],
+      skips: [],
+      tracked: [],
+      policyBlocks: [],
+    };
     if (failure !== undefined) {
       return {
         ...untouched,
@@ -433,6 +434,8 @@ export class ConfigStore {
         version,
         issues: [],
         legacyLayout: migrated,
+        // The validated document, so a name here is one list() will return.
+        tracked: trackedIn(doc),
         ...flattenPolicy(parsed.data),
       },
     };
@@ -552,9 +555,7 @@ export class ConfigStore {
    * The names tracked under one key, in file order.
    */
   list(key: ApplistKey): readonly string[] {
-    const seq = resolveSeq(this.requireDoc(), key);
-    if (!seq) return [];
-    return seq.items.map(scalarValue);
+    return namesUnder(this.requireDoc(), key);
   }
 
   /**

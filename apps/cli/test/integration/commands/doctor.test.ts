@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -7,7 +7,6 @@ import { check as checkDataIntegrity } from '../../../src/commands/doctor/checks
 import { check as checkPlugins } from '../../../src/commands/doctor/checks/plugins';
 import type { CheckDeps } from '../../../src/commands/doctor/report';
 import { buildReport, exitCodeFor } from '../../../src/commands/doctor/report';
-import type { ApplistKey } from '../../../src/config/schema';
 import { ErrPluginUnavailable } from '../../../src/errors';
 import { FixtureExecRunner } from '../../../src/exec/fixtures';
 import type {
@@ -248,7 +247,7 @@ describe('doctor — data integrity reads the applist through the store (#147)',
           installedVersion,
           updateStatus: 'current',
         })),
-      { configKeys: ['npm' as ApplistKey], ...overrides },
+      { configKeys: ['npm'], ...overrides },
     );
 
   it('reads a pre-1.x layout in its migrated shape, as load() will, so its tracked names are verified', async () => {
@@ -257,12 +256,14 @@ describe('doctor — data integrity reads the applist through the store (#147)',
     // migrate it to `npm` and track everything in it. One reader, one
     // judgement (ADR 0058).
     const section = await runIntegrity([npmWith({})], 'npm_apps:\n  - typescript\n');
-    expect(section.results).toContainEqual({
-      level: 'warn',
-      label: 'Not installed',
-      detail: 'npm:typescript tracked but not installed',
-      hint: 'run: macup npm install typescript',
-    });
+    expect(section.results).toEqual([
+      {
+        level: 'warn',
+        label: 'Not installed',
+        detail: 'npm:typescript tracked but not installed',
+        hint: 'run: macup npm install typescript',
+      },
+    ]);
   });
 
   it('reports a missing applist as nothing to verify', async () => {
@@ -287,6 +288,49 @@ describe('doctor — data integrity reads the applist through the store (#147)',
 
   it('reports YAML that does not parse the same way', async () => {
     const section = await runIntegrity([npmWith({})], 'npm:\n  - typescript\n bad: [\n');
+    expect(section.results.map((r) => r.detail)).toEqual([
+      'not verified — applist.yaml failed validation (see Config)',
+    ]);
+  });
+
+  it('reports a file it cannot read as not verified, not as no applist', async () => {
+    // The check's own reader turned any read failure into "no applist yet",
+    // an ok line about a file that is there. The store's read reports the
+    // failure as the file's one issue, and the Config section names it.
+    // Set up by hand: the snapshot helper cannot read the file either.
+    const dir = await mkdtemp(join(tmpdir(), 'macup-doctor-'));
+    const applistPath = join(dir, 'applist.yaml');
+    await writeFile(applistPath, 'npm:\n  - typescript\n', 'utf8');
+    await chmod(applistPath, 0o000);
+    try {
+      const section = await checkDataIntegrity(
+        makeDeps({
+          plugins: [npmWith({})],
+          paths: {
+            applistPath,
+            configDir: dir,
+            backupDir: join(dir, 'b'),
+            source: 'home-macup',
+            explicit: false,
+          },
+        }),
+      );
+      expect(section.results.map((r) => r.detail)).toEqual([
+        'not verified — applist.yaml failed validation (see Config)',
+      ]);
+    } finally {
+      await chmod(applistPath, 0o644);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports a file declaring a newer schema version as not verified, as load() refuses it', async () => {
+    // The check's own zod call accepted any positive version and verified the
+    // contents; load() has always refused the file. One judgement (ADR 0058).
+    const section = await runIntegrity(
+      [npmWith({ typescript: '5.3.3' })],
+      'version: 999\nnpm:\n  - typescript\n',
+    );
     expect(section.results.map((r) => r.detail)).toEqual([
       'not verified — applist.yaml failed validation (see Config)',
     ]);
@@ -362,7 +406,7 @@ describe('doctor — data integrity reads the applist through the store (#147)',
       async () => [
         { ref: { kind: 'formula', name: 'git' }, installed: true, updateStatus: 'current' },
       ],
-      { configKeys: ['brew.formulas' as ApplistKey, 'brew.casks' as ApplistKey] },
+      { configKeys: ['brew.formulas', 'brew.casks'] },
     );
     const section = await runIntegrity(
       [brew],
@@ -403,7 +447,7 @@ describe('doctor — data integrity reads the applist through the store (#147)',
       async () => {
         throw new Error('should not be probed when the binary is missing');
       },
-      { configKeys: ['npm' as ApplistKey] },
+      { configKeys: ['npm'] },
     );
     const section = await runIntegrity([gone], 'npm:\n  - typescript\n  - prettier\n');
     expect(section.results).toEqual([

@@ -238,7 +238,7 @@ for (const plugin of BUILTIN_PLUGINS) {
 // before falling through to the wizard. --help/--version are intercepted above;
 // the rest are stripped from argv before citty. Every action now owns a
 // subcommand (ADR 0029), so the surface's global flags are the whole top-level
-// flag surface — nothing is merged in from the actions. The stripped flags
+// flag surface. Nothing is merged in from the actions. The stripped flags
 // stay listed so a change that stops stripping one doesn't silently make it
 // "unknown".
 const KNOWN_TOP_LEVEL_FLAGS = new Set<string>(

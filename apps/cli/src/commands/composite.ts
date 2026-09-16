@@ -28,7 +28,7 @@
 
 import { confirm, isCancel } from '@clack/prompts';
 import { type CommandDef, defineCommand } from 'citty';
-import { type Verb, type VerbName, pluginSurface } from '../cli/surface';
+import { type VerbName, commandDefOf, pluginSurface } from '../cli/surface';
 import { mutateFor } from '../plugins/operations';
 import { probe, probeOutcomeReason } from '../plugins/probe';
 import type {
@@ -307,12 +307,10 @@ export function buildCompositeCommand(
 ): CommandDef {
   const { manifest } = COMPOSITE_DECLARATION;
   const surface = pluginSurface(manifest);
-  const define = (
-    name: VerbName,
-  ): { meta: { name: string; description: string }; args: Verb['args'] } => {
+  const define = (name: VerbName): ReturnType<typeof commandDefOf> => {
     const verb = surface.verbs.find((v) => v.name === name);
     if (!verb) throw new Error(`composite manifest does not admit \`${name}\``);
-    return { meta: { name: verb.name, description: verb.description }, args: verb.args };
+    return commandDefOf(verb);
   };
 
   const list = defineCommand({

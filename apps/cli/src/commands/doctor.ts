@@ -99,19 +99,12 @@ export class DoctorAction implements ActionCommand {
         'Run a self-diagnostic report: environment, config, plugin probes, data integrity, shell integration.',
     },
     // The surface declares `--json` (#148), so `macup doctor` registers it
-    // and the shells and the reference list it; the run still reads argv
-    // below, as it did when `--doctor` was a root flag and registering
-    // `json` there would have shadowed the subcommands' own.
+    // and the shells and the reference list it. Before ADR 0029 `--doctor`
+    // was a root flag, and a root `--json` would have shadowed the
+    // subcommands' own, so the run read argv instead; as a subcommand arg
+    // the parsed bag is the one source.
     ...DOCTOR_ARGS,
   };
 
-  // Read from argv rather than the parsed bag: this predates ADR 0029, when
-  // `--doctor` was a root flag and a root `--json` would have shadowed
-  // subcommand `--json` (e.g. `macup outdated --json`) and made bare
-  // `macup --json` a "known" flag that skipped the unknown-flag guard.
-  // citty accepts the unrecognised `--json` on the root command
-  // permissively, and this action only runs when `--doctor` is present.
-  run(args: ParsedArgs, deps: CliDeps): Promise<void> {
-    return runDoctor({ ...args, json: process.argv.includes('--json') }, deps);
-  }
+  run = runDoctor;
 }

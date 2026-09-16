@@ -10,7 +10,7 @@
  */
 
 import { type CommandDef, defineCommand } from 'citty';
-import { type Verb, type VerbName, pluginSurface } from '../cli/surface';
+import { type Verb, type VerbName, commandDefOf, pluginSurface } from '../cli/surface';
 import type { ApplistKey } from '../config/schema';
 import type { ConfigStore, SaveResult } from '../config/store';
 import { applyRefs, listPackages, planInstall, planUpdate } from '../plugins/operations';
@@ -243,11 +243,6 @@ function subtypeCliFlag(manifest: PluginManifest, subtype: string | undefined): 
   return flag ? `--${flag} ` : '';
 }
 
-/** The `meta` and `args` a verb's `defineCommand` takes, as the surface declares them. */
-function define(verb: Verb): { meta: { name: string; description: string }; args: Verb['args'] } {
-  return { meta: { name: verb.name, description: verb.description }, args: verb.args };
-}
-
 /**
  * Build a plugin's whole command tree from its manifest: only the verbs it
  * advertises, with the flags each accepts.
@@ -271,7 +266,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
   const list = verb('list');
   if (list) {
     subCommands.list = defineCommand({
-      ...define(list),
+      ...commandDefOf(list),
       async run({ args }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
@@ -335,7 +330,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
   const install = verb('install');
   if (install) {
     subCommands.install = defineCommand({
-      ...define(install),
+      ...commandDefOf(install),
       /**
        * @throws whatever `check()`, `list()` or the store raised: an
        * unavailable backend still aborts the command before any ref is
@@ -383,7 +378,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
   const update = verb('update');
   if (update) {
     subCommands.update = defineCommand({
-      ...define(update),
+      ...commandDefOf(update),
       /**
        * @throws whatever `check()`, `list()` or the store raised: an
        * unavailable backend still aborts the command before any ref is
@@ -474,7 +469,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     // deliberately not registered as a subcommand, so it stays out of
     // citty's per-plugin help and the generated completions.
     subCommands.track = defineCommand({
-      ...define(track),
+      ...commandDefOf(track),
       async run({ args, rawArgs }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
@@ -514,7 +509,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
   if (untrack) {
     // Deprecated `remove` alias: see the argv-rewrite note on `track` above.
     subCommands.untrack = defineCommand({
-      ...define(untrack),
+      ...commandDefOf(untrack),
       async run({ args, rawArgs }) {
         const resolved = resolveSubtypeOrExit(plugin, args);
         if (!resolved.ok) return;
@@ -574,7 +569,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     };
 
     subCommands.pin = defineCommand({
-      ...define(pin),
+      ...commandDefOf(pin),
       async run({ args, rawArgs }) {
         const positionals = requireNames(rawArgs, manifest.id, 'pin <name> <version>');
         if (!positionals || positionals.length < 2) {
@@ -597,7 +592,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
 
     subCommands.unpin = defineCommand({
-      ...define(unpin),
+      ...commandDefOf(unpin),
       async run({ args, rawArgs }) {
         const names = requireNames(rawArgs, manifest.id, 'unpin');
         if (!names) return;
@@ -613,7 +608,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
 
     subCommands.skip = defineCommand({
-      ...define(skip),
+      ...commandDefOf(skip),
       async run({ args, rawArgs }) {
         const names = requireNames(rawArgs, manifest.id, 'skip');
         if (!names) return;
@@ -629,7 +624,7 @@ export function commandsFromManifest(plugin: Plugin, deps: CommandDeps): Command
     });
 
     subCommands.unskip = defineCommand({
-      ...define(unskip),
+      ...commandDefOf(unskip),
       async run({ args, rawArgs }) {
         const names = requireNames(rawArgs, manifest.id, 'unskip');
         if (!names) return;

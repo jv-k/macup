@@ -426,6 +426,14 @@ export interface Verb {
   readonly flags: readonly SurfaceFlag[];
 }
 
+/** The `meta` and `args` a verb's `defineCommand` takes, as the surface declares them; the command factory and the composite spread this and add only `run`. */
+export function commandDefOf(verb: Verb): {
+  meta: { name: string; description: string };
+  args: ArgsDef;
+} {
+  return { meta: { name: verb.name, description: verb.description }, args: verb.args };
+}
+
 /** What one plugin presents on the command line. @see {@link pluginSurface} */
 export interface PluginSurface {
   readonly manifest: PluginManifest;

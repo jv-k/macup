@@ -3,12 +3,13 @@
 // never writes. Every case here asserts both halves against a real directory,
 // because "byte-identical afterwards" is only observable on disk.
 
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ConfigStore } from '../../../src/config/store';
 import { ErrApplistNotFound, ErrInvalidConfig } from '../../../src/errors';
+import { snapshotDir } from '../../fixtures/dir-snapshot';
 
 let workDir: string;
 let applistPath: string;
@@ -28,22 +29,10 @@ async function seed(content: string): Promise<void> {
   await writeFile(applistPath, content, 'utf8');
 }
 
-// Every entry under the config dir with its bytes, so a stray backup dir, a
-// leftover .tmp, or a rewritten applist all show up as a diff.
-async function snapshot(dir: string): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (const rel of await readdir(dir, { recursive: true })) {
-    const abs = join(dir, rel);
-    const s = await stat(abs);
-    out.set(rel, s.isDirectory() ? '<dir>' : await readFile(abs, 'utf8'));
-  }
-  return out;
-}
-
 async function read() {
-  const before = await snapshot(workDir);
+  const before = await snapshotDir(workDir);
   const found = await new ConfigStore({ applistPath, backupDir }).read();
-  expect(await snapshot(workDir)).toEqual(before);
+  expect(await snapshotDir(workDir)).toEqual(before);
   return found;
 }
 
@@ -117,6 +106,22 @@ describe('ConfigStore.read — what it found, without touching the directory', (
     expect(found.issues[0]).toMatch(/line 4/);
   });
 
+  it('reports a file it cannot read as present, with the failure as the issue', async () => {
+    // Not a finding about the file's contents, but one the diagnostics must
+    // be able to report rather than crash on.
+    await seed('version: 1\n');
+    await chmod(applistPath, 0o000);
+    try {
+      const found = await new ConfigStore({ applistPath, backupDir }).read();
+      expect(found.exists).toBe(true);
+      expect(found.version).toBeUndefined();
+      expect(found.issues).toHaveLength(1);
+      expect(found.issues[0]).toMatch(/EACCES/);
+    } finally {
+      await chmod(applistPath, 0o644);
+    }
+  });
+
   it('reports a version newer than this build reads as an issue, keeping the version', async () => {
     await seed('version: 999\nnpm:\n  - typescript\n');
     const found = await read();
@@ -162,7 +167,7 @@ describe('ConfigStore.load — the same read, then migrate and stamp', () => {
     // loading that could later save it over the user's file. One reader means
     // load() refuses exactly what read() reports as an issue.
     await seed('brew:\n  formulas:\n  - git\n bad: [\n');
-    const before = await snapshot(workDir);
+    const before = await snapshotDir(workDir);
     const s = new ConfigStore({ applistPath, backupDir });
     const err = await s.load().then(
       () => {
@@ -173,7 +178,7 @@ describe('ConfigStore.load — the same read, then migrate and stamp', () => {
     expect(err).toBeInstanceOf(ErrInvalidConfig);
     expect((err as ErrInvalidConfig).exitCode).toBe(1);
     expect(err.message).toMatch(/line 4/);
-    expect(await snapshot(workDir)).toEqual(before);
+    expect(await snapshotDir(workDir)).toEqual(before);
   });
 });
 
@@ -201,7 +206,12 @@ describe('ConfigStore — a named applist must exist (ADR 0044)', () => {
   });
 
   it('names $MACUP_APPLIST when the env var selected it', async () => {
-    await expect(named('env-applist').load()).rejects.toThrow(/selected by \$MACUP_APPLIST/);
+    const err = await named('env-applist')
+      .load()
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ErrApplistNotFound);
+    expect((err as ErrApplistNotFound).exitCode).toBe(1);
+    expect((err as ErrApplistNotFound).message).toContain('selected by $MACUP_APPLIST');
   });
 
   it('read() still reports the missing file rather than refusing to diagnose', async () => {

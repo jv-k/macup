@@ -31,20 +31,20 @@ const boot = (over: Partial<BootstrapInput>) =>
 
 describe('explicit applist must exist (#17)', () => {
   it('throws ErrApplistNotFound naming the resolved path and the flag', async () => {
-    const deps = boot({ applist: 'lists/work.yaml', cwd: '/projects/acme', exists: never });
+    const deps = boot({ applist: 'lists/work.yaml', cwd: workDir, exists: never });
     await expect(deps.getStore()).rejects.toThrow(ErrApplistNotFound);
     await deps.getStore().catch((err: unknown) => {
       expect(err).toBeInstanceOf(ErrApplistNotFound);
       const e = err as ErrApplistNotFound;
-      expect(e.applistPath).toBe('/projects/acme/lists/work.yaml');
-      expect(e.message).toContain('/projects/acme/lists/work.yaml');
+      expect(e.applistPath).toBe(join(workDir, 'lists/work.yaml'));
+      expect(e.message).toContain(join(workDir, 'lists/work.yaml'));
       expect(e.message).toContain('--applist');
       expect(e.exitCode).toBe(1);
     });
   });
 
   it('names $MACUP_APPLIST when the env var selected it', async () => {
-    const deps = boot({ env: { MACUP_APPLIST: '/env/work.yaml' }, exists: never });
+    const deps = boot({ env: { MACUP_APPLIST: join(workDir, 'work.yaml') }, exists: never });
     await deps.getStore().catch((err: unknown) => {
       expect((err as ErrApplistNotFound).message).toContain('$MACUP_APPLIST');
     });
@@ -52,12 +52,12 @@ describe('explicit applist must exist (#17)', () => {
   });
 
   it('does not fire for $MACUP_CONFIG, which still creates the file on first write', async () => {
-    const deps = boot({ env: { MACUP_CONFIG: '/env/applist.yaml' }, exists: never });
+    const deps = boot({ env: { MACUP_CONFIG: join(workDir, 'applist.yaml') }, exists: never });
     await expect(deps.getStore()).resolves.toBeDefined();
   });
 
   it('does not fire for the default locations', async () => {
-    const deps = boot({ exists: never });
+    const deps = boot({ home: workDir, exists: never });
     await expect(deps.getStore()).resolves.toBeDefined();
   });
 

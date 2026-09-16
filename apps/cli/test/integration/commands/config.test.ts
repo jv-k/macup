@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildConfigReport, formatConfigReport } from '../../../src/commands/config';
 import type { PathResolution } from '../../../src/config/paths';
+import { snapshotDir } from '../../fixtures/dir-snapshot';
 
 let workDir: string;
 
@@ -14,18 +15,6 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(workDir, { recursive: true, force: true });
 });
-
-// Every entry under the config dir with its bytes: `macup config` is a
-// diagnostic, so a run against any applist must leave the directory as it was.
-async function snapshot(dir: string): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (const rel of await readdir(dir, { recursive: true })) {
-    const abs = join(dir, rel);
-    const s = await stat(abs);
-    out.set(rel, s.isDirectory() ? '<dir>' : await readFile(abs, 'utf8'));
-  }
-  return out;
-}
 
 function paths(applistName = 'applist.yaml'): PathResolution {
   return {
@@ -87,23 +76,23 @@ describe('buildConfigReport', () => {
   it('judges a pre-1.x file the way the store would, and leaves it in that layout', async () => {
     const p = paths();
     await writeFile(p.applistPath, 'brew_formulas:\n  - git\nnpm_apps: not-a-list\n', 'utf8');
-    const before = await snapshot(workDir);
+    const before = await snapshotDir(workDir);
     const r = await buildConfigReport(p);
     expect(r.exists).toBe(true);
     expect(r.schemaValid).toBe(false);
     expect(r.schemaError).toContain('npm: Invalid input: expected array, received string');
     // Read, not loaded: no migration rewrite, no backup dir, no .tmp file.
-    expect(await snapshot(workDir)).toEqual(before);
+    expect(await snapshotDir(workDir)).toEqual(before);
   });
 
   it('reports YAML that does not parse as invalid, naming the line', async () => {
     const p = paths();
     await writeFile(p.applistPath, 'brew:\n  formulas:\n  - git\n bad: [\n', 'utf8');
-    const before = await snapshot(workDir);
+    const before = await snapshotDir(workDir);
     const r = await buildConfigReport(p);
     expect(r.schemaValid).toBe(false);
     expect(r.schemaError).toMatch(/line 4/);
-    expect(await snapshot(workDir)).toEqual(before);
+    expect(await snapshotDir(workDir)).toEqual(before);
   });
 
   it('reports a newer-than-supported version as invalid, matching the store', async () => {

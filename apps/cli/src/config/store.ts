@@ -91,7 +91,7 @@ export interface Skip {
 export interface ApplistRead {
   /** Whether the file is on disk. Absent is not a problem in itself: the default locations are created on first write. */
   readonly exists: boolean;
-  /** The declared schema version, or the introduction version when the field is absent; undefined when the file is missing or does not parse. */
+  /** The declared schema version, or the introduction version when the field is absent. Undefined when the file is missing, unreadable, or fails validation, except that a version this build cannot read is kept beside that issue. */
   readonly version?: number;
   /** Why the file would fail to load, one line per problem in the store's spelling. Empty when it would load. */
   readonly issues: readonly string[];
@@ -298,16 +298,17 @@ export class ConfigStore {
     this.backupPrefix = backupPrefixFor(paths.applistPath);
   }
 
-  // The raw file, or undefined when there is none. Only a missing file is a
-  // finding; any other filesystem failure is the machine's, and propagates.
-  private async readText(): Promise<string | undefined> {
+  // The raw file: nothing when there is none, or the failure to read it. A
+  // permissions error or a directory at the path is something the
+  // diagnostics have to be able to report, so it is a finding, not a throw.
+  private async readText(): Promise<{ text?: string; failure?: string }> {
     try {
-      return await readFile(this.paths.applistPath, 'utf8');
+      return { text: await readFile(this.paths.applistPath, 'utf8') };
     } catch (err) {
       if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
-        return undefined;
+        return {};
       }
-      throw err;
+      return { failure: err instanceof Error ? err.message : String(err) };
     }
   }
 
@@ -315,19 +316,23 @@ export class ConfigStore {
   // memory, with the report of what that found. read() returns the report and
   // drops the document; load() keeps the document and persists the migration.
   private async inspect(): Promise<InspectedApplist> {
-    const text = await this.readText();
-    const exists = text !== undefined;
+    const { text, failure } = await this.readText();
+    const exists = text !== undefined || failure !== undefined;
     const doc = parseDocument(text ?? '');
     const untouched = { exists, text: text ?? '', doc, migrated: false };
-    const empty = { legacyLayout: false, pins: [], skips: [] };
+    const nothing = { pins: [], skips: [] };
+    if (failure !== undefined) {
+      return {
+        ...untouched,
+        report: { exists, issues: [failure], legacyLayout: false, ...nothing },
+      };
+    }
     // A file the parser could not read whole is reported on that alone: what
     // it did read is partial, so validating or migrating it would act on the
     // wrong document.
     if (doc.errors.length > 0) {
-      return {
-        ...untouched,
-        report: { exists, issues: doc.errors.map((e) => e.message), ...empty },
-      };
+      const issues = doc.errors.map((e) => e.message);
+      return { ...untouched, report: { exists, issues, legacyLayout: false, ...nothing } };
     }
 
     // Stamp the schema version before migrating so a legacy-key migration
@@ -350,8 +355,8 @@ export class ConfigStore {
         report: {
           exists,
           issues: formatApplistIssueLines(parsed.error),
-          ...empty,
           legacyLayout: migrated,
+          ...nothing,
         },
       };
     }
@@ -368,8 +373,8 @@ export class ConfigStore {
           issues: [
             `schema version ${parsed.data.version} is newer than this macup supports (${SCHEMA_VERSION}) — upgrade macup`,
           ],
-          ...empty,
           legacyLayout: migrated,
+          ...nothing,
         },
       };
     }
@@ -404,8 +409,13 @@ export class ConfigStore {
     }
     // A document the parser could not read whole never becomes this store's
     // state: a later save() would write the part it did read over the rest.
+    // (A file that could not be read at all parses as empty and is refused
+    // at the issues check below.)
     if (doc.errors.length > 0) {
-      throw new ErrInvalidConfig(this.paths.applistPath, report.issues.join('\n'));
+      throw new ErrInvalidConfig(
+        this.paths.applistPath,
+        `${report.issues.join('\n')}${await this.recoveryHint()}`,
+      );
     }
     this.fileExisted = exists;
     this.originalText = text;

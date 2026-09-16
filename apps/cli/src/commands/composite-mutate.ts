@@ -10,9 +10,8 @@
 
 import type { ConfigStore } from '../config/store';
 import type { MutateFailure } from '../errors';
+import { applyRefs, mutateFor, planInstall, selectUpdate } from '../plugins/operations';
 import { type ProbeOutcome, probe, probeOutcomeReason } from '../plugins/probe';
-import { resolveSelection } from '../plugins/selection';
-import { kindForConfigKey } from '../plugins/subtype-table';
 import type {
   MutateOptions,
   PackageRef,
@@ -20,7 +19,7 @@ import type {
   Plugin,
   PluginContext,
 } from '../plugins/types';
-import { type MutationMode, failuresFor, mutateFor } from './mutation-report';
+import type { MutationMode } from './mutation-report';
 
 /** Why a constituent won't run, or the refs it will act on (status 'planned'). */
 export interface ConstituentPlan {
@@ -72,21 +71,25 @@ export interface ConstituentOutcome {
 /**
  * Plan the composite `all` fan-out (ADR 0033) WITHOUT mutating: drop backends
  * listed in skip.all (ADR 0037), then per constituent resolve the refs it would
- * act on through the same per-plugin selection the individual commands use (so
- * skip and pin bind on `all` too). A missing backend is `unavailable`
- * (ErrPluginUnavailable), distinct from a real `error` — mirroring the read
- * path (buildOutdatedReport). Planning first lets the caller show a count and
- * skip the confirmation prompt when there is nothing to do.
+ * act on through the same plan operations the individual commands use
+ * (`plugins/operations.ts`, so skip and pin bind on `all` too). A missing
+ * backend is `unavailable` (ErrPluginUnavailable), distinct from a real
+ * `error` — mirroring the read path (buildOutdatedReport). Planning first lets
+ * the caller show a count and skip the confirmation prompt when there is
+ * nothing to do.
  *
  * Both modes go through the promoted probe (ADR 0050), check() then list(),
  * for one listing that serves two ends. `update` selects its refs from it,
- * so it lists `onlyOutdated`. `install` selects from the tracked applist and
- * lists for the report alone: its `before` snapshot (ADR 0052 rule 2), a
- * full listing so a present ref that is up to date is not misread as
- * freshly installed. Where no report will read that snapshot (a dry run,
- * or nothing tracked), availability alone decides the install plan: the
- * probe runs check() and skips the listing (`skipList`), so the
- * unavailable-vs-error split is read off the probe in every case.
+ * so it lists `onlyOutdated`, then hands the listing to the plan's selection
+ * (`selectUpdate`, the half of `planUpdate` below the probe, since the probe
+ * here is classified rather than thrown). `install` plans from the tracked
+ * applist (`planInstall`, every key) and lists for the report alone: its
+ * `before` snapshot (ADR 0052 rule 2), a full listing so a present ref that
+ * is up to date is not misread as freshly installed. Where no report will
+ * read that snapshot (a dry run, or nothing tracked), availability alone
+ * decides the install plan: the probe runs check() and skips the listing
+ * (`skipList`), so the unavailable-vs-error split is read off the probe in
+ * every case.
  */
 export async function planComposite(
   mode: MutationMode,
@@ -108,11 +111,24 @@ export async function planComposite(
     }
     const ctx = makeCtx();
     if (mode === 'update') {
+      // `all update` is the "update everything outdated" command, so it is
+      // not scoped to the tracked applist (`showAll`), but skip and pin still
+      // bind (ADR 0033), and unenforceable pins upgrade anyway (ADR 0034).
       const outcome = await probe(plugin, ctx, { onlyOutdated: true });
-      plans.push(planFromProbe(plugin, outcome, (s) => selectUpdateRefs(s, plugin, store)));
+      plans.push(
+        planFromProbe(
+          plugin,
+          outcome,
+          (statuses) => selectUpdate(plugin, statuses, store, { showAll: true }).refs,
+        ),
+      );
       continue;
     }
-    const refs = selectInstallRefs(plugin, store);
+    // install: each constituent's whole tracked set (the backend skips what
+    // is already installed). Not list-based: plugin.list() enumerates only
+    // what is installed, so filtering it for not-installed would be empty
+    // and `all install` would silently no-op.
+    const { refs } = await planInstall(plugin, async () => store, {});
     const skipList = opts.dryRun || refs.length === 0;
     plans.push(planFromProbe(plugin, await probe(plugin, ctx, {}, { skipList }), refs));
   }
@@ -140,14 +156,17 @@ function planFromProbe(
 }
 
 /**
- * Apply a plan: mutate each planned constituent's refs one call per ref,
- * attempting every ref whatever happened to the one before it (ADR 0052), so
- * a constituent whose `update()` fails atomically on one ref still gets the
- * rest of its batch. A ref's failure is recorded as detail on the outcome
- * for the report to classify against the after snapshot, never as a verdict
- * here. The one exception is cancellation: a failure after the signal
- * aborted is what a SIGINT-cancelled subprocess threw, and the run must end
- * there rather than march through the remaining refs and backends.
+ * Apply a plan: each planned constituent's refs through the apply operation
+ * (`applyRefs`), one call per ref, every ref attempted whatever happened to
+ * the one before it (ADR 0052), so a constituent whose `update()` fails
+ * atomically on one ref still gets the rest of its batch. A ref's failure is
+ * recorded as detail on the outcome for the report to classify against the
+ * after snapshot, never as a verdict here. The one exception is cancellation:
+ * a failure after the signal aborted is what a SIGINT-cancelled subprocess
+ * threw, and the run must end there rather than march through the remaining
+ * refs and backends. No constituent's health check runs: `all` never ran
+ * them, and the e2e dry-run guard reads every `[dry-run]` line as a mutating
+ * call.
  *
  * @throws the constituent's own error, only once `ctx.signal` has aborted.
  */
@@ -164,21 +183,14 @@ export async function applyComposite(
       outcomes.push({ pluginId, status: plan.status, refs: [], message: plan.message });
       continue;
     }
-    const mutate = mutateFor(mode, plan.plugin);
-    if (!mutate || plan.refs.length === 0) {
+    if (!mutateFor(mode, plan.plugin) || plan.refs.length === 0) {
       outcomes.push({ pluginId, status: 'nothing', refs: [] });
       continue;
     }
-    const failures: MutateFailure[] = [];
-    for (const ref of plan.refs) {
-      const ctx = makeCtx();
-      try {
-        await mutate(ctx, [ref], opts);
-      } catch (err) {
-        if (ctx.signal.aborted) throw err;
-        failures.push(...failuresFor(ref, err));
-      }
-    }
+    const { failures } = await applyRefs(plan.plugin, makeCtx(), mode, plan.refs, {
+      dryRun: opts.dryRun,
+      healthCheck: false,
+    });
     outcomes.push({
       pluginId,
       status: 'acted',
@@ -199,34 +211,4 @@ export async function fanOutComposite(
 ): Promise<ConstituentOutcome[]> {
   const plans = await planComposite(mode, constituents, store, makeCtx, { dryRun: opts.dryRun });
   return applyComposite(mode, plans, makeCtx, opts);
-}
-
-// `all update` is the "update everything outdated" command, so it is not
-// scoped to the tracked applist — but skip and pin still bind (ADR 0033).
-// Unenforceable pins upgrade anyway (ADR 0023/0034), so they join the set.
-// Takes the probe's already-fetched statuses rather than listing again.
-function selectUpdateRefs(
-  statuses: readonly PackageStatus[],
-  plugin: Plugin,
-  store: ConfigStore,
-): PackageRef[] {
-  const { upgradable, pinUnenforceable } = resolveSelection(
-    statuses,
-    store.selectionFor(plugin.manifest.id),
-    plugin.manifest.compareVersions,
-  );
-  return [...upgradable, ...pinUnenforceable].map((s) => s.ref);
-}
-
-// install: each constituent's tracked applist set (matches the individual
-// install command; the backend skips already-installed packages). Not
-// list-based — plugin.list() enumerates only what is installed, so filtering
-// it for not-installed is empty and `all install` would silently no-op.
-function selectInstallRefs(plugin: Plugin, store: ConfigStore): PackageRef[] {
-  const refs: PackageRef[] = [];
-  for (const key of plugin.manifest.configKeys) {
-    const kind = kindForConfigKey(plugin.manifest, key);
-    for (const name of store.list(key)) refs.push({ kind, name });
-  }
-  return refs;
 }

@@ -7,13 +7,10 @@
  * @module
  */
 
-import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { parse } from 'yaml';
 import { TOP_LEVEL_COMMANDS } from '../cli/commands';
 import type { ActionCommand, CliDeps, ParsedArgs } from '../cli/types';
 import type { PathResolution } from '../config/paths';
-import { ApplistSchema, SCHEMA_VERSION, formatApplistIssueLines } from '../config/schema';
+import { ConfigStore } from '../config/store';
 
 /** Everything `macup config` and doctor's Config section report, computed once so the two cannot disagree on what "valid" means. */
 export interface ConfigReport {
@@ -33,73 +30,32 @@ export interface ConfigReport {
   legacyMigration?: PathResolution['legacyMigration'];
 }
 
-/** Inspect the applist without mutating it: existence, schema validity, pin and skip counts, and any migration still pending. */
+/**
+ * Inspect the applist without mutating it: existence, schema validity, pin and
+ * skip counts, and any migration still pending. Everything about the file
+ * comes from the store's read (ADR 0058), so this cannot judge a file
+ * differently from the load that follows, and never writes.
+ */
 export async function buildConfigReport(paths: PathResolution): Promise<ConfigReport> {
-  const report: ConfigReport = {
+  const found = await new ConfigStore(paths).read();
+  return {
     applistPath: paths.applistPath,
     source: paths.source,
-    exists: existsSync(paths.applistPath),
+    exists: found.exists,
     explicit: paths.explicit,
-    schemaValid: false,
-    pinsCount: 0,
-    skipCount: 0,
+    // A missing file has nothing to violate, so it reads as valid here.
+    schemaValid: found.issues.length === 0,
+    // The store's own lines, inlined: a path is spelled `brew.casks[0]` here
+    // and in the load error alike, never `brew.casks.0` on one of them.
+    ...(found.issues.length > 0 ? { schemaError: found.issues.join('; ') } : {}),
+    // Kept next to the reason when the version itself is what was rejected.
+    ...(found.version !== undefined ? { schemaVersion: found.version } : {}),
+    pinsCount: found.pins.length,
+    skipCount: found.skips.length,
     backupDir: paths.backupDir,
     deprecationWarning: paths.deprecationWarning,
     legacyMigration: paths.legacyMigration,
   };
-
-  if (!report.exists) {
-    report.schemaValid = true; // vacuously — nothing to violate yet
-    return report;
-  }
-
-  try {
-    const text = await readFile(paths.applistPath, 'utf8');
-    const parsed = parse(text);
-    const result = ApplistSchema.safeParse(parsed ?? {});
-    if (!result.success) {
-      report.schemaValid = false;
-      // Shared with the store's load/save errors so a path is spelled the
-      // same everywhere: `brew.casks[0]`, not `brew.casks.0` here and
-      // `brew.casks[0]` there for the identical problem.
-      report.schemaError = formatApplistIssueLines(result.error).join('; ');
-    } else if (result.data.version > SCHEMA_VERSION) {
-      // Mirror the store's load-time rejection: a newer-than-supported
-      // version is not something this build can safely read, so `--config`
-      // must not call it valid.
-      report.schemaValid = false;
-      report.schemaVersion = result.data.version;
-      report.schemaError = `schema version ${result.data.version} is newer than this macup supports (${SCHEMA_VERSION}) — upgrade macup`;
-    } else {
-      report.schemaValid = true;
-      report.schemaVersion = result.data.version;
-      // Count leaf entries across both shapes: a pin value is either a
-      // version string (flat) or a subtype→version map (nested); a skip value
-      // is either a name list (flat) or a subtype→names map (nested).
-      report.pinsCount = Object.values(result.data.pins).reduce(
-        (acc, entry) =>
-          acc +
-          Object.values(entry).reduce(
-            (n, v) => n + (typeof v === 'string' ? 1 : Object.keys(v).length),
-            0,
-          ),
-        0,
-      );
-      report.skipCount = Object.values(result.data.skip).reduce(
-        (acc, entry) =>
-          acc +
-          (Array.isArray(entry)
-            ? entry.length
-            : Object.values(entry).reduce((n, list) => n + list.length, 0)),
-        0,
-      );
-    }
-  } catch (err) {
-    report.schemaValid = false;
-    report.schemaError = err instanceof Error ? err.message : String(err);
-  }
-
-  return report;
 }
 
 // What "no file here" means depends on who chose the path. The default

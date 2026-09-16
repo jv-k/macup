@@ -61,7 +61,7 @@ export interface PathResolution {
  * meaningful when the resolution is `explicit`; the implicit sources are the
  * ones nobody had to ask for.
  */
-export function selectorLabel(paths: Pick<PathResolution, 'source'>): string {
+export function selectorLabel(paths: Pick<Partial<PathResolution>, 'source'>): string {
   return paths.source === 'flag-applist' ? '--applist' : '$MACUP_APPLIST';
 }
 

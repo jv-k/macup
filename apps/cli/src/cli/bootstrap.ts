@@ -15,9 +15,8 @@
 
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { expandUserPath, resolveConfigPaths, selectorLabel } from '../config/paths';
+import { expandUserPath, resolveConfigPaths } from '../config/paths';
 import { ConfigStore } from '../config/store';
-import { ErrApplistNotFound } from '../errors';
 import { buildExecRunner } from '../exec/build';
 import { fileLogSink } from '../exec/logging';
 import { ExecaExecRunner } from '../exec/run';
@@ -45,7 +44,7 @@ export interface BootstrapInput {
   readonly log?: string;
   /** Base for a relative --applist / --log; defaults to the live process cwd. */
   readonly cwd?: string;
-  /** Filesystem probe; injectable so the applist guard is testable in-process. */
+  /** Filesystem probe for path resolution; injectable so the precedence order is testable in-process. */
   readonly exists?: (path: string) => boolean;
 }
 
@@ -110,15 +109,9 @@ export function bootstrap(input: BootstrapInput): CliDeps {
     });
 
   const getStore = async (): Promise<ConfigStore> => {
-    const paths = resolvePaths();
-    // An applist the user named that isn't there is a typo, not a first run
-    // (ADR 0044). Refuse here rather than in ConfigStore: the diagnostic
-    // surfaces (`config`, `doctor`) go through resolvePaths directly and
-    // should still be able to REPORT a missing file rather than fail on it.
-    if (paths.explicit && !exists(paths.applistPath)) {
-      throw new ErrApplistNotFound(paths.applistPath, selectorLabel(paths));
-    }
-    const store = new ConfigStore(paths);
+    // The store refuses a named-but-missing applist itself (ADR 0044, ADR
+    // 0058); the diagnostics read through the same store without loading.
+    const store = new ConfigStore(resolvePaths());
     const result = await store.load();
     if (result.migrated) {
       const suffix = result.migrationBackupPath ? ` (backup: ${result.migrationBackupPath})` : '';

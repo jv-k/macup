@@ -12,23 +12,35 @@
 import { copyFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Document, Scalar, YAMLMap, YAMLSeq, parseDocument } from 'yaml';
-import { ErrInvalidConfig } from '../errors';
+import { ErrApplistNotFound, ErrInvalidConfig } from '../errors';
 import type { SelectionPolicy } from '../plugins/selection';
 import { backupFileRe, backupPrefixFor, uniqueBackupPath } from './backup';
+import { type PathSource, selectorLabel } from './paths';
 import {
+  type Applist,
   type ApplistKey,
   ApplistSchema,
   INITIAL_SCHEMA_VERSION,
   SCHEMA_VERSION,
+  formatApplistIssueLines,
   formatApplistIssues,
 } from './schema';
 
-/** Where one applist and its backups live. */
+/** Where one applist and its backups live, and whether the user named it. */
 export interface ConfigStorePaths {
   /** The applist this store reads and writes. */
   readonly applistPath: string;
   /** Where its backups go. Shared between applists, which is why filenames are namespaced (ADR 0044). */
   readonly backupDir: string;
+  /**
+   * True when the user named this applist via `--applist` or `$MACUP_APPLIST`
+   * (ADR 0044): a named file that isn't there is a typo, not a first run, so
+   * load() refuses it rather than starting an empty list. Absent for the
+   * default locations, which a first write creates.
+   */
+  readonly explicit?: boolean;
+  /** Which rule chose the path, so the refusal can name the selector. Only read when `explicit`. */
+  readonly source?: PathSource;
 }
 
 /** Outcome of a save. `changed: false` means the serialized form was identical, so nothing was written and no backup taken. */
@@ -47,8 +59,63 @@ export interface LoadResult {
   migrationBackupPath?: string;
 }
 
+/** One pin as the file declares it: a version ceiling on one name under one plugin, and the subtype it binds when per-subtype (ADR 0035). */
+export interface Pin {
+  /** The plugin whose package is pinned. */
+  readonly pluginId: string;
+  /** Set when the pin binds one subtype (`pins.brew.casks`); absent for a flat pin. */
+  readonly subtype?: string;
+  /** The package name. */
+  readonly name: string;
+  /** The ceiling: macup upgrades up to it, never past it. */
+  readonly maxVersion: string;
+}
+
+/** One skip as the file declares it: a name taken out of update consideration under one plugin, and the subtype it binds when per-subtype (ADR 0035). */
+export interface Skip {
+  /** The plugin whose package is skipped. */
+  readonly pluginId: string;
+  /** Set when the skip binds one subtype (`skip.brew.casks`); absent for a flat skip. */
+  readonly subtype?: string;
+  /** The package name. */
+  readonly name: string;
+}
+
+/**
+ * What one read of the applist found, and nothing else. The read that
+ * produces it never throws on the file's contents, never migrates, and never
+ * writes, so the diagnostics (`config`, `doctor`) can consume it against any
+ * file; `load()` is the same read followed by the migrate-and-stamp step
+ * (ADR 0058).
+ */
+export interface ApplistRead {
+  /** Whether the file is on disk. Absent is not a problem in itself: the default locations are created on first write. */
+  readonly exists: boolean;
+  /** The declared schema version, or the introduction version when the field is absent; undefined when the file is missing or does not parse. */
+  readonly version?: number;
+  /** Why the file would fail to load, one line per problem in the store's spelling. Empty when it would load. */
+  readonly issues: readonly string[];
+  /** True when the file still uses the pre-1.x flat keys, which the next load() rewrites after taking a backup. */
+  readonly legacyLayout: boolean;
+  /** Every pin in force, flattened out of the flat and per-subtype shapes. Empty unless the file validates. */
+  readonly pins: readonly Pin[];
+  /** Every skip in force, likewise. */
+  readonly skips: readonly Skip[];
+}
+
 interface ConfigStoreDeps {
   readonly now?: () => Date;
+}
+
+// The document behind an ApplistRead, for load() to keep: stamped and
+// migrated in memory, with the raw text the no-change guard baselines on.
+interface InspectedApplist {
+  readonly exists: boolean;
+  readonly text: string;
+  readonly doc: Document;
+  /** Legacy keys were renamed in memory; persisting that is load()'s call. */
+  readonly migrated: boolean;
+  readonly report: ApplistRead;
 }
 
 function scalarValue(node: unknown): string {
@@ -135,6 +202,35 @@ function stampVersion(doc: Document, version: number): boolean {
   return true;
 }
 
+// Every pin and skip as a flat list, out of the two shapes the schema allows
+// per plugin (ADR 0035): a flat name→version map or name list, or a
+// subtype→(the same) map. File order is kept so a report reads like the file.
+function flattenPolicy(data: Applist): { pins: Pin[]; skips: Skip[] } {
+  const pins: Pin[] = [];
+  for (const [pluginId, entry] of Object.entries(data.pins)) {
+    for (const [key, value] of Object.entries<string | Record<string, string>>(entry)) {
+      if (typeof value === 'string') {
+        pins.push({ pluginId, name: key, maxVersion: value });
+      } else {
+        for (const [name, maxVersion] of Object.entries(value)) {
+          pins.push({ pluginId, subtype: key, name, maxVersion });
+        }
+      }
+    }
+  }
+  const skips: Skip[] = [];
+  for (const [pluginId, entry] of Object.entries(data.skip)) {
+    if (Array.isArray(entry)) {
+      for (const name of entry) skips.push({ pluginId, name });
+    } else {
+      for (const [subtype, names] of Object.entries(entry)) {
+        for (const name of names) skips.push({ pluginId, subtype, name });
+      }
+    }
+  }
+  return { pins, skips };
+}
+
 function pathFor(key: ApplistKey): readonly string[] {
   return key.split('.');
 }
@@ -202,56 +298,137 @@ export class ConfigStore {
     this.backupPrefix = backupPrefixFor(paths.applistPath);
   }
 
-  /**
-   * Read and validate the applist. Migrates a pre-1.x layout in place, which is the one side effect a read can have, so a dry-run path must not call this.
-   * @throws ErrInvalidConfig when the file does not satisfy the schema, or declares a newer version than this build understands.
-   */
-  async load(): Promise<LoadResult> {
-    let text: string;
+  // The raw file, or undefined when there is none. Only a missing file is a
+  // finding; any other filesystem failure is the machine's, and propagates.
+  private async readText(): Promise<string | undefined> {
     try {
-      text = await readFile(this.paths.applistPath, 'utf8');
-      this.fileExisted = true;
+      return await readFile(this.paths.applistPath, 'utf8');
     } catch (err) {
       if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
-        // No config file yet — start with an empty document.
-        text = '';
-        this.fileExisted = false;
-      } else {
-        throw err;
+        return undefined;
       }
+      throw err;
     }
-    this.originalText = text;
-    this.doc = parseDocument(text);
+  }
+
+  // The one reader (ADR 0058): the file parsed, stamped and migrated in
+  // memory, with the report of what that found. read() returns the report and
+  // drops the document; load() keeps the document and persists the migration.
+  private async inspect(): Promise<InspectedApplist> {
+    const text = await this.readText();
+    const exists = text !== undefined;
+    const doc = parseDocument(text ?? '');
+    const untouched = { exists, text: text ?? '', doc, migrated: false };
+    const empty = { legacyLayout: false, pins: [], skips: [] };
+    // A file the parser could not read whole is reported on that alone: what
+    // it did read is partial, so validating or migrating it would act on the
+    // wrong document.
+    if (doc.errors.length > 0) {
+      return {
+        ...untouched,
+        report: { exists, issues: doc.errors.map((e) => e.message), ...empty },
+      };
+    }
 
     // Stamp the schema version before migrating so a legacy-key migration
     // persists a versioned file in the same write. A version-less file on
     // disk is a legacy file, so it earns the INTRODUCTION version, not the
     // current one — never silently relabel an old-shape file as a newer
-    // schema. On a file that only lacks `version` (nothing else to migrate)
-    // this is an in-memory change that does NOT force a rewrite — the field
-    // lands the next time the user mutates config, keeping read-only
-    // commands side-effect free. The no-change guard is baselined below
-    // AFTER this stamp, so save() sees a version-only file as unchanged.
-    stampVersion(this.doc, INITIAL_SCHEMA_VERSION);
+    // schema. Both are in-memory changes: load() decides whether the
+    // migration reaches disk, and the stamp alone never does — the field
+    // lands the next time the user mutates config.
+    stampVersion(doc, INITIAL_SCHEMA_VERSION);
+    const migrated = migrateInPlace(doc);
+    const found = { ...untouched, migrated };
+
+    // Validated in its migrated shape: zod strips unknown keys, so a legacy
+    // list only fails validation once it sits under its modern key.
+    const parsed = ApplistSchema.safeParse(doc.toJS() ?? {});
+    if (!parsed.success) {
+      return {
+        ...found,
+        report: {
+          exists,
+          issues: formatApplistIssueLines(parsed.error),
+          ...empty,
+          legacyLayout: migrated,
+        },
+      };
+    }
+    const version = exists ? parsed.data.version : undefined;
+    // A file declaring a higher version was written by a newer macup whose
+    // shape this build may not understand. Refuse rather than silently
+    // misread it — that's the whole point of the version field.
+    if (parsed.data.version > SCHEMA_VERSION) {
+      return {
+        ...found,
+        report: {
+          exists,
+          version,
+          issues: [
+            `schema version ${parsed.data.version} is newer than this macup supports (${SCHEMA_VERSION}) — upgrade macup`,
+          ],
+          ...empty,
+          legacyLayout: migrated,
+        },
+      };
+    }
+    return {
+      ...found,
+      report: {
+        exists,
+        version,
+        issues: [],
+        legacyLayout: migrated,
+        ...flattenPolicy(parsed.data),
+      },
+    };
+  }
+
+  /**
+   * What the applist holds, without touching it: never throws on a missing or invalid file, never migrates, and never writes (ADR 0058).
+   */
+  async read(): Promise<ApplistRead> {
+    return (await this.inspect()).report;
+  }
+
+  /**
+   * The applist as this store's working state: {@link ConfigStore.read} followed by the migrate-and-stamp step. Migrating a pre-1.x layout rewrites the file, which is the one side effect a read can have, so a dry-run path must not call this.
+   * @throws ErrApplistNotFound when the user named the applist and it isn't there (ADR 0044).
+   * @throws ErrInvalidConfig when the file does not parse, does not satisfy the schema, or declares a newer version than this build understands.
+   */
+  async load(): Promise<LoadResult> {
+    const { exists, text, doc, migrated, report } = await this.inspect();
+    if (!exists && this.paths.explicit) {
+      throw new ErrApplistNotFound(this.paths.applistPath, selectorLabel(this.paths));
+    }
+    // A document the parser could not read whole never becomes this store's
+    // state: a later save() would write the part it did read over the rest.
+    if (doc.errors.length > 0) {
+      throw new ErrInvalidConfig(this.paths.applistPath, report.issues.join('\n'));
+    }
+    this.fileExisted = exists;
+    this.originalText = text;
+    this.doc = doc;
 
     let result: LoadResult = { migrated: false };
-    if (migrateInPlace(this.doc)) {
+    if (migrated) {
       const backupPath = await this.persistMigration();
       result = backupPath
         ? { migrated: true, migrationBackupPath: backupPath }
         : { migrated: true };
     }
 
-    // Baseline the no-change guard against the SERIALIZED form. The YAML
-    // serializer normalizes formatting (flow `[a, b]` → `[ a, b ]`), so
-    // comparing a later doc.toString() against the raw on-disk text would
-    // flag a cosmetic-only reflow as a change — triggering a spurious backup
-    // and rewrite on a no-op mutation (C-2). Re-baselining means a no-op
-    // serializes identically and save() correctly reports "unchanged".
-    this.originalText = this.doc.toString();
+    // Baseline the no-change guard against the SERIALIZED form, and after
+    // the in-memory version stamp. The YAML serializer normalizes formatting
+    // (flow `[a, b]` → `[ a, b ]`), so comparing a later doc.toString()
+    // against the raw on-disk text would flag a cosmetic-only reflow as a
+    // change — triggering a spurious backup and rewrite on a no-op mutation
+    // (C-2). Re-baselining means a no-op serializes identically, a
+    // version-only stamp included, and save() correctly reports "unchanged".
+    this.originalText = doc.toString();
 
-    const parsed = ApplistSchema.safeParse(this.doc.toJS() ?? {});
-    if (!parsed.success) {
+    if (report.issues.length > 0) {
       // Migration ran, then validation failed → the on-disk file was just
       // rewritten and is now invalid. Surface the backup path so the user
       // can recover, even if they didn't know a migration was happening.
@@ -260,17 +437,7 @@ export class ConfigStore {
         : '';
       throw new ErrInvalidConfig(
         this.paths.applistPath,
-        `${formatApplistIssues(parsed.error)}${suffix}${await this.recoveryHint()}`,
-      );
-    }
-
-    // A file declaring a higher version was written by a newer macup whose
-    // shape this build may not understand. Refuse rather than silently
-    // misread it — that's the whole point of the version field.
-    if (parsed.data.version > SCHEMA_VERSION) {
-      throw new ErrInvalidConfig(
-        this.paths.applistPath,
-        `schema version ${parsed.data.version} is newer than this macup supports (${SCHEMA_VERSION}) — upgrade macup`,
+        `${report.issues.join('\n')}${suffix}${await this.recoveryHint()}`,
       );
     }
     return result;

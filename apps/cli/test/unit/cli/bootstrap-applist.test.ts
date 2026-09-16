@@ -1,16 +1,30 @@
 // The explicit-applist guard (#17, ADR 0044): an applist the user NAMED that
 // isn't on disk is a typo, not a first run, so getStore refuses rather than
-// creating it. Driven through bootstrap with an injected `exists` probe, so
-// the error class and its exit code are asserted directly (a spawned CLI can
-// only see the exit code and the printed text).
+// creating it. The refusal is the store's (ADR 0058), so it follows the disk:
+// the injected `exists` probe still drives path resolution, but a named path
+// is judged by the read, which is why the present case writes a real file.
+// Driven through bootstrap so the error class and its exit code are asserted
+// directly (a spawned CLI can only see the exit code and the printed text).
 
-import { describe, expect, it } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type BootstrapInput, bootstrap } from '../../../src/cli/bootstrap';
 import { ErrApplistNotFound } from '../../../src/errors';
 
+let workDir: string;
+
+beforeEach(async () => {
+  workDir = await mkdtemp(join(tmpdir(), 'macup-boot-applist-'));
+});
+
+afterEach(async () => {
+  await rm(workDir, { recursive: true, force: true });
+});
+
 const HOME = '/home/test';
 const never = () => false;
-const always = () => true;
 
 const boot = (over: Partial<BootstrapInput>) =>
   bootstrap({ debug: false, verbose: false, home: HOME, env: {}, ...over });
@@ -48,10 +62,10 @@ describe('explicit applist must exist (#17)', () => {
   });
 
   it('does not fire when the named applist is there', async () => {
-    const deps = boot({ applist: '/lists/work.yaml', exists: always });
-    // The file "exists" per the probe but has no contents on the real disk;
-    // ConfigStore treats an unreadable path as an empty document, which is
-    // enough to prove the guard let the call through.
+    const workPath = join(workDir, 'work.yaml');
+    await writeFile(workPath, 'version: 1\n', 'utf8');
+    // The probe says nothing exists; the file on disk is what the store reads.
+    const deps = boot({ applist: workPath, exists: never });
     await expect(deps.getStore()).resolves.toBeDefined();
   });
 });

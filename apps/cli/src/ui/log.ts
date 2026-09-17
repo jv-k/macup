@@ -12,7 +12,7 @@ import { S_BAR } from '@clack/prompts';
 import pc from 'picocolors';
 import { useColor as useColorFn } from '../runtime';
 import { renderAppleLogo } from './logo';
-import { visualWidth, wrapAnsiToWidth } from './width';
+import { splitLeadingSpaces, visualWidth, wrapAnsiToWidth } from './width';
 
 // Re-exported so existing importers (ui/pager, ui/picker, tests) keep importing
 // visualWidth from ui/log; the implementation now lives in ui/width, shared
@@ -180,6 +180,9 @@ export function badge(text: string, color: boolean = useColorFn()): string {
 
 let frameOn = false;
 
+/** The two spaces between the gutter bar and a row. */
+const GUTTER_GAP = '  ';
+
 /** Enable/disable the wizard gutter for subsequent print()/printErr() calls. */
 export function setFrame(on: boolean): void {
   frameOn = on;
@@ -195,7 +198,7 @@ export function framed(text: string): string {
   const bar = useColorFn() ? forced.gray(GLYPHS.bar) : GLYPHS.bar;
   return text
     .split('\n')
-    .map((line) => (line.length > 0 ? `${bar}  ${line}` : bar))
+    .map((line) => (line.length > 0 ? `${bar}${GUTTER_GAP}${line}` : bar))
     .join('\n');
 }
 
@@ -217,8 +220,8 @@ export function setWrapColumns(columns: number | undefined): void {
   wrapColumns = columns;
 }
 
-/** The gutter bar and its two spaces, which `framed` adds to every row after the formatter. */
-const FRAME_CELLS = 3;
+/** What `framed` adds to every row after the formatter: the gutter bar and its gap. */
+const FRAME_CELLS = visualWidth(`${GLYPHS.bar}${GUTTER_GAP}`);
 /** Every notice formatter's own indent: the two spaces before the glyph. */
 const BASE_INDENT = 2;
 /** Below this many cells a hang makes rows too short to read, so the indent gives way, then the wrap. */
@@ -229,10 +232,6 @@ function terminalColumns(): number | undefined {
   if (wrapColumns !== undefined) return wrapColumns;
   return process.stdout.isTTY ? process.stdout.columns : undefined;
 }
-
-// A body's leading spaces, past any SGR opens that colour them.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI on purpose
-const LEADING_SPACES = /^((?:\x1b\[[0-9;]*m)*)( *)/;
 
 /**
  * Wrap `body` under `prefix` with a hanging indent at the message column.
@@ -254,23 +253,22 @@ function hang(prefix: string, body: string): string {
   const width = columns - (frameOn ? FRAME_CELLS : 0);
   if (!body.includes('\n') && visualWidth(row) <= width) return row;
 
-  const [, opens = '', lead = ''] = LEADING_SPACES.exec(body) ?? [];
-  const text = `${opens}${body.slice(opens.length + lead.length)}`;
+  const { opens, lead, rest } = splitLeadingSpaces(body);
   const column = visualWidth(prefix) + lead.length;
-  let indent = column;
-  if (width - indent < WRAP_FLOOR) indent = BASE_INDENT;
+  const indent = width - column >= WRAP_FLOOR ? column : BASE_INDENT;
+  const available = width - indent;
   // The first row starts at the message column, the rest at the indent. When
   // the floor moved the indent back, the text is padded by the difference so
   // the wrapper sees the first row's true start, and the padding comes off
   // again; the wrapper trims nothing, so it is spaces in, spaces out. A
   // prefix that fills the row on its own leaves nothing to wrap.
   const pad = column - indent;
-  if (width - indent < WRAP_FLOOR || pad >= width - indent) return row;
+  if (available < WRAP_FLOOR || pad >= available) return row;
 
-  const wrapped = wrapAnsiToWidth(`${' '.repeat(pad)}${text}`, width - indent, { hard: true });
-  const [first = '', ...rest] = wrapped;
+  const wrapped = wrapAnsiToWidth(`${' '.repeat(pad)}${opens}${rest}`, available, { hard: true });
+  const [first = '', ...more] = wrapped;
   const hangStr = ' '.repeat(indent);
-  return [`${prefix}${lead}${first.slice(pad)}`, ...rest.map((r) => `${hangStr}${r}`)].join('\n');
+  return [`${prefix}${lead}${first.slice(pad)}`, ...more.map((r) => `${hangStr}${r}`)].join('\n');
 }
 
 /** console.log through the frame. The one stdout seam for view output. */

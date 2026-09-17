@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   clipAnsiToWidth,
   clipToWidth,
+  splitLeadingSpaces,
   stripAnsi,
   visualWidth,
   wrapAnsiToWidth,
@@ -123,5 +124,16 @@ describe('wrapAnsiToWidth', () => {
     for (const row of rows.slice(0, -1)) expect(row.endsWith('\x1b[39m')).toBe(true);
     for (const row of rows.slice(1)) expect(row.startsWith('\x1b[32m')).toBe(true);
     expect(stripAnsi(rows.join(''))).toBe('green words that wrap');
+  });
+});
+
+describe('splitLeadingSpaces', () => {
+  it('separates the spans that open a string from the spaces they colour', () => {
+    expect(splitLeadingSpaces('\x1b[33m  name: msg\x1b[39m')).toEqual({
+      opens: '\x1b[33m',
+      lead: '  ',
+      rest: 'name: msg\x1b[39m',
+    });
+    expect(splitLeadingSpaces('plain')).toEqual({ opens: '', lead: '', rest: 'plain' });
   });
 });

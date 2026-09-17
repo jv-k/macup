@@ -109,10 +109,19 @@ export function clipAnsiToWidth(s: string, maxCells: number): string {
   return `${out}…${sawAnsi ? '\x1b[0m' : ''}`;
 }
 
-// A continuation row's opening SGR reopens (zero or more), then the one
-// separator space a break can land on.
+// Any SGR opens a string starts with, then the plain spaces after them.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI on purpose
-const ROW_OPENING_SPACE = /^((?:\x1b\[[0-9;]*m)*) /;
+const LEADING_SPACES = /^((?:\x1b\[[0-9;]*m)*)( *)/;
+
+/**
+ * Split `s` into the SGR opens it starts with, the plain spaces after them,
+ * and the rest, so a caller can measure or move a body's leading spaces
+ * without disturbing the span that colours them.
+ */
+export function splitLeadingSpaces(s: string): { opens: string; lead: string; rest: string } {
+  const [, opens = '', lead = ''] = LEADING_SPACES.exec(s) ?? [];
+  return { opens, lead, rest: s.slice(opens.length + lead.length) };
+}
 
 /**
  * Wrap `text` into rows of at most `maxCells`, ANSI-aware: escape sequences
@@ -135,6 +144,13 @@ export function wrapAnsiToWidth(
   const options = { hard: opts.hard ?? false, trim: false, wordWrap: true };
   return text.split('\n').flatMap((paragraph) => {
     const [first = '', ...rest] = wrapAnsi(paragraph, maxCells, options).split('\n');
-    return [first, ...rest.map((row) => row.replace(ROW_OPENING_SPACE, '$1'))];
+    return [first, ...rest.map(consumeSeparator)];
   });
+}
+
+// The one separator space a break can land on, at the start of a
+// continuation row, past the span the wrapper reopened there.
+function consumeSeparator(row: string): string {
+  const { opens, lead, rest } = splitLeadingSpaces(row);
+  return lead ? `${opens}${lead.slice(1)}${rest}` : row;
 }

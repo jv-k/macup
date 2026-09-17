@@ -129,12 +129,13 @@ export function splitLeadingSpaces(s: string): { opens: string; lead: string; re
  * the next row, and fullwidth codepoints count two cells. Breaks fall at
  * spaces; `hard` also splits a single word wider than `maxCells` by cells.
  * A break that lands on a space consumes it, so no continuation row opens
- * one cell off its column; every other character survives, leading spaces
- * and internal runs included, so the rows joined without a separator are
- * `text` less those breaks. Embedded newlines are paragraph breaks and each
- * paragraph wraps on its own. The plain-text sibling is `log.wrapText`,
- * which measures by `length` and is only safe on text with no escapes
- * (ADR 0060).
+ * one cell off its column, and a row that was only that space (between two
+ * words that each overflow the width) goes with it. Every other character
+ * survives, leading spaces and internal runs included, so the rows joined
+ * without a separator are `text` less those breaks. Embedded newlines are
+ * paragraph breaks and each paragraph wraps on its own. The plain-text
+ * sibling is `log.wrapText`, which measures by `length` and is only safe on
+ * text with no escapes (ADR 0060).
  */
 export function wrapAnsiToWidth(
   text: string,
@@ -144,12 +145,14 @@ export function wrapAnsiToWidth(
   const options = { hard: opts.hard ?? false, trim: false, wordWrap: true };
   return text.split('\n').flatMap((paragraph) => {
     const [first = '', ...rest] = wrapAnsi(paragraph, maxCells, options).split('\n');
-    return [first, ...rest.map(consumeSeparator)];
+    return [first, ...rest.map(consumeSeparator).filter((row) => stripAnsi(row) !== '')];
   });
 }
 
 // The one separator space a break can land on, at the start of a
-// continuation row, past the span the wrapper reopened there.
+// continuation row, past the span the wrapper reopened there. When the row
+// before was already full and the next word overflows too, the separator is
+// the whole row, so consuming it leaves the empty row the filter above drops.
 function consumeSeparator(row: string): string {
   const { opens, lead, rest } = splitLeadingSpaces(row);
   return lead ? `${opens}${lead.slice(1)}${rest}` : row;

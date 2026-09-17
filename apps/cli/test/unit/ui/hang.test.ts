@@ -7,6 +7,7 @@ import {
   info,
   setFrame,
   setWrapColumns,
+  streamLine,
   success,
   trace,
   traceError,
@@ -384,5 +385,129 @@ describe('the counter on its own', () => {
     expect(counter(3, 12, 'Updating', NAME)).toBe(plain);
     setFrame(true);
     expect(counter(3, 12, 'Updating', NAME)).toBe(plain);
+  });
+});
+
+describe('a streamed backend line', () => {
+  // The one soft path (ADR 0060): breaks fall at spaces only, never inside a token.
+  const PROSE =
+    'npm WARN deprecated request@2.88.2: request has been deprecated, see the readme of the package for alternatives';
+  const BLOB_URL = `https://ghcr.io/v2/homebrew/core/ripgrep/blobs/sha256:${'0123456789abcdef'.repeat(2)}0123`;
+  // The base indent: the formatter's own two spaces, with no glyph after them.
+  const INDENT = messageColumn(streamLine);
+
+  it('with the width unset, zero, or under the floor returns one row, the same string as before', () => {
+    expect(INDENT).toBe(2);
+    const before = streamLine(PROSE);
+    expect(before).not.toContain('\n');
+    for (const columns of [undefined, 0, 12]) {
+      setWrapColumns(columns);
+      expect(streamLine(PROSE), String(columns)).toBe(before);
+    }
+  });
+
+  for (const frame of [false, true]) {
+    it(`at 40 columns, frame ${frame ? 'on' : 'off'}, folds at spaces and hangs every continuation at the base indent`, () => {
+      setFrame(frame);
+      setWrapColumns(40);
+      const out = rows(streamLine(PROSE));
+      expect(out.length).toBeGreaterThan(1);
+      for (const row of out) expect(visualWidth(row), row).toBeLessThanOrEqual(40);
+      const gutter = frame ? 3 : 0;
+      for (const row of out.slice(1)) {
+        const plain = stripAnsi(row).slice(gutter);
+        expect(plain.slice(0, INDENT), row).toBe(' '.repeat(INDENT));
+        expect(plain[INDENT], row).not.toBe(' ');
+      }
+      const body = out.map((row) => stripAnsi(row).slice(gutter + INDENT));
+      expect(reads(body, PROSE), body.join('|')).toBe(true);
+      // Every break landed on a space: the rows joined with one are the line
+      // again, which a break inside a word would have padded.
+      expect(body.map((row) => row.trimEnd()).join(' ')).toBe(PROSE);
+    });
+  }
+
+  it('at 40 columns leaves a 90-character URL whole on one row wider than 40', () => {
+    expect(BLOB_URL.length).toBe(90);
+    setWrapColumns(40);
+    expect(streamLine(BLOB_URL)).toBe(`  ${BLOB_URL}`);
+    setFrame(true);
+    const out = rows(streamLine(BLOB_URL));
+    expect(out).toHaveLength(1);
+    expect(visualWidth(out[0] ?? '')).toBeGreaterThan(40);
+    expect(stripAnsi(out[0] ?? '').endsWith(BLOB_URL)).toBe(true);
+  });
+
+  it('hangs the URL of a brew download line whole under the base indent', () => {
+    setFrame(true);
+    setWrapColumns(40);
+    const out = rows(streamLine(`==> Downloading ${BLOB_URL}`)).map((row) =>
+      stripAnsi(row).trimEnd(),
+    );
+    // The frame puts a bare bar on an empty row, so that is the bar on its own.
+    const bar = stripAnsi(framed(''));
+    expect(out).toEqual([`${bar}    ==> Downloading`, `${bar}    ${BLOB_URL}`]);
+  });
+
+  it('puts a hash and a path that each overflow the row on one row each, with no blank row between', () => {
+    const HASH = `sha256:${'0123456789abcdef'.repeat(4)}`;
+    const PATH = '/opt/homebrew/Cellar/ripgrep/14.1.1/share/zsh/site-functions/_rg';
+    setFrame(true);
+    setWrapColumns(50);
+    const out = rows(streamLine(`${HASH} ${PATH}`)).map((row) => stripAnsi(row).trimEnd());
+    const bar = stripAnsi(framed(''));
+    expect(out).toEqual([`${bar}    ${HASH}`, `${bar}    ${PATH}`]);
+  });
+
+  it('hangs a line with its own leading spaces under its text, like a notice body', () => {
+    // brew indents its caveats; the hang absorbs the indent as it does for
+    // the composite's nested rows, so a wrapped caveat stays under itself.
+    const CAVEAT =
+      '    Please run brew doctor and report any problems you find before opening an issue';
+    const indent = messageColumn(streamLine) + 4;
+    setWrapColumns(40);
+    const out = rows(streamLine(CAVEAT));
+    expect(out.length).toBeGreaterThan(1);
+    for (const row of out) expect(visualWidth(row), row).toBeLessThanOrEqual(40);
+    expect(stripAnsi(out[0] ?? '').startsWith('      Please')).toBe(true);
+    for (const row of out.slice(1)) {
+      const plain = stripAnsi(row);
+      expect(plain.slice(0, indent), row).toBe(' '.repeat(indent));
+      expect(plain[indent], row).not.toBe(' ');
+    }
+    const body = out.map((row) => stripAnsi(row).slice(indent));
+    expect(reads(body, CAVEAT.trimStart()), body.join('|')).toBe(true);
+  });
+
+  it('under the floor, keeps an indented line whose first token overflows on one row', () => {
+    // At 24 columns the hang falls back to the base indent, and the path is
+    // wider than the room past the line's own spaces; it stays on the first
+    // row rather than leaving that row as spaces alone.
+    const PATH = '    /opt/homebrew/Cellar/ripgrep/14.1.1/share/zsh/site-functions/_rg';
+    setWrapColumns(24);
+    expect(streamLine(PATH)).toBe(`  ${PATH}`);
+  });
+
+  it('with colour on, closes the dim span at every row end and reopens it after the indent', () => {
+    withTty(() => {
+      setFrame(true);
+      setWrapColumns(40);
+      const out = rows(streamLine(PROSE));
+      expect(out.length).toBeGreaterThan(1);
+      // Everything `framed` puts before a row: the bar and its gap, so the
+      // gutter can be told apart from the indent the formatter added.
+      const gutter = framed('x').slice(0, -1);
+      for (const row of out) {
+        expect(row).toContain('\x1b[2m');
+        expect(openSpans(row), row).toEqual([]);
+      }
+      for (const row of out.slice(1)) {
+        // The bar, the gap and the indent are plain cells; the dim the wrapper
+        // closed at the previous row end reopens only past them.
+        expect(row.startsWith(`${gutter}${' '.repeat(INDENT)}\x1b[2m`), row).toBe(true);
+      }
+      const body = out.map((row) => stripAnsi(row).slice(3 + INDENT));
+      expect(reads(body, PROSE), body.join('|')).toBe(true);
+    });
   });
 });

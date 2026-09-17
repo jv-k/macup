@@ -114,6 +114,14 @@ describe('wrapAnsiToWidth', () => {
     expect(wrapAnsiToWidth('foob bar', 4)).toEqual(['foob', 'bar']);
   });
 
+  it('puts two words that each overflow the width on one row each, with no blank row between', () => {
+    // The library starts a fresh row for the separator after a row that is
+    // already full, then another for a word that will not fit it; consuming
+    // the separator would otherwise leave that first row empty.
+    expect(wrapAnsiToWidth('aaaaaa bbbbbb', 4)).toEqual(['aaaaaa', 'bbbbbb']);
+    expect(wrapAnsiToWidth('aaaaaa bbbbbb cc', 4)).toEqual(['aaaaaa', 'bbbbbb', 'cc']);
+  });
+
   it('keeps an embedded newline as a paragraph break and the next paragraph as written', () => {
     expect(wrapAnsiToWidth('a\n b', 10)).toEqual(['a', ' b']);
   });

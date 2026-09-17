@@ -244,9 +244,11 @@ function terminalColumns(): number | undefined {
  * rows reads worse than the terminal's own wrap. With no width (a pipe, CI,
  * or `setWrapColumns(0)`) the row is returned as built, byte for byte.
  * Colour is already on the body: the wrapper closes a span at a row end and
- * reopens it after the indent, so the indent spaces carry none.
+ * reopens it after the indent, so the indent spaces carry none. `hard` is
+ * the wrapper's: on by default, since macup's own text splits a word wider
+ * than the row rather than overflow it, and off for {@link streamLine}.
  */
-function hang(prefix: string, body: string): string {
+function hang(prefix: string, body: string, opts: { hard?: boolean } = {}): string {
   const row = `${prefix}${body}`;
   const columns = terminalColumns();
   if (!columns) return row;
@@ -265,10 +267,16 @@ function hang(prefix: string, body: string): string {
   const pad = column - indent;
   if (available < WRAP_FLOOR || pad >= available) return row;
 
-  const wrapped = wrapAnsiToWidth(`${' '.repeat(pad)}${opens}${rest}`, available, { hard: true });
-  const [first = '', ...more] = wrapped;
+  const hard = opts.hard ?? true;
+  const wrapped = wrapAnsiToWidth(`${' '.repeat(pad)}${opens}${rest}`, available, { hard });
+  const [padded = '', ...more] = wrapped;
+  const first = padded.slice(pad);
+  // A soft-wrapped token wider than the room past the padding goes to the
+  // next row whole, which would leave the first row as padding alone. The
+  // token takes the first row instead, since spilling is the rule for it.
+  const [head = '', ...tail] = !hard && first === '' && more.length > 0 ? more : [first, ...more];
   const hangStr = ' '.repeat(indent);
-  return [`${prefix}${lead}${first.slice(pad)}`, ...more.map((r) => `${hangStr}${r}`)].join('\n');
+  return [`${prefix}${lead}${head}`, ...tail.map((r) => `${hangStr}${r}`)].join('\n');
 }
 
 /** console.log through the frame. The one stdout seam for view output. */
@@ -340,7 +348,11 @@ export function pkgUncheckable(name: string, version: string, pad: number): stri
 
 // ── Per-package progress counter ────────────────────────────────
 
-/** `3/12 upgrading ripgrep` — per-item progress during a bulk run. */
+/**
+ * `3/12 Updating ripgrep`: per-item progress during a bulk run. A body for
+ * {@link activity} and for the `done.` closer, never printed alone, so it
+ * composes the text and leaves the wrap to the formatter that prints it.
+ */
 export function counter(idx: number, total: number, action: string, name: string): string {
   const prefix = useColorFn() ? forced.dim(`${idx}/${total}`) : `${idx}/${total}`;
   const styled = useColorFn() ? forced.green(name) : name;
@@ -349,18 +361,21 @@ export function counter(idx: number, total: number, action: string, name: string
 
 // ── Secondary trace lines (one dim line under a message) ────────
 
+// The shape both traces share: four spaces, the arrow, the dim detail, hung
+// under the detail text, which is two cells past where the notice above hangs.
+function traceRow(arrow: string, detail: string): string {
+  const body = useColorFn() ? forced.dim(detail) : detail;
+  return hang(`    ${arrow} `, body);
+}
+
 /** A dim secondary line under a message: doctor's per-finding hints, and the "did you mean" on an unknown flag. */
 export function trace(detail: string): string {
-  const arrow = useColorFn() ? forced.dim('↳') : '↳';
-  const body = useColorFn() ? forced.dim(detail) : detail;
-  return `    ${arrow} ${body}`;
+  return traceRow(useColorFn() ? forced.dim('↳') : '↳', detail);
 }
 
 /** {@link trace} for a failure: same dim secondary shape, red tone. */
 export function traceError(detail: string): string {
-  const arrow = useColorFn() ? forced.red('↳') : '↳';
-  const body = useColorFn() ? forced.dim(detail) : detail;
-  return `    ${arrow} ${body}`;
+  return traceRow(useColorFn() ? forced.red('↳') : '↳', detail);
 }
 
 // ── Message types ───────────────────────────────────────────────
@@ -394,16 +409,26 @@ export function error(msg: string): string {
 // hangs off the gutter inside the wizard and stays flat for direct commands
 // — one path, no reserved rows.
 
-/** Opening line for a streamed operation: `◐ Updating homebrew…`. */
+/**
+ * Opening line for a streamed operation: `◐ Updating homebrew…`. Hangs like
+ * a notice. A {@link counter} body carries its own two spaces, and the hang
+ * step folds them into the indent, so a wrapped header continues under `3/12`.
+ */
 export function activity(msg: string): string {
   const glyph = useColorFn() ? forced.cyan(GLYPHS.activity) : GLYPHS.activity;
-  return `  ${glyph} ${msg}`;
+  return hang(`  ${glyph} `, msg);
 }
 
-/** One line of raw subprocess output, dimmed so it reads as subordinate
- *  detail beneath the activity header and counters. */
+/**
+ * One line of raw subprocess output, dimmed so it reads as subordinate
+ * detail beneath the activity header and counters. Hangs like a notice, at
+ * the base indent plus any leading spaces of its own, with soft breaks: the
+ * text folds at spaces, and a token wider than the row (a URL, a hash) is
+ * left whole on its own row, the one thing allowed to spill past the width,
+ * so it stays one token a person can copy or grep for.
+ */
 export function streamLine(line: string): string {
-  return `  ${useColorFn() ? forced.dim(line) : line}`;
+  return hang('  ', useColorFn() ? forced.dim(line) : line, { hard: false });
 }
 
 export { SYM };

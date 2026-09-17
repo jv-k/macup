@@ -343,9 +343,7 @@ export function pkgUncheckable(name: string, version: string, pad: number): stri
 /**
  * `3/12 Updating ripgrep`: per-item progress during a bulk run. A body for
  * {@link activity} and for the `done.` closer, never printed alone, so it
- * composes the text and leaves the wrap to the formatter that prints it. Its
- * two leading spaces are what put `3/12` past the header's glyph, and the
- * hang absorbs them so a wrapped header continues under `3/12`.
+ * composes the text and leaves the wrap to the formatter that prints it.
  */
 export function counter(idx: number, total: number, action: string, name: string): string {
   const prefix = useColorFn() ? forced.dim(`${idx}/${total}`) : `${idx}/${total}`;
@@ -355,22 +353,21 @@ export function counter(idx: number, total: number, action: string, name: string
 
 // ── Secondary trace lines (one dim line under a message) ────────
 
-/**
- * A dim secondary line under a message: doctor's per-finding hints, and the
- * "did you mean" on an unknown flag. Hangs under its own detail text, two
- * cells past where the notice above it hangs.
- */
-export function trace(detail: string): string {
-  const arrow = useColorFn() ? forced.dim('↳') : '↳';
+// The shape both traces share: four spaces, the arrow, the dim detail, hung
+// under the detail text, which is two cells past where the notice above hangs.
+function traceRow(arrow: string, detail: string): string {
   const body = useColorFn() ? forced.dim(detail) : detail;
   return hang(`    ${arrow} `, body);
 }
 
-/** {@link trace} for a failure: same dim secondary shape and hang, red tone. */
+/** A dim secondary line under a message: doctor's per-finding hints, and the "did you mean" on an unknown flag. */
+export function trace(detail: string): string {
+  return traceRow(useColorFn() ? forced.dim('↳') : '↳', detail);
+}
+
+/** {@link trace} for a failure: same dim secondary shape, red tone. */
 export function traceError(detail: string): string {
-  const arrow = useColorFn() ? forced.red('↳') : '↳';
-  const body = useColorFn() ? forced.dim(detail) : detail;
-  return hang(`    ${arrow} `, body);
+  return traceRow(useColorFn() ? forced.red('↳') : '↳', detail);
 }
 
 // ── Message types ───────────────────────────────────────────────
@@ -406,8 +403,8 @@ export function error(msg: string): string {
 
 /**
  * Opening line for a streamed operation: `◐ Updating homebrew…`. Hangs like
- * a notice; a {@link counter} body carries its own two spaces, which the
- * hang absorbs so a wrapped header continues under `3/12`.
+ * a notice. A {@link counter} body carries its own two spaces, and the hang
+ * step folds them into the indent, so a wrapped header continues under `3/12`.
  */
 export function activity(msg: string): string {
   const glyph = useColorFn() ? forced.cyan(GLYPHS.activity) : GLYPHS.activity;

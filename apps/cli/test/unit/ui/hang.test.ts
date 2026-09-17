@@ -22,22 +22,26 @@ afterEach(() => {
 });
 
 const NOTICES = { success, warning, error, info } as const;
-// Every formatter that hangs: the four notices, the activity header the
-// composite prints with a plain message, and the two traces under a notice.
+// Every formatter that hangs: the four notices, the activity header with a
+// plain message (the shape the spec names for the composite path; today's one
+// caller always passes a counter), and the two traces under a notice.
 const HANGING = { ...NOTICES, activity, trace, traceError } as const;
 
 const LONG =
   'Homebrew reports 14 outdated formulae and 3 casks; run macup brew update to bring them current';
+// A cask token long enough to wrap at 80 with the frame on: the header is
+// macup's own text, so the break is hard and lands mid-token.
+const NAME = 'homebrew/cask-versions/visual-studio-code-insiders-with-every-optional-component';
 
 describe('hanging formatters with the width unset or zero', () => {
   it('return one row, the same string as before wrapping existed', () => {
-    for (const notice of Object.values(HANGING)) {
-      const before = notice(LONG);
+    for (const formatter of Object.values(HANGING)) {
+      const before = formatter(LONG);
       expect(before).not.toContain('\n');
       setWrapColumns(undefined);
-      expect(notice(LONG)).toBe(before);
+      expect(formatter(LONG)).toBe(before);
       setWrapColumns(0);
-      expect(notice(LONG)).toBe(before);
+      expect(formatter(LONG)).toBe(before);
     }
   });
 });
@@ -68,11 +72,11 @@ describe('hanging formatters at a set width', () => {
   for (const columns of [40, 60, 80]) {
     for (const frame of [false, true]) {
       it(`at ${columns} columns, frame ${frame ? 'on' : 'off'}, every row fits and every continuation hangs at the message column`, () => {
-        for (const [name, notice] of Object.entries(HANGING)) {
-          const indent = messageColumn(notice);
+        for (const [name, formatter] of Object.entries(HANGING)) {
+          const indent = messageColumn(formatter);
           setFrame(frame);
           setWrapColumns(columns);
-          const out = rows(notice(LONG));
+          const out = rows(formatter(LONG));
           expect(out.length, name).toBeGreaterThan(1);
           for (const row of out)
             expect(visualWidth(row), `${name}: ${row}`).toBeLessThanOrEqual(columns);
@@ -114,8 +118,9 @@ function sgrCodes(s: string): number[] {
   return [...s.matchAll(/\x1b\[(\d+)m/g)].map((m) => Number(m[1]));
 }
 
-// What closes each SGR open these rows use: dim and the foreground colours.
-const SGR_CLOSE: Record<number, number> = { 2: 22, 32: 39, 36: 39 };
+// What closes each SGR open these rows use: dim, and the red, green, yellow
+// and cyan foregrounds.
+const SGR_CLOSE: Record<number, number> = { 2: 22, 31: 39, 32: 39, 33: 39, 36: 39 };
 
 /** The SGR opens still unclosed at the end of `row`, so a painted span cannot bleed past it. */
 function openSpans(row: string): number[] {
@@ -257,9 +262,6 @@ describe('a body with leading spaces', () => {
 });
 
 describe('the activity header with a nested counter', () => {
-  // A cask token long enough to wrap at 80 with the frame on: the header is
-  // macup's own text, so the break is hard and lands mid-token.
-  const NAME = 'homebrew/cask-versions/visual-studio-code-insiders-with-every-optional-component';
   const TEXT = `3/12 Updating ${NAME}`;
   for (const columns of [40, 60, 80]) {
     for (const frame of [false, true]) {
@@ -275,7 +277,7 @@ describe('the activity header with a nested counter', () => {
         // two cells past the header's message column, and the hang follows it.
         expect(first.startsWith('  ◐   3/12 Updating ')).toBe(true);
         const indent = first.indexOf('3/12');
-        expect(indent).toBe(6);
+        expect(indent).toBe(messageColumn(activity) + 2);
         for (const row of out.slice(1)) {
           const plain = stripAnsi(row).slice(gutter);
           expect(plain.slice(0, indent), row).toBe(' '.repeat(indent));
@@ -289,6 +291,7 @@ describe('the activity header with a nested counter', () => {
 
   it('with colour on, keeps the dim counter and the green name inside their rows', () => {
     withTty(() => {
+      const indent = messageColumn(activity) + 2;
       setWrapColumns(40);
       const out = rows(activity(counter(3, 12, 'Updating', NAME)));
       expect(out.length).toBeGreaterThan(1);
@@ -298,41 +301,73 @@ describe('the activity header with a nested counter', () => {
         expect(openSpans(row), row).toEqual([]);
       }
       for (const row of out.slice(1)) {
-        // Six plain cells, then the green the wrapper reopened for the name.
-        expect(row.startsWith(`${' '.repeat(6)}\x1b[32m`), row).toBe(true);
+        // Plain cells up to 3/12, then the green the wrapper reopened for the name.
+        expect(row.startsWith(`${' '.repeat(indent)}\x1b[32m`), row).toBe(true);
       }
-      const body = out.map((row) => stripAnsi(row).slice(6));
+      const body = out.map((row) => stripAnsi(row).slice(indent));
       expect(reads(body, TEXT), body.join('|')).toBe(true);
     });
+  });
+
+  it('at 26 columns with the frame on hangs at the base two cells, and at 12 goes out unwrapped', () => {
+    setFrame(true);
+    setWrapColumns(26);
+    const out = rows(activity(counter(3, 12, 'Updating', NAME)));
+    expect(out.length).toBeGreaterThan(1);
+    for (const row of out) expect(visualWidth(row), row).toBeLessThanOrEqual(26);
+    for (const row of out.slice(1)) {
+      // Under 3/12 would leave 17 cells past the gutter, so the hang falls
+      // back to two, which leaves 21.
+      const past = stripAnsi(row).slice(3);
+      expect(past.slice(0, 2), row).toBe('  ');
+      expect(past[2], row).not.toBe(' ');
+    }
+    const body = out.map((row, i) => stripAnsi(row).slice(3 + (i === 0 ? 6 : 2)));
+    expect(reads(body, TEXT), body.join('|')).toBe(true);
+
+    setWrapColumns(0);
+    const plain = activity(counter(3, 12, 'Updating', NAME));
+    setWrapColumns(12);
+    expect(activity(counter(3, 12, 'Updating', NAME))).toBe(plain);
   });
 });
 
 describe('a trace under a wrapped notice', () => {
   it('hangs under its own detail text, two cells past the notice', () => {
+    const noticeColumn = messageColumn(warning);
+    const traceColumn = messageColumn(trace);
+    expect(traceColumn).toBe(noticeColumn + 2);
     setFrame(true);
     setWrapColumns(40);
-    // Past the three-cell gutter: the notice's text starts at four, the
-    // trace's at six, and each hangs where its own text starts.
+    // Past the three-cell gutter, each hangs where its own text starts.
     const notice = rows(warning(LONG)).map((row) => stripAnsi(row).slice(3));
     const detail = rows(trace(LONG)).map((row) => stripAnsi(row).slice(3));
     expect(notice.length).toBeGreaterThan(1);
     expect(detail.length).toBeGreaterThan(1);
     expect(notice[0]?.startsWith('  ! Homebrew')).toBe(true);
     expect(detail[0]?.startsWith('    ↳ Homebrew')).toBe(true);
-    for (const row of notice.slice(1)) expect(row.slice(0, 5), row).toMatch(/^ {4}[^ ]$/);
-    for (const row of detail.slice(1)) expect(row.slice(0, 7), row).toMatch(/^ {6}[^ ]$/);
+    for (const row of notice.slice(1)) {
+      expect(row.slice(0, noticeColumn), row).toBe(' '.repeat(noticeColumn));
+      expect(row[noticeColumn], row).not.toBe(' ');
+    }
+    for (const row of detail.slice(1)) {
+      expect(row.slice(0, traceColumn), row).toBe(' '.repeat(traceColumn));
+      expect(row[traceColumn], row).not.toBe(' ');
+    }
   });
 
   it('with colour on, keeps the dim detail closed at every row end and reopened after the indent', () => {
     withTty(() => {
+      const indent = messageColumn(traceError);
       setWrapColumns(40);
       const out = rows(traceError(LONG));
       expect(out.length).toBeGreaterThan(1);
+      expect(out[0]).toContain('\x1b[31m↳\x1b[39m');
       for (const row of out) expect(openSpans(row), row).toEqual([]);
       for (const row of out.slice(1)) {
-        expect(row.startsWith(`${' '.repeat(6)}\x1b[2m`), row).toBe(true);
+        expect(row.startsWith(`${' '.repeat(indent)}\x1b[2m`), row).toBe(true);
       }
-      const body = out.map((row) => stripAnsi(row).slice(6));
+      const body = out.map((row) => stripAnsi(row).slice(indent));
       expect(reads(body, LONG), body.join('|')).toBe(true);
     });
   });
@@ -342,7 +377,6 @@ describe('the counter on its own', () => {
   // It is a body for `activity` and the closer, never printed alone, so it
   // carries no width logic: the same one row at any width.
   it('is one row at any width, the same string it was before wrapping existed', () => {
-    const NAME = 'homebrew/cask-versions/visual-studio-code-insiders-with-every-optional-component';
     setWrapColumns(0);
     const plain = counter(3, 12, 'Updating', NAME);
     expect(plain).toBe(`  3/12 Updating ${NAME}`);

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { clipAnsiToWidth, clipToWidth, stripAnsi, visualWidth } from '../../../src/ui/width';
+import {
+  clipAnsiToWidth,
+  clipToWidth,
+  stripAnsi,
+  visualWidth,
+  wrapAnsiToWidth,
+} from '../../../src/ui/width';
 
 describe('visualWidth', () => {
   it('counts ASCII as one cell each', () => {
@@ -77,5 +83,45 @@ describe('clipAnsiToWidth', () => {
     for (const cols of [3, 4, 8, 15]) {
       expect(visualWidth(clipAnsiToWidth(wide, cols))).toBeLessThanOrEqual(cols);
     }
+  });
+});
+
+describe('wrapAnsiToWidth', () => {
+  it('returns one row when the text fits', () => {
+    expect(wrapAnsiToWidth('hello world', 40)).toEqual(['hello world']);
+  });
+
+  it('folds at spaces and keeps every character, spaces included', () => {
+    const rows = wrapAnsiToWidth('alpha beta gamma delta', 11);
+    for (const row of rows) expect(visualWidth(row)).toBeLessThanOrEqual(11);
+    expect(rows.join('')).toBe('alpha beta gamma delta');
+  });
+
+  it('splits a word wider than the width by cells under hard, fullwidth counting two', () => {
+    const rows = wrapAnsiToWidth('日'.repeat(6), 4, { hard: true });
+    expect(rows).toEqual(['日日', '日日', '日日']);
+    expect(wrapAnsiToWidth('日'.repeat(6), 4)).toEqual(['日日日日日日']);
+  });
+
+  it('keeps leading spaces on the first row', () => {
+    expect(wrapAnsiToWidth('  indented text here', 12)).toEqual(['  indented ', 'text here']);
+  });
+
+  it('consumes the space a break lands on, so no continuation row opens with one', () => {
+    // A row that fills its width exactly would otherwise push the separator
+    // to the start of the next row, one cell off the hang.
+    expect(wrapAnsiToWidth('foob bar', 4)).toEqual(['foob', 'bar']);
+  });
+
+  it('keeps an embedded newline as a paragraph break and the next paragraph as written', () => {
+    expect(wrapAnsiToWidth('a\n b', 10)).toEqual(['a', ' b']);
+  });
+
+  it('closes an open SGR span at the row end and reopens it on the next row', () => {
+    const rows = wrapAnsiToWidth('\x1b[32mgreen words that wrap\x1b[39m', 12);
+    expect(rows.length).toBeGreaterThan(1);
+    for (const row of rows.slice(0, -1)) expect(row.endsWith('\x1b[39m')).toBe(true);
+    for (const row of rows.slice(1)) expect(row.startsWith('\x1b[32m')).toBe(true);
+    expect(stripAnsi(rows.join(''))).toBe('green words that wrap');
   });
 });

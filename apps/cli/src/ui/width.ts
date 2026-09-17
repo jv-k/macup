@@ -8,6 +8,8 @@
  * @module
  */
 
+import { wrapAnsi } from 'fast-wrap-ansi';
+
 // Strip every CSI escape sequence — colour AND cursor movement — so a measured
 // string counts only the cells it actually occupies.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI on purpose
@@ -105,4 +107,34 @@ export function clipAnsiToWidth(s: string, maxCells: number): string {
     i += ch.length;
   }
   return `${out}…${sawAnsi ? '\x1b[0m' : ''}`;
+}
+
+// A continuation row's opening SGR reopens (zero or more), then the one
+// separator space a break can land on.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI on purpose
+const ROW_OPENING_SPACE = /^((?:\x1b\[[0-9;]*m)*) /;
+
+/**
+ * Wrap `text` into rows of at most `maxCells`, ANSI-aware: escape sequences
+ * cost nothing, an SGR span open at a row end is closed there and reopened on
+ * the next row, and fullwidth codepoints count two cells. Breaks fall at
+ * spaces; `hard` also splits a single word wider than `maxCells` by cells.
+ * A break that lands on a space consumes it, so no continuation row opens
+ * one cell off its column; every other character survives, leading spaces
+ * and internal runs included, so the rows joined without a separator are
+ * `text` less those breaks. Embedded newlines are paragraph breaks and each
+ * paragraph wraps on its own. The plain-text sibling is `log.wrapText`,
+ * which measures by `length` and is only safe on text with no escapes
+ * (ADR 0060).
+ */
+export function wrapAnsiToWidth(
+  text: string,
+  maxCells: number,
+  opts: { hard?: boolean } = {},
+): string[] {
+  const options = { hard: opts.hard ?? false, trim: false, wordWrap: true };
+  return text.split('\n').flatMap((paragraph) => {
+    const [first = '', ...rest] = wrapAnsi(paragraph, maxCells, options).split('\n');
+    return [first, ...rest.map((row) => row.replace(ROW_OPENING_SPACE, '$1'))];
+  });
 }

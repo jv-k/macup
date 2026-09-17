@@ -340,7 +340,13 @@ export function pkgUncheckable(name: string, version: string, pad: number): stri
 
 // ── Per-package progress counter ────────────────────────────────
 
-/** `3/12 upgrading ripgrep` — per-item progress during a bulk run. */
+/**
+ * `3/12 Updating ripgrep`: per-item progress during a bulk run. A body for
+ * {@link activity} and for the `done.` closer, never printed alone, so it
+ * composes the text and leaves the wrap to the formatter that prints it. Its
+ * two leading spaces are what put `3/12` past the header's glyph, and the
+ * hang absorbs them so a wrapped header continues under `3/12`.
+ */
 export function counter(idx: number, total: number, action: string, name: string): string {
   const prefix = useColorFn() ? forced.dim(`${idx}/${total}`) : `${idx}/${total}`;
   const styled = useColorFn() ? forced.green(name) : name;
@@ -349,18 +355,22 @@ export function counter(idx: number, total: number, action: string, name: string
 
 // ── Secondary trace lines (one dim line under a message) ────────
 
-/** A dim secondary line under a message: doctor's per-finding hints, and the "did you mean" on an unknown flag. */
+/**
+ * A dim secondary line under a message: doctor's per-finding hints, and the
+ * "did you mean" on an unknown flag. Hangs under its own detail text, two
+ * cells past where the notice above it hangs.
+ */
 export function trace(detail: string): string {
   const arrow = useColorFn() ? forced.dim('↳') : '↳';
   const body = useColorFn() ? forced.dim(detail) : detail;
-  return `    ${arrow} ${body}`;
+  return hang(`    ${arrow} `, body);
 }
 
-/** {@link trace} for a failure: same dim secondary shape, red tone. */
+/** {@link trace} for a failure: same dim secondary shape and hang, red tone. */
 export function traceError(detail: string): string {
   const arrow = useColorFn() ? forced.red('↳') : '↳';
   const body = useColorFn() ? forced.dim(detail) : detail;
-  return `    ${arrow} ${body}`;
+  return hang(`    ${arrow} `, body);
 }
 
 // ── Message types ───────────────────────────────────────────────
@@ -394,10 +404,14 @@ export function error(msg: string): string {
 // hangs off the gutter inside the wizard and stays flat for direct commands
 // — one path, no reserved rows.
 
-/** Opening line for a streamed operation: `◐ Updating homebrew…`. */
+/**
+ * Opening line for a streamed operation: `◐ Updating homebrew…`. Hangs like
+ * a notice; a {@link counter} body carries its own two spaces, which the
+ * hang absorbs so a wrapped header continues under `3/12`.
+ */
 export function activity(msg: string): string {
   const glyph = useColorFn() ? forced.cyan(GLYPHS.activity) : GLYPHS.activity;
-  return `  ${glyph} ${msg}`;
+  return hang(`  ${glyph} `, msg);
 }
 
 /** One line of raw subprocess output, dimmed so it reads as subordinate

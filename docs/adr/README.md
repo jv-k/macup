@@ -87,3 +87,4 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0057](0057-bundle-preview-is-the-report-before-the-fact.md) | The bundle preview is the mutation report before the fact | accepted |
 | [0058](0058-the-applist-has-one-reader.md) | The applist has one reader, and the diagnostics consume its read | accepted |
 | [0059](0059-cli-surface-is-one-data-module.md) | The CLI surface is one data module, and every renderer projects from it | accepted |
+| [0060](0060-notices-wrap-in-the-formatter-with-a-hanging-indent.md) | Notices wrap in the formatter with a hanging indent at the message column | accepted |

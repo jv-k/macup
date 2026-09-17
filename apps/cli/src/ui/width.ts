@@ -8,6 +8,8 @@
  * @module
  */
 
+import { wrapAnsi } from 'fast-wrap-ansi';
+
 // Strip every CSI escape sequence — colour AND cursor movement — so a measured
 // string counts only the cells it actually occupies.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI on purpose
@@ -105,4 +107,50 @@ export function clipAnsiToWidth(s: string, maxCells: number): string {
     i += ch.length;
   }
   return `${out}…${sawAnsi ? '\x1b[0m' : ''}`;
+}
+
+// Any SGR opens a string starts with, then the plain spaces after them.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI on purpose
+const LEADING_SPACES = /^((?:\x1b\[[0-9;]*m)*)( *)/;
+
+/**
+ * Split `s` into the SGR opens it starts with, the plain spaces after them,
+ * and the rest, so a caller can measure or move a body's leading spaces
+ * without disturbing the span that colours them.
+ */
+export function splitLeadingSpaces(s: string): { opens: string; lead: string; rest: string } {
+  const [, opens = '', lead = ''] = LEADING_SPACES.exec(s) ?? [];
+  return { opens, lead, rest: s.slice(opens.length + lead.length) };
+}
+
+/**
+ * Wrap `text` into rows of at most `maxCells`, ANSI-aware: escape sequences
+ * cost nothing, an SGR span open at a row end is closed there and reopened on
+ * the next row, and fullwidth codepoints count two cells. Breaks fall at
+ * spaces; `hard` also splits a single word wider than `maxCells` by cells.
+ * A break that lands on a space consumes it, so no continuation row opens
+ * one cell off its column; every other character survives, leading spaces
+ * and internal runs included, so the rows joined without a separator are
+ * `text` less those breaks. Embedded newlines are paragraph breaks and each
+ * paragraph wraps on its own. The plain-text sibling is `log.wrapText`,
+ * which measures by `length` and is only safe on text with no escapes
+ * (ADR 0060).
+ */
+export function wrapAnsiToWidth(
+  text: string,
+  maxCells: number,
+  opts: { hard?: boolean } = {},
+): string[] {
+  const options = { hard: opts.hard ?? false, trim: false, wordWrap: true };
+  return text.split('\n').flatMap((paragraph) => {
+    const [first = '', ...rest] = wrapAnsi(paragraph, maxCells, options).split('\n');
+    return [first, ...rest.map(consumeSeparator)];
+  });
+}
+
+// The one separator space a break can land on, at the start of a
+// continuation row, past the span the wrapper reopened there.
+function consumeSeparator(row: string): string {
+  const { opens, lead, rest } = splitLeadingSpaces(row);
+  return lead ? `${opens}${lead.slice(1)}${rest}` : row;
 }

@@ -12,7 +12,7 @@ import { S_BAR } from '@clack/prompts';
 import pc from 'picocolors';
 import { useColor as useColorFn } from '../runtime';
 import { renderAppleLogo } from './logo';
-import { visualWidth } from './width';
+import { splitLeadingSpaces, visualWidth, wrapAnsiToWidth } from './width';
 
 // Re-exported so existing importers (ui/pager, ui/picker, tests) keep importing
 // visualWidth from ui/log; the implementation now lives in ui/width, shared
@@ -180,6 +180,9 @@ export function badge(text: string, color: boolean = useColorFn()): string {
 
 let frameOn = false;
 
+/** The two spaces between the gutter bar and a row. */
+const GUTTER_GAP = '  ';
+
 /** Enable/disable the wizard gutter for subsequent print()/printErr() calls. */
 export function setFrame(on: boolean): void {
   frameOn = on;
@@ -195,8 +198,77 @@ export function framed(text: string): string {
   const bar = useColorFn() ? forced.gray(GLYPHS.bar) : GLYPHS.bar;
   return text
     .split('\n')
-    .map((line) => (line.length > 0 ? `${bar}  ${line}` : bar))
+    .map((line) => (line.length > 0 ? `${bar}${GUTTER_GAP}${line}` : bar))
     .join('\n');
+}
+
+// ── Hanging indent (ADR 0060) ───────────────────────────────────
+// A notice wider than the terminal wraps at the terminal width, with every
+// continuation row indented to the column where its message starts, so the
+// message reads as one block under its glyph inside the gutter. The wrap
+// lives here, in the formatter that built the prefix, because only the
+// formatter knows where the message column is; `print` sees a finished row.
+//
+// The width is module state like the frame flag: `undefined` reads stdout's
+// columns on every call (append-only rows never redraw, so a per-call read is
+// the resize handling), a number forces it for tests, and 0 disables the wrap.
+
+let wrapColumns: number | undefined;
+
+/** Force the wrap width: a number fixes it, `0` disables wrapping, `undefined` restores the stdout read. */
+export function setWrapColumns(columns: number | undefined): void {
+  wrapColumns = columns;
+}
+
+/** What `framed` adds to every row after the formatter: the gutter bar and its gap. */
+const FRAME_CELLS = visualWidth(`${GLYPHS.bar}${GUTTER_GAP}`);
+/** Every notice formatter's own indent: the two spaces before the glyph. */
+const BASE_INDENT = 2;
+/** Below this many cells a hang makes rows too short to read, so the indent gives way, then the wrap. */
+const WRAP_FLOOR = 20;
+
+/** The width to wrap at: the forced dial, else stdout's columns when it is a terminal. */
+function terminalColumns(): number | undefined {
+  if (wrapColumns !== undefined) return wrapColumns;
+  return process.stdout.isTTY ? process.stdout.columns : undefined;
+}
+
+/**
+ * Wrap `body` under `prefix` with a hanging indent at the message column.
+ * The indent is the prefix's visual width plus the body's leading spaces,
+ * so a body that carries its own indent hangs under its text, not under the
+ * glyph, whether or not colour put those spaces inside a span. Available
+ * width is the terminal's less the frame and the indent; if that is under
+ * the floor the indent falls back to the base two cells, and if it is still
+ * under the floor the row goes out unwrapped, because a ribbon of three-word
+ * rows reads worse than the terminal's own wrap. With no width (a pipe, CI,
+ * or `setWrapColumns(0)`) the row is returned as built, byte for byte.
+ * Colour is already on the body: the wrapper closes a span at a row end and
+ * reopens it after the indent, so the indent spaces carry none.
+ */
+function hang(prefix: string, body: string): string {
+  const row = `${prefix}${body}`;
+  const columns = terminalColumns();
+  if (!columns) return row;
+  const width = columns - (frameOn ? FRAME_CELLS : 0);
+  if (!body.includes('\n') && visualWidth(row) <= width) return row;
+
+  const { opens, lead, rest } = splitLeadingSpaces(body);
+  const column = visualWidth(prefix) + lead.length;
+  const indent = width - column >= WRAP_FLOOR ? column : BASE_INDENT;
+  const available = width - indent;
+  // The first row starts at the message column, the rest at the indent. When
+  // the floor moved the indent back, the text is padded by the difference so
+  // the wrapper sees the first row's true start, and the padding comes off
+  // again; the wrapper trims nothing, so it is spaces in, spaces out. A
+  // prefix that fills the row on its own leaves nothing to wrap.
+  const pad = column - indent;
+  if (available < WRAP_FLOOR || pad >= available) return row;
+
+  const wrapped = wrapAnsiToWidth(`${' '.repeat(pad)}${opens}${rest}`, available, { hard: true });
+  const [first = '', ...more] = wrapped;
+  const hangStr = ' '.repeat(indent);
+  return [`${prefix}${lead}${first.slice(pad)}`, ...more.map((r) => `${hangStr}${r}`)].join('\n');
 }
 
 /** console.log through the frame. The one stdout seam for view output. */
@@ -292,25 +364,27 @@ export function traceError(detail: string): string {
 }
 
 // ── Message types ───────────────────────────────────────────────
+// One row each until the message is wider than the terminal, then the rows
+// hang at the message column (ADR 0060). Under a pipe they stay one row.
 
-/** One-line notice with no verdict attached: progress, or a fact the user should see. */
+/** Notice with no verdict attached: progress, or a fact the user should see. */
 export function info(msg: string): string {
-  return `  ${SYM.info} ${useColorFn() ? forced.cyan(msg) : msg}`;
+  return hang(`  ${SYM.info} `, useColorFn() ? forced.cyan(msg) : msg);
 }
 
-/** One-line notice that an operation completed. Paired with the success glyph. */
+/** Notice that an operation completed. Paired with the success glyph. */
 export function success(msg: string): string {
-  return `  ${SYM.success} ${useColorFn() ? forced.green(msg) : msg}`;
+  return hang(`  ${SYM.success} `, useColorFn() ? forced.green(msg) : msg);
 }
 
-/** One-line notice that something needs attention without having failed the run, so the exit code is unaffected. */
+/** Notice that something needs attention without having failed the run, so the exit code is unaffected. */
 export function warning(msg: string): string {
-  return `  ${SYM.warning} ${useColorFn() ? forced.yellow(msg) : msg}`;
+  return hang(`  ${SYM.warning} `, useColorFn() ? forced.yellow(msg) : msg);
 }
 
-/** One-line failure notice. Callers route it to stderr, so piped stdout stays parseable. */
+/** Failure notice. Callers route it to stderr, so piped stdout stays parseable. */
 export function error(msg: string): string {
-  return `  ${SYM.error} ${useColorFn() ? forced.red(msg) : msg}`;
+  return hang(`  ${SYM.error} `, useColorFn() ? forced.red(msg) : msg);
 }
 
 // ── Activity + streamed output (ADR 0043) ───────────────────────

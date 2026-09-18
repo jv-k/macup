@@ -88,3 +88,6 @@ ADR-NNNN". Do not rewrite the old record. The trail is the point.
 | [0058](0058-the-applist-has-one-reader.md) | The applist has one reader, and the diagnostics consume its read | accepted |
 | [0059](0059-cli-surface-is-one-data-module.md) | The CLI surface is one data module, and every renderer projects from it | accepted |
 | [0060](0060-notices-wrap-in-the-formatter-with-a-hanging-indent.md) | Notices wrap in the formatter with a hanging indent at the message column | accepted |
+| [0061](0061-bundle-create-captures-intent-by-name.md) | `bundle create` captures intent, composes by name, and adopts nothing | accepted |
+| [0062](0062-bundle-name-resolves-nearest-first.md) | A bare bundle name resolves nearest-first, and the applist beats the bundles directory | accepted |
+| [0063](0063-bundle-update-reconciles-up.md) | `bundle update` reconciles up, and removal is an opt-in prune | accepted |

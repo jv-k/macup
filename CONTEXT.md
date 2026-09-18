@@ -112,6 +112,18 @@ _Avoid_: preview, simulation, no-op run, plan (the plan is what a dry run report
 A named, shareable collection of packages spanning any combination of bundle targets, composable through inheritance. A declarative, version-controllable artifact that replaces a setup shell script.
 _Avoid_: group, profile, preset
 
+**Adopt**:
+To add a portable bundle reference to the applist, making the bundle and the packages it resolves part of declared tracked intent. `bundle install` adopts unless `--no-track`; whether a package is newly installed is a separate outcome.
+_Avoid_: track (for the act), activate, enable
+
+**Bundle definition**:
+The body behind a bundle identity: its envelope, package targets, pins, and parents. An inline applist block, a local bundle file, or a cached remote can supply the definition.
+_Avoid_: bundle (when the distinction from its identity matters), bundle body
+
+**Shadowed**:
+A valid bundle definition that shares a bare name with a nearer source and therefore loses name resolution. An inline definition shadows a file, and a file shadows a cached remote; an explicit path or spec can still reach the shadowed definition.
+_Avoid_: duplicate, overridden
+
 **Bundle target**:
 A plugin a bundle can list as a key. Defined by capability, not by an enumerated list: a plugin is a bundle target exactly when it declares the `track` capability. Today that is the package-manager backends (`brew`, `npm`, `pnpm`, `pip`, `appstore`). The self-updaters (`xcode`, `system`) and the Composite (`all`) are not bundle targets, because they install no arbitrary packages. A new track-capable plugin becomes a bundle target for free (#82).
 _Avoid_: bundle plugin, bundle key (the key is a target's in-file form)
@@ -119,6 +131,18 @@ _Avoid_: bundle plugin, bundle key (the key is a target's in-file form)
 **Provenance**:
 The per-machine record of what macup itself installed, kept in `state.yaml` rather than the applist. Observed fact, as against the applist's declared intent: never committed, different on every machine, and recording only packages an `installed` outcome produced, never already-present, never failed. Only bundle adoption writes it (ADR 0038, ADR 0039).
 _Avoid_: history, lockfile, receipt, install log
+
+**Last-known set**:
+The package set an adopted bundle resolved to the last time an acting verb accepted its definition. It is the comparison baseline when current resolution moves or becomes unavailable.
+_Avoid_: lock, snapshot, cached bundle
+
+**Moved**:
+An adopted bundle is moved when the package set it currently resolves to differs from its Last-known set. Additions and removals both count as movement.
+_Avoid_: changed, updated, drifted
+
+**Surplus**:
+A package macup installed for a bundle that the current definition no longer lists and no other tracked intent claims. It remains installed until an explicit back-out removes it.
+_Avoid_: orphan, residue, leftover
 
 **Back-out**:
 Removing a bundle by dropping its name from the applist and uninstalling what macup installed for it, and only that: the leave-no-trace rule. Bounded by Provenance and by refcount, so a package the user already had, one that failed, or one another bundle still claims is left alone. Where the record is ambiguous macup under-removes. The CLI spells it `macup bundle uninstall` (ADR 0039).

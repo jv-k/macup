@@ -67,7 +67,7 @@
     "picocolors": "^1.1.1",
     "semver": "^7.7.4",
     "yaml": "^2.8.3",
-    "zod": "^4.3.6"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
